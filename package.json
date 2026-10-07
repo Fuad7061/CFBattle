@@ -1,0 +1,13 @@
+{
+  "name": "flag-battle-streamer",
+  "version": "1.0.0",
+  "description": "24/7 Flag Battle YouTube Streamer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "puppeteer-core": "^22.0.0"
+  }
+}

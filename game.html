@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Flag Battle — 200+ country flags battle inside a spinning arena. Last one standing wins!">
+  <title>Flag Battle Simulation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ================================================================
+       GAME WRAPPER — fixed 540×960 portrait, scaled via JS
+       ================================================================ -->
+  <div id="game-wrapper">
+
+    <!-- Canvas — all physics drawing goes here -->
+    <canvas id="game-canvas" width="540" height="960"></canvas>
+
+    <!-- Countdown overlay (shown before round starts) -->
+    <div id="countdown-overlay" class="hidden">
+      <div id="countdown-num">3</div>
+    </div>
+
+    <!-- HUD Layer (pointer-events: none so canvas stays interactive) -->
+    <div id="hud">
+
+      <!-- ── Top Header ── -->
+      <div id="round-header">
+        <span id="round-label">ROUND 1</span>
+        <span class="hdr-sep">🔥</span>
+        <span id="timer-display">00:00</span>
+        <span class="hdr-sep">·</span>
+        <span id="phase-label">READY</span>
+      </div>
+
+      <!-- ── Two-Panel Row: Qualified + Top Supporters ── -->
+      <div id="panels-row">
+
+        <!-- Left: Qualified Panel -->
+        <div id="qualified-panel">
+          <div id="qualified-title">QUALIFIED FOR FINAL</div>
+          <div id="qualified-list"></div>
+        </div>
+
+        <!-- Right: Top Supporters Leaderboard -->
+        <div id="supporters-panel">
+          <div id="supporters-title">💎 TOP SUPPORTERS ·</div>
+          <div id="supporters-list">
+            <div class="sup-empty">No supporters yet</div>
+          </div>
+        </div>
+
+      </div><!-- /#panels-row -->
+
+      <!-- ── Sub-labels ── -->
+      <div id="sub-row">
+        <span id="mod-label">[ BATTLE MOD ]</span>
+        <span id="qualifying-mid">
+          <span id="qualifying-text">QUALIFYING</span>
+          <span id="qualifying-timer">· 00:00</span>
+        </span>
+      </div>
+
+      <!-- ── Chat Boost Call-To-Action ── -->
+      <div id="chat-cta" class="hidden">💬 COMMENT YOUR COUNTRY TO BOOST YOUR FLAG! ⚡</div>
+
+      <!-- ── Scrolling Elimination Feed ── -->
+      <div id="elimination-feed"></div>
+
+      <!-- ── Live Viewer Counter ── -->
+      <div id="live-viewers" class="hidden">
+        <span class="live-dot"></span>
+        <span id="viewer-count">0</span> watching now
+      </div>
+
+      <!-- ── Engagement CTA Banner (rotates messages) ── -->
+      <div id="engagement-cta" class="hidden"></div>
+
+      <!-- ── Top 5 Finalists Tracker (shown when 5 flags remain) ── -->
+      <div id="top5-tracker" class="hidden">
+        <div id="top5-header">⚡ TOP 5 FINALISTS — WHO WILL WIN? ⚡</div>
+        <div id="top5-cards"></div>
+      </div>
+
+      <!-- ── Winner Screen (hidden by default) ── -->
+      <div id="winner-screen" class="hidden">
+        <div id="winner-title">ROUND WINNER</div>
+        <div id="winner-trophy">🏆</div>
+        <div id="winner-flag-wrap">
+          <img id="winner-flag-img" src="" alt="" crossorigin="anonymous">
+        </div>
+        <div id="winner-name"></div>
+        <div id="podium-row">
+          <div class="podium-item" id="podium-2nd">
+            <img id="second-flag-img" src="" alt="2nd" crossorigin="anonymous">
+            <span id="second-name">--</span>
+            <span class="podium-rank">2</span>
+          </div>
+          <div class="podium-item podium-winner" id="podium-1st">
+            <img id="first-flag-img-podium" src="" alt="1st" crossorigin="anonymous">
+            <span id="first-name-podium">--</span>
+            <span class="podium-rank">1</span>
+          </div>
+          <div class="podium-item" id="podium-3rd">
+            <img id="third-flag-img" src="" alt="3rd" crossorigin="anonymous">
+            <span id="third-name">--</span>
+            <span class="podium-rank">3</span>
+          </div>
+        </div>
+        <div id="next-tournament" class="hidden">NEXT TOURNAMENT IN <span id="next-timer">60</span>s</div>
+      </div>
+
+      <!-- ── Milestone Celebration ── -->
+      <div id="milestone-popup" class="hidden"></div>
+
+      <!-- ── Suspense Notice (Last N flags) ── -->
+      <div id="suspense-notice" class="hidden"></div>
+
+      <!-- push remaining elements to bottom -->
+      <div class="hud-push"></div>
+
+      <!-- ── Counter + Progress Bar ── -->
+      <div id="counter-section">
+        <div id="progress-bg"><div id="progress-fill"></div></div>
+        <div id="counter-text">0 / 0 FLAGS</div>
+      </div>
+
+      <!-- ── Roster Grid ── -->
+      <div id="roster-section">
+        <div id="roster-header">Active Countries</div>
+        <div id="roster-grid"></div>
+      </div>
+
+      <!-- ── Branding ── -->
+      <div id="branding">★ @FlagsBattleSimulator ★</div>
+
+    </div><!-- /#hud -->
+
+    <!-- Loading overlay (injected by ui.js inside game-wrapper) -->
+
+  </div><!-- /#game-wrapper -->
+
+  <!-- ================================================================
+       CONTROLS — outside the game canvas so they are NOT recorded
+       ================================================================ -->
+  <div id="controls-panel">
+
+    <!-- Left: playback -->
+    <div class="ctrl-group">
+      <button id="btn-start"  class="ctrl-btn primary" title="Start round (Space)">▶ START</button>
+      <button id="btn-pause"  class="ctrl-btn"         title="Pause (P)" disabled>⏸ PAUSE</button>
+      <button id="btn-reset"  class="ctrl-btn"         title="Full reset (R)">↺ RESET</button>
+    </div>
+
+    <!-- Center: speed -->
+    <div class="ctrl-group">
+      <label class="ctrl-label">Speed</label>
+      <input type="range" id="speed-slider" min="1" max="5" value="1">
+      <span id="speed-value">1×</span>
+    </div>
+
+    <!-- Right: recording + utils -->
+    <div class="ctrl-group">
+      <button id="btn-mute"     class="ctrl-btn icon" title="Toggle mute (M)">🔊</button>
+      <button id="btn-fs"       class="ctrl-btn icon" title="Fullscreen (F)">⛶</button>
+      <button id="btn-record"   class="ctrl-btn record" title="Record canvas">⏺ REC</button>
+      <button id="btn-stop"     class="ctrl-btn" disabled>⏹ STOP</button>
+      <button id="btn-download" class="ctrl-btn" disabled>⬇ SAVE</button>
+      <div id="rec-badge"><span class="rec-dot"></span> REC</div>
+      <button id="btn-settings" class="ctrl-btn icon" title="Settings">⚙</button>
+    </div>
+
+  </div><!-- /#controls-panel -->
+
+  <!-- Keyboard hint -->
+  <div id="key-hint">Space · P pause · R reset · M mute · F fullscreen</div>
+
+</div><!-- /#app -->
+
+<!-- ================================================================
+     SETTINGS PANEL — fixed, slides from right
+     ================================================================ -->
+<div id="settings-panel" aria-label="Settings">
+  <div class="sp-header">
+    <h3>⚙ SETTINGS</h3>
+    <button id="settings-close" title="Apply & Close">✕ APPLY</button>
+  </div>
+
+  <div class="sp-body">
+
+    <div class="sp-section-label">BRANDING</div>
+    <div class="sg">
+      <label>Channel Watermark</label>
+      <input type="text" id="setting-channel" value="@FlagsBattleSimulator" placeholder="@YourChannel">
+    </div>
+
+    <div class="sg">
+      <label>Watermark Opacity</label>
+      <div class="range-row">
+        <span>0</span>
+        <input type="range" id="setting-wm-opacity" min="0" max="1" step="0.01" value="0.15">
+        <span>1</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Watermark Font Size</label>
+      <div class="range-row">
+        <span>10</span>
+        <input type="range" id="setting-wm-size" min="10" max="150" step="1" value="36">
+        <span>150</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Watermark Density (Count)</label>
+      <div class="range-row">
+        <span>1</span>
+        <input type="range" id="setting-wm-count" min="1" max="10" step="1" value="3">
+        <span>10</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Watermark Angle (Degrees)</label>
+      <div class="range-row">
+        <span>-90°</span>
+        <input type="range" id="setting-wm-angle" min="-90" max="90" step="1" value="0">
+        <span>90°</span>
+      </div>
+    </div>
+
+    <hr class="sp-hr">
+    <div class="sp-section-label">PHYSICS</div>
+
+    <div class="sg">
+      <div class="toggle-row">
+        <input type="checkbox" id="setting-audience-bias" checked>
+        <label for="setting-audience-bias">YouTube Audience Retention Mode <small>(Favors high-viewership countries for AVD)</small></label>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Arena Rotation Speed <small>(rad/step, default 0.0028)</small></label>
+      <input type="number" id="setting-rot-speed" value="0.0028" min="0" max="0.05" step="0.001">
+    </div>
+
+    <div class="sg">
+      <label>Gravity <small>(default 1.0)</small></label>
+      <input type="number" id="setting-gravity" value="1.0" min="0.1" max="5" step="0.1">
+    </div>
+
+    <div class="sg">
+      <label>Hole Opening Frequency <small>(1 = rare → 5 = constant)</small></label>
+      <div class="range-row">
+        <span>Rare</span>
+        <input type="range" id="setting-hole-freq" min="1" max="5" value="3">
+        <span>Often</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Hole Duration (ms)</label>
+      <input type="number" id="setting-hole-dur" value="4000" min="500" max="15000" step="500">
+    </div>
+
+    <div class="sg">
+      <label>Countdown Before Round (s)</label>
+      <input type="number" id="setting-countdown" value="3" min="0" max="10" step="1">
+    </div>
+
+    <hr class="sp-hr">
+    <div class="sp-section-label">VOICE / TTS</div>
+
+    <div class="sg">
+      <label>TTS Provider</label>
+      <select id="setting-tts">
+        <option value="browser" selected>Browser Web Speech API (free)</option>
+        <option value="google">Google Cloud TTS (API key required)</option>
+      </select>
+    </div>
+
+    <div class="sg">
+      <label>Google Cloud TTS API Key</label>
+      <input type="password" id="setting-gemini-key" placeholder="AIza…">
+    </div>
+
+    <div class="sg">
+      <label>Browser Voice</label>
+      <select id="setting-voice"><option value="0">Default</option></select>
+    </div>
+
+    <hr class="sp-hr">
+    <div class="sp-section-label">AUDIO</div>
+
+    <div class="sg">
+      <div class="toggle-row">
+        <input type="checkbox" id="setting-sfx" checked>
+        <label for="setting-sfx">Sound Effects (elimination, fanfare)</label>
+      </div>
+      <div class="range-row" style="margin-top:8px;">
+        <span>🔈</span>
+        <input type="range" id="setting-sfx-vol" min="0" max="1" step="0.05" value="0.5">
+        <span>🔊</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <div class="toggle-row">
+        <input type="checkbox" id="setting-music" checked>
+        <label for="setting-music">Background Music</label>
+      </div>
+      <div class="range-row" style="margin-top:8px;">
+        <span>🔈</span>
+        <input type="range" id="setting-music-vol" min="0" max="1" step="0.05" value="0.35">
+        <span>🔊</span>
+      </div>
+    </div>
+
+    <div class="sg">
+      <label>Upload Background Music (MP3 / OGG / WAV)</label>
+      <input type="file" id="music-upload" accept="audio/*">
+    </div>
+
+    <div class="sg">
+      <label>Music Volume</label>
+      <input type="range" id="setting-music-vol" min="0" max="1" step="0.05" value="0.35">
+    </div>
+
+  </div><!-- /.sp-body -->
+</div><!-- /#settings-panel -->
+
+<!-- ================================================================
+     SCRIPTS (load order matters — no SRI hash, just CDN URL)
+     ================================================================ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script src="js/countries.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/recorder.js"></script>
+<script src="js/game.js"></script>
+
+<script>
+  // Headless Stream Mode (24/7 Live)
+  if (window.location.search.includes('stream=true')) {
+    // Hide all controls and settings UI from the viewer
+    const controlsPanel = document.getElementById('controls-panel');
+    const settingsPanel = document.getElementById('settings-panel');
+    if (controlsPanel) controlsPanel.style.display = 'none';
+    if (settingsPanel) settingsPanel.style.display = 'none';
+  }
+</script>
+
+</body>
+</html>
