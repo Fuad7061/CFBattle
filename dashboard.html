@@ -160,6 +160,13 @@
             <div class="left-col">
                 <div class="panel" style="margin-bottom: 20px;">
                     <h2>Stream Preview</h2>
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Game Engine Version</label>
+                        <select id="live-game-version" style="margin-top: 5px; margin-bottom: 15px;" onchange="updatePreviewGame()">
+                            <option value="1">Original Engine (Vanilla JS)</option>
+                            <option value="2">V2 Engine (React + Tailwind)</option>
+                        </select>
+                    </div>
                     <div class="preview-wrapper">
                         <iframe id="preview-frame" src="/game.html?stream=true"></iframe>
                         <div id="visual-crop-box"></div>
@@ -378,7 +385,12 @@
         async function startStream() {
             document.getElementById('btn-start').disabled = true;
             try {
-                const res = await fetch('/api/start-stream', { method: 'POST', headers: API_HEADERS() });
+                const game = document.getElementById('live-game-version').value;
+                const res = await fetch('/api/start-stream', { 
+                    method: 'POST', 
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ game })
+                });
                 const data = await res.json();
                 if (data.success) {
                     showAlert('Stream booting! FFmpeg starting...');
@@ -578,11 +590,12 @@
             const btn = document.getElementById('btn-record');
             btn.disabled = true;
             const duration = parseFloat(document.getElementById('record-duration').value) || 5;
+            const game = document.getElementById('live-game-version').value;
             try {
                 const res = await fetch('/api/start-record', { 
                     method: 'POST', 
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ duration })
+                    body: JSON.stringify({ duration, game })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -595,6 +608,16 @@
                 showAlert('Network error', true);
             }
             btn.disabled = false;
+        }
+
+        function updatePreviewGame() {
+            const game = document.getElementById('live-game-version').value;
+            const frame = document.getElementById('preview-frame');
+            if (game === '1') {
+                frame.src = "/game.html?stream=true";
+            } else {
+                frame.src = "/game2/?stream=true";
+            }
         }
 
         async function fetchRecordings() {

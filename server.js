@@ -3,6 +3,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
+const { EventEmitter } = require('events');
+const { startYoutubeChatPolling } = require('./youtubeChat.js');
 
 const app = express();
 app.use(express.json());
@@ -103,10 +105,19 @@ app.get('/api/status', checkAuth, (req, res) => {
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
+    const oldSettings = { ...currentSettings };
     currentSettings = { ...currentSettings, ...req.body };
     try {
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2));
         logMsg("Settings updated and saved to disk.");
+        
+        // Check if YouTube settings changed
+        if (oldSettings.youtubeApiKey !== currentSettings.youtubeApiKey ||
+            oldSettings.youtubeLiveId !== currentSettings.youtubeLiveId ||
+            oldSettings.youtubeChannelId !== currentSettings.youtubeChannelId) {
+            restartYoutubeChat(currentSettings);
+        }
+        
         res.json({ success: true });
     } catch (err) {
         logMsg("Failed to save settings: " + err.message, true);
@@ -186,7 +197,11 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        const gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
+        const gameParam = req.body.game || '1';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
+        if (gameParam === '2') {
+            gameUrl = `http://localhost:${process.env.PORT || 3000}/game2/?stream=true`;
+        }
         logMsg(`Puppeteer navigating to ${gameUrl}`);
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
@@ -396,7 +411,11 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         });
 
         currentPage = await browser.newPage();
-        const gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
+        const gameParam = req.body.game || '1';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
+        if (gameParam === '2') {
+            gameUrl = `http://localhost:${process.env.PORT || 3000}/game2/?stream=true`;
+        }
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
         if (currentSettings.gameSettings) {
@@ -427,16 +446,13 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             logMsg("macOS detected: using avfoundation for local testing capture.");
             ffmpegArgs = [
                 '-f', 'avfoundation',
-                '-framerate', '60',
-                '-i', '1:0',
+                '-framerate', '30',
+                '-i', '1:none', // Video index 1, no audio
                 '-t', durationSeconds.toString(),
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-crf', '18',
                 '-threads', '2',
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-ar', '44100',
                 tmpPath
             ];
         } else {
@@ -446,10 +462,24 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
                 '-video_size', '1080x1920',
                 '-framerate', '60',
                 '-draw_mouse', '0',
-                '-i', process.env.DISPLAY || ':99',
-                '-thread_queue_size', '1024',
-                '-f', 'pulse',
-                '-i', 'v1.monitor',
+                '-i', process.env.DISPLAY || ':99'
+            ];
+
+            // Conditionally add audio if pulse audio source exists
+            try {
+                const execSync = require('child_process').execSync;
+                execSync('pactl list sources | grep v1.monitor');
+                ffmpegArgs.push(
+                    '-thread_queue_size', '1024',
+                    '-f', 'pulse',
+                    '-i', 'v1.monitor'
+                );
+                logMsg("Pulse audio source v1.monitor detected. Recording with audio.");
+            } catch (e) {
+                logMsg("Pulse audio source v1.monitor NOT found. Recording video ONLY.", true);
+            }
+
+            ffmpegArgs.push(
                 '-t', durationSeconds.toString(), // Automatically stop after duration
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
@@ -458,8 +488,9 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-ar', '44100',
+                '-y', // Overwrite if exists
                 tmpPath
-            ];
+            );
         }
 
         streamProcess = spawn('ffmpeg', ffmpegArgs);
@@ -597,6 +628,7 @@ app.post('/api/control', checkAuth, async (req, res) => {
 
 // Serve Static files (Must be after root route)
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
+app.use('/game2', express.static(path.join(__dirname, 'react-game', 'dist')));
 app.use(express.static(path.join(__dirname, '.'), {
     setHeaders: (res, reqPath) => {
         if (reqPath.endsWith('.html')) {
@@ -609,6 +641,85 @@ app.use(express.static(path.join(__dirname, '.'), {
 }));
 
 const PORT = process.env.PORT || 3000;
+
+// --- YouTube Chat Integration ---
+const bus = new EventEmitter();
+bus.setMaxListeners(100);
+
+const RECENT_MESSAGES_CAP = 200;
+let recentMessages = [];
+let voteTally = {}; // { [countryCode]: count }
+
+bus.on('chat', (msg) => {
+  recentMessages.push(msg);
+  if (recentMessages.length > RECENT_MESSAGES_CAP) {
+    recentMessages = recentMessages.slice(-RECENT_MESSAGES_CAP);
+  }
+});
+
+bus.on('vote', ({ code, weight }) => {
+  voteTally[code] = (voteTally[code] || 0) + (weight || 1);
+});
+
+const sseClients = new Set();
+app.get('/api/chat-stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  res.write('\n');
+  sseClients.add(res);
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+function broadcastChat(msg) {
+  const payload = `data: ${JSON.stringify(msg)}\n\n`;
+  for (const client of sseClients) {
+    client.write(payload);
+  }
+}
+bus.on('chat', broadcastChat);
+
+setInterval(() => {
+  for (const client of sseClients) client.write(': ping\n\n');
+}, 25000);
+
+app.get('/api/votes', (req, res) => res.json(voteTally));
+app.post('/api/votes/reset', (req, res) => {
+  voteTally = {};
+  res.json({ ok: true });
+});
+
+let chatPoller = null;
+function restartYoutubeChat(settings) {
+    if (chatPoller) {
+        chatPoller.stop();
+        chatPoller = null;
+    }
+    const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
+    const liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID;
+    const channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID;
+    
+    if (apiKey && (liveVideoId || channelId)) {
+        chatPoller = startYoutubeChatPolling({
+            apiKey, liveVideoId, channelId, bus,
+            log: {
+                info: msg => logMsg(msg),
+                warn: msg => logMsg(msg, true),
+                error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
+            }
+        });
+    }
+}
+
+// --------------------------------
+
 app.listen(PORT, () => {
     logMsg(`Server booted. Listening on port ${PORT}`);
+    const settings = fs.existsSync(SETTINGS_FILE) ? JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) : {};
+    restartYoutubeChat(settings);
 });

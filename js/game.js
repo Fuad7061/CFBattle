@@ -124,6 +124,51 @@ class FlagBattle {
     // 8. Load images in background
     this.ui.showLoading(`Loading ${COUNTRIES.length} official countries…`);
     this._loadImages();
+
+    // 9. Initialize YouTube Chat SSE
+    this._initYoutubeChat();
+  }
+
+  /* ================================================================== */
+  /*  YOUTUBE CHAT INTEGRATION                                          */
+  /* ================================================================== */
+
+  _initYoutubeChat() {
+    const source = new EventSource('/api/chat-stream');
+    source.onmessage = (e) => {
+      if (e.data === ': ping') return;
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.vote && this.running && !this.paused) {
+          this._handleChatVote(msg.vote);
+        }
+      } catch (err) {
+        console.error('Error parsing chat message', err);
+      }
+    };
+    source.onerror = (err) => {
+      console.warn('SSE stream error, retrying...', err);
+    };
+  }
+
+  _handleChatVote(vote) {
+    const code = vote.code;
+    const flag = this.flags.find(f => f.country.code === code && !f.eliminated);
+    if (!flag) return; // ignore if eliminated
+
+    // Show toast UI
+    this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
+
+    // Apply physics boost (push away from the hole/edge towards center)
+    const body = flag.body;
+    const dx = this.CX - body.position.x;
+    const dy = this.CY - body.position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const forceMag = 0.015 * vote.weight; 
+    Matter.Body.applyForce(body, body.position, {
+      x: (dx / dist) * forceMag,
+      y: (dy / dist) * forceMag
+    });
   }
 
   /* ================================================================== */

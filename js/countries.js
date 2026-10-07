@@ -207,3 +207,5 @@ const COUNTRIES = [
 function getFlagUrl(code, size = 80) {
   return `https://flagcdn.com/w${size}/${code}.png`;
 }
+
+if (typeof module !== 'undefined') { module.exports = COUNTRIES; }
