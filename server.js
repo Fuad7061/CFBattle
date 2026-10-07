@@ -202,6 +202,13 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             logMsg("Applied saved game settings on stream boot.");
         }
 
+        // Auto-start gameplay
+        await currentPage.evaluate(() => {
+            const btn = document.getElementById('btn-start');
+            if (btn && !btn.disabled) btn.click();
+        });
+        logMsg("Auto-started gameplay for the stream.");
+
         logMsg("Starting FFmpeg streaming...");
 
         // Construct FFmpeg Args based on crop settings
@@ -245,6 +252,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-f', 'x11grab',
                 '-video_size', '1080x1920',
                 '-framerate', '60',
+                '-draw_mouse', '0',
                 '-i', process.env.DISPLAY || ':99',
                 '-f', 'pulse',
                 '-i', 'default',
