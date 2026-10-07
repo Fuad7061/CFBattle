@@ -1,0 +1,6 @@
+node_modules/
+react-game/node_modules/
+react-game/dist/
+recordings/
+.env
+.git/

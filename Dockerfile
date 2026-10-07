@@ -25,6 +25,11 @@ RUN npm install
 # Copy project files
 COPY . .
 
+# Build React Game automatically during Docker build
+WORKDIR /app/react-game
+RUN npm install && npm run build
+WORKDIR /app
+
 # Make the startup script executable
 RUN chmod +x start.sh
 
