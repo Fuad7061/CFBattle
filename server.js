@@ -39,7 +39,7 @@ let currentSettings = {
     streamUrl: '',
     streamKey: '',
     bitrate: 6800,
-    crop: { enabled: false, x: 0, y: 0, w: 540, h: 960 }
+    crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 }
 };
 
 // Load settings on boot
@@ -139,7 +139,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             '--disable-dev-shm-usage',
             '--disable-gpu',
             '--disable-software-rasterizer',
-            '--window-size=540,960',
+            '--window-size=1080,1920',
             '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required',
             '--kiosk'
@@ -155,7 +155,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
         browser = await puppeteer.launch({
             executablePath: chromeExecutable,
             headless: process.platform === 'darwin' ? false : false, 
-            defaultViewport: { width: 540, height: 960 },
+            defaultViewport: { width: 1080, height: 1920 },
             args: puppeteerArgs
         });
 
@@ -221,7 +221,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             logMsg("macOS detected: using avfoundation for local testing capture.");
             ffmpegArgs = [
                 '-f', 'avfoundation',
-                '-framerate', '24',
+                '-framerate', '60',
                 '-i', '1:0', // Typically 1 is screen, 0 is mic on mac. Or 'default'
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
@@ -242,8 +242,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             // Linux/VPS mode (Xvfb + Pulse)
             ffmpegArgs = [
                 '-f', 'x11grab',
-                '-video_size', '540x960',
-                '-framerate', '24',
+                '-video_size', '1080x1920',
+                '-framerate', '60',
                 '-i', process.env.DISPLAY || ':99',
                 '-f', 'pulse',
                 '-i', 'default',

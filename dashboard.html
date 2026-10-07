@@ -252,8 +252,8 @@
                     <div class="settings-grid" style="grid-template-columns: repeat(4, 1fr);">
                         <div class="form-group"><label>X Offset</label><input type="number" id="set-crop-x" value="0" min="0" oninput="updateVisualCrop()"></div>
                         <div class="form-group"><label>Y Offset</label><input type="number" id="set-crop-y" value="0" min="0" oninput="updateVisualCrop()"></div>
-                        <div class="form-group"><label>Width</label><input type="number" id="set-crop-w" value="540" min="10" oninput="updateVisualCrop()"></div>
-                        <div class="form-group"><label>Height</label><input type="number" id="set-crop-h" value="960" min="10" oninput="updateVisualCrop()"></div>
+                        <div class="form-group"><label>Width</label><input type="number" id="set-crop-w" value="1080" min="10" oninput="updateVisualCrop()"></div>
+                        <div class="form-group"><label>Height</label><input type="number" id="set-crop-h" value="1920" min="10" oninput="updateVisualCrop()"></div>
                     </div>
                 </div>
 
@@ -494,16 +494,16 @@
             box.style.display = 'block';
             const x = parseInt(document.getElementById('set-crop-x').value) || 0;
             const y = parseInt(document.getElementById('set-crop-y').value) || 0;
-            const w = parseInt(document.getElementById('set-crop-w').value) || 540;
-            const h = parseInt(document.getElementById('set-crop-h').value) || 960;
+            const w = parseInt(document.getElementById('set-crop-w').value) || 1080;
+            const h = parseInt(document.getElementById('set-crop-h').value) || 1920;
             
-            // Since preview iframe might scale, we assume it fills 100% width of a 540x960 aspect ratio container.
+            // Since preview iframe might scale, we assume it fills 100% width of a 1080x1920 aspect ratio container.
             // But actually CSS handles width:100% and aspect-ratio:9/16, so the wrapper is proportionally scaled.
             // The box coordinates must be % based to overlay correctly regardless of actual wrapper pixel size.
-            box.style.left = (x / 540 * 100) + '%';
-            box.style.top = (y / 960 * 100) + '%';
-            box.style.width = (w / 540 * 100) + '%';
-            box.style.height = (h / 960 * 100) + '%';
+            box.style.left = (x / 1080 * 100) + '%';
+            box.style.top = (y / 1920 * 100) + '%';
+            box.style.width = (w / 1080 * 100) + '%';
+            box.style.height = (h / 1920 * 100) + '%';
         }
 
         // Logs
