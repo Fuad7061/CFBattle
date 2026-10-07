@@ -145,7 +145,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             '--window-size=720,1280',
             '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required',
-            '--kiosk'
+            '--kiosk',
+            '--js-flags="--max-old-space-size=512"'
         ];
 
         if (process.env.DISPLAY) {
@@ -353,7 +354,8 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             '--disable-gpu', '--disable-software-rasterizer',
             '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
             '--window-size=720,1280', '--window-position=0,0',
-            '--autoplay-policy=no-user-gesture-required', '--kiosk'
+            '--autoplay-policy=no-user-gesture-required', '--kiosk',
+            '--js-flags="--max-old-space-size=512"'
         ];
 
         if (process.env.DISPLAY) puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
@@ -531,7 +533,16 @@ app.post('/api/control', checkAuth, async (req, res) => {
 
 // Serve Static files (Must be after root route)
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
-app.use(express.static(path.join(__dirname, '.')));
+app.use(express.static(path.join(__dirname, '.'), {
+    setHeaders: (res, reqPath) => {
+        if (reqPath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+        } else {
+            // Aggressive 1-day caching for JS, CSS, Images to save CPU
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+    }
+}));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
