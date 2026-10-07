@@ -1,4 +1,4 @@
-FROM node:18-bullseye-slim
+FROM node:18-bookworm-slim
 
 # Install OS dependencies for Headless Chrome, Xvfb, FFmpeg and PulseAudio
 RUN apt-get update && apt-get install -y \
@@ -16,7 +16,7 @@ RUN mkdir -p /app/data && chmod 777 /app/data
 ENV DATA_DIR="/app/data"
 
 # Default Login Key (Can be overridden in Coolify ENV variables)
-ENV LOGIN_KEY="admin123"
+ENV LOGIN_KEY="admin"
 
 # Install Node.js dependencies
 COPY package*.json ./
