@@ -81,8 +81,8 @@ function checkAuth(req, res, next) {
     res.status(401).json({ error: 'Unauthorized. Invalid Login Key.' });
 }
 
-// Serve Dashboard at root FIRST
-app.get('/', (req, res) => {
+// Serve Dashboard at /dashboard
+app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
@@ -212,11 +212,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        const gameParam = req.body.game || '1';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
-        if (gameParam === '2') {
-            gameUrl = `http://localhost:${process.env.PORT || 3000}/game2/?stream=true`;
-        }
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/?stream=true`;
         logMsg(`Puppeteer navigating to ${gameUrl}`);
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
@@ -426,11 +422,7 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         });
 
         currentPage = await browser.newPage();
-        const gameParam = req.body.game || '1';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
-        if (gameParam === '2') {
-            gameUrl = `http://localhost:${process.env.PORT || 3000}/game2/?stream=true`;
-        }
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/?stream=true`;
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
         if (currentSettings.gameSettings) {
@@ -646,10 +638,10 @@ app.post('/api/control', checkAuth, async (req, res) => {
 // Serve Static files (Must be after root route)
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
 
-// Root route goes to React game (V2)
+// Root route goes to React game
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html')));
 app.use('/assets', express.static(path.join(__dirname, 'react-game', 'dist', 'assets')));
-app.get('/legacy.html', (req, res) => res.sendFile(path.join(__dirname, 'game.html')));
+app.use('/flags', express.static(path.join(__dirname, 'react-game', 'dist', 'flags')));
 
 app.use(express.static(path.join(__dirname, '.'), {
     setHeaders: (res, reqPath) => {

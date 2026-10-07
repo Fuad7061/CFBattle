@@ -4,293 +4,482 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flag Battle | Director's Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f111a;
-            --panel-bg: #1a1d2d;
-            --border: #2a2d42;
-            --text-main: #f8f9fa;
-            --text-muted: #94a3b8;
-            --primary: #4f46e5;
-            --primary-hover: #4338ca;
-            --danger: #e11d48;
-            --danger-hover: #be123c;
+            --bg: #09090b;
+            --panel-bg: #18181b;
+            --panel-hover: #27272a;
+            --border: #27272a;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
             --success: #10b981;
-            --radius: 8px;
+            --accent: #f59e0b;
+            --radius: 12px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.25);
         }
 
         * { box-sizing: border-box; }
         body {
-            margin: 0; padding: 20px;
-            font-family: 'Inter', sans-serif;
+            margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
             background-color: var(--bg);
             color: var(--text-main);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         /* --- LOGIN VIEW --- */
         #login-view {
-            max-width: 400px;
-            margin: 100px auto;
+            max-width: 420px;
+            margin: 120px auto;
             background: var(--panel-bg);
-            padding: 30px;
+            padding: 40px;
             border-radius: var(--radius);
             border: 1px solid var(--border);
             text-align: center;
+            box-shadow: var(--shadow);
+            animation: fadeIn 0.5s ease-out;
         }
-        #login-view h2 { margin-top: 0; color: white; font-size: 20px; }
+        #login-view h2 { margin-top: 0; color: white; font-size: 24px; font-weight: 600; margin-bottom: 30px;}
+        #login-view .icon { font-size: 48px; margin-bottom: 20px; color: var(--primary); }
 
-        .active-view { display: block !important; }
+        .active-view { display: flex !important; flex-direction: column; }
         #login-view, #dashboard-view { display: none; }
 
-        /* --- DASHBOARD LAYOUT --- */
-        .dashboard-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px; border-bottom: 1px solid var(--border);
+        /* --- DASHBOARD HEADER --- */
+        .topbar {
+            background: rgba(24, 24, 27, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-        .dashboard-header h1 { margin: 0; font-size: 22px; color: white; display: flex; align-items: center; gap: 10px; }
+        .brand {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 20px; font-weight: 700; color: white;
+            letter-spacing: -0.5px;
+        }
+        .brand-icon {
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 24px;
+        }
         
         .status-badge {
             display: inline-flex; align-items: center; gap: 8px;
-            padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;
-            background: rgba(148, 163, 184, 0.1); color: var(--text-muted);
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+            background: rgba(161, 161, 170, 0.1); color: var(--text-muted);
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s;
         }
-        .status-badge.is-live { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .status-badge.is-live { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-        .is-live .status-dot { box-shadow: 0 0 8px currentColor; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        .is-live .status-dot { box-shadow: 0 0 10px currentColor; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .grid-container {
-            display: grid;
-            grid-template-columns: 450px 1fr;
-            gap: 25px;
-            align-items: start;
+        .header-actions { display: flex; gap: 15px; align-items: center; }
+
+        /* --- DASHBOARD LAYOUT --- */
+        .dashboard-content {
+            display: flex;
+            flex: 1;
+            padding: 30px;
+            gap: 30px;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
         }
 
-        .panel {
+        /* --- SIDEBAR TABS --- */
+        .sidebar {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            text-align: left;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .tab-btn:hover {
+            background: rgba(255,255,255,0.03);
+            color: var(--text-main);
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        /* Quick Links Area */
+        .quick-links {
+            margin-top: auto;
             background: var(--panel-bg);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 20px;
         }
-        .panel h2 { margin: 0 0 15px 0; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
-
-        /* --- LEFT: PREVIEW & MAIN CONTROLS --- */
-        .preview-wrapper {
-            position: relative; width: 100%; aspect-ratio: 9/16;
-            background: #000; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 15px;
-        }
-        .preview-wrapper iframe { width: 100%; height: 100%; border: none; }
-        #visual-crop-box {
-            position: absolute; top: 0; left: 0;
-            border: 2px dashed #10b981; background: rgba(16, 185, 129, 0.1);
-            pointer-events: none; display: none; box-sizing: border-box;
-        }
-
-        .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .quick-links h3 { margin: 0 0 15px 0; font-size: 14px; color: white; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
         
-        /* --- RIGHT: CONFIGURATIONS --- */
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+        .game-link-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: linear-gradient(to right, #3b82f6, #8b5cf6);
+            color: white; text-decoration: none; padding: 12px; border-radius: 8px;
+            font-weight: 600; font-size: 14px; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .game-link-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        /* --- MAIN CONTENT AREA --- */
+        .main-area {
+            flex: 1;
+            min-width: 0;
+        }
+        .tab-pane {
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+
+        /* --- PANELS --- */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .panel-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px; margin-bottom: 20px;
+        }
+        .panel-header h2 { margin: 0; font-size: 18px; color: white; font-weight: 600; }
+        .panel-desc { font-size: 13px; color: var(--text-muted); margin: -10px 0 20px 0; line-height: 1.5; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+        /* --- CONTROLS --- */
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
         input[type="text"], input[type="number"], input[type="password"], select {
-            width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);
-            color: white; border-radius: 6px; font-family: inherit; font-size: 14px;
+            width: 100%; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+            color: white; border-radius: 8px; font-family: inherit; font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        input:focus, select:focus { outline: none; border-color: var(--primary); }
+        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
         
-        .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: white; font-size: 14px; }
-        
+        .checkbox-label { 
+            display: flex; align-items: center; gap: 10px; cursor: pointer; color: white; font-size: 14px; 
+            padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid transparent;
+            transition: background 0.2s;
+        }
+        .checkbox-label:hover { background: rgba(255,255,255,0.05); border-color: var(--border); }
+        .checkbox-label input { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+
         .btn {
-            background: var(--primary); color: white; border: none; padding: 12px 20px;
-            border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: 0.2s;
-            width: 100%; text-align: center;
+            background: var(--panel-hover); color: white; border: 1px solid var(--border); padding: 12px 20px;
+            border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; transition: all 0.2s;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .btn:hover { background: var(--primary-hover); }
+        .btn:hover { background: rgba(255,255,255,0.1); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        .btn-outline { background: transparent; border: 1px solid var(--border); color: white; }
-        .btn-outline:hover { background: rgba(255,255,255,0.05); }
-        .btn-danger { background: var(--danger); }
-        .btn-danger:hover { background: var(--danger-hover); }
+        .btn-primary { background: var(--primary); border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+        
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+        .btn-danger:hover { background: var(--danger); color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
 
+        .btn-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
+        .btn-success:hover { background: var(--success); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+
+        /* --- PREVIEW --- */
+        .preview-container {
+            display: grid; grid-template-columns: 350px 1fr; gap: 30px;
+        }
+        .preview-wrapper {
+            position: relative; width: 100%; aspect-ratio: 9/16;
+            background: #000; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        .preview-wrapper iframe { width: 100%; height: 100%; border: none; }
+        
         /* --- LOGS --- */
         .log-box {
-            background: #000; color: #a3e635; padding: 12px; border-radius: 4px;
-            font-family: monospace; font-size: 12px; height: 150px; overflow-y: auto;
-            border: 1px solid var(--border); margin-top: 10px;
+            background: #050505; color: #a3e635; padding: 15px; border-radius: 8px;
+            font-family: 'Courier New', monospace; font-size: 13px; height: 300px; overflow-y: auto;
+            border: 1px solid var(--border); line-height: 1.5;
         }
+        .log-box::-webkit-scrollbar { width: 8px; }
+        .log-box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 
         .alert {
-            position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 8px;
-            font-weight: 500; font-size: 14px; z-index: 9999; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            animation: slideIn 0.3s ease forwards;
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100%);
+            padding: 12px 24px; border-radius: 30px; font-weight: 500; font-size: 14px; z-index: 9999;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; gap: 8px;
         }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .alert.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        .recording-item {
+            background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border);
+            transition: border-color 0.2s;
+        }
+        .recording-item:hover { border-color: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
 
-    <div id="alert-box" class="alert"></div>
+    <div id="alert-box" class="alert">
+        <span class="icon"></span>
+        <span class="text"></span>
+    </div>
 
     <!-- LOGIN -->
     <div id="login-view" class="active-view">
-        <h2>Dashboard Login</h2>
+        <div class="icon">🛡️</div>
+        <h2>Director Authentication</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-top: -20px; margin-bottom: 30px;">Enter your secure login key to access the director dashboard.</p>
         <div class="form-group">
-            <input type="password" id="login-key" placeholder="Enter LOGIN_KEY">
+            <input type="password" id="login-key" placeholder="••••••••" style="text-align: center; letter-spacing: 2px; font-size: 18px;">
         </div>
-        <button class="btn" onclick="login()">Access Dashboard</button>
+        <button class="btn btn-primary" onclick="login()" style="width: 100%;">Unlock Dashboard ➔</button>
     </div>
 
     <!-- DASHBOARD -->
     <div id="dashboard-view">
-        <div class="dashboard-header">
-            <h1>🌐 Flag Battle Director</h1>
-            <div class="status-badge" id="status-badge">
-                <div class="status-dot"></div>
-                <span id="status-text">OFFLINE</span>
+        <div class="topbar">
+            <div class="brand">
+                <span class="brand-icon">🏴</span> Flag Battle Director
+            </div>
+            
+            <div class="header-actions">
+                <button class="btn" onclick="saveAndApplySettings()">💾 Save Global Settings</button>
+                <div class="status-badge" id="status-badge">
+                    <div class="status-dot"></div>
+                    <span id="status-text">OFFLINE</span>
+                </div>
+                <button class="btn" style="padding: 8px 12px; font-size: 12px;" onclick="logout()">Logout</button>
             </div>
         </div>
 
-        <div class="grid-container">
-            <!-- LEFT COLUMN: PREVIEW & ACTIONS -->
-            <div class="left-col">
-                <div class="panel" style="margin-bottom: 20px;">
-                    <h2>Stream Preview</h2>
-                    <div style="margin-bottom: 10px;">
-                        <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Game Engine Version</label>
-                        <select id="live-game-version" style="margin-top: 5px; margin-bottom: 15px;" onchange="updatePreviewGame()">
-                            <option value="1">V2 Engine (React + Tailwind)</option>
-                            <option value="legacy">Legacy Engine (Vanilla JS)</option>
-                        </select>
-                    </div>
-                    <div class="preview-wrapper">
-                        <iframe id="preview-frame" src="/game.html?stream=true"></iframe>
-                        <div id="visual-crop-box"></div>
-                    </div>
-                    
-                    <button class="btn" id="btn-start" onclick="startStream()">▶ Start 24/7 Stream (Boot Headless)</button>
-                    <button class="btn btn-danger" id="btn-stop" style="display:none;" onclick="stopStream()">⏹ Stop Stream</button>
-                </div>
+        <div class="dashboard-content">
+            <!-- SIDEBAR -->
+            <div class="sidebar">
+                <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview & Controls</button>
+                <button class="tab-btn" onclick="switchTab('tab-settings')">⚙️ Match Settings</button>
+                <button class="tab-btn" onclick="switchTab('tab-stream')">📡 Stream Config</button>
+                <button class="tab-btn" onclick="switchTab('tab-records')">🎥 Saved Recordings</button>
+                <button class="tab-btn" onclick="switchTab('tab-logs')">📋 System Logs</button>
 
-                <div class="panel">
-                    <h2>Live Game Controls</h2>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:0;">Trigger actions live inside the stream.</p>
-                    <div class="action-row">
-                        <button class="btn btn-outline" onclick="controlGame('start')">▶ Play Round</button>
-                        <button class="btn btn-outline" onclick="controlGame('pause')">⏸ Pause/Resume</button>
-                    </div>
-                    <button class="btn btn-outline" onclick="controlGame('reset')" style="width:100%; border-color:var(--danger); color:var(--danger);">↺ Reset Match</button>
+                <div class="quick-links">
+                    <h3>🚀 Quick Access</h3>
+                    <p style="font-size:12px; color:var(--text-muted); margin-bottom: 15px; line-height: 1.4;">
+                        The full optimized React game engine runs natively on the root URL. Open it to play manually or capture via OBS.
+                    </p>
+                    <a href="/" target="_blank" class="game-link-btn">
+                        🎮 Open Live Game (New Tab)
+                    </a>
                 </div>
             </div>
 
-            <!-- RIGHT COLUMN: SETTINGS -->
-            <div class="right-col">
+            <!-- MAIN CONTENT -->
+            <div class="main-area">
                 
-                <div class="panel" style="margin-bottom: 20px;">
-                    <h2>Match Mechanics & Logic</h2>
-                    <div class="settings-grid">
-                        <div class="form-group">
-                            <label>Total Countries to Spawn</label>
-                            <input type="number" id="live-total-countries" min="10" max="245" value="195">
+                <!-- TAB: OVERVIEW -->
+                <div id="tab-overview" class="tab-pane active">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Live Director Studio</h2>
                         </div>
-                        <div class="form-group">
-                            <label>Rounds (Best of X)</label>
-                            <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
+                        <div class="preview-container">
+                            <div class="controls-col">
+                                <h3 style="margin-top:0; font-size:15px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase;">Engine State</h3>
+                                <button class="btn btn-success" id="btn-start" onclick="startStream()" style="width:100%; margin-bottom: 10px; height: 50px;">
+                                    ▶ Start 24/7 Stream (Headless)
+                                </button>
+                                <button class="btn btn-danger" id="btn-stop" style="display:none; width:100%; margin-bottom: 10px; height: 50px;" onclick="stopStream()">
+                                    ⏹ Stop Engine (Stream/Record)
+                                </button>
+                                <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="width:100%; height: 50px; background:var(--accent); border-color:var(--accent);">
+                                    ⏺ Record Gameplay Offline
+                                </button>
+                                
+                                <h3 style="margin-top:30px; font-size:15px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase;">Live Remote Controls</h3>
+                                <p style="font-size:12px; color:var(--text-muted); margin-top:-10px; margin-bottom:15px;">Send commands instantly to the running game instance.</p>
+                                
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <div class="grid-2">
+                                        <button class="btn" onclick="controlGame('start')">▶ Play Round</button>
+                                        <button class="btn" onclick="controlGame('pause')">⏸ Pause/Resume</button>
+                                    </div>
+                                    <button class="btn" onclick="controlGame('reset')" style="border-color:var(--danger); color:var(--danger);">↺ Reset Match (Hard Restart)</button>
+                                </div>
+                            </div>
+                            
+                            <div class="preview-col">
+                                <div class="preview-wrapper">
+                                    <iframe id="preview-frame" src="/?stream=true"></iframe>
+                                </div>
+                                <div style="text-align: center; margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                                    Local Preview Mirror (Audio Muted)
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Match Duration (Minutes)</label>
-                            <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
-                        </div>
-                        <div class="form-group">
-                            <label>Team Up Mode</label>
-                            <select id="live-teams">
-                                <option value="none">Free for All (Solo)</option>
-                                <option value="2">2 Teams (Red vs Blue)</option>
-                                <option value="4">4 Teams</option>
-                                <option value="continents">By Continent</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <h2 style="margin-top: 15px;">Physics & Experience</h2>
-                    <div class="settings-grid">
-                        <div class="form-group">
-                            <label>Game Speed (1-5)</label>
-                            <input type="number" id="live-speed" min="1" max="5" value="1">
-                        </div>
-                        <div class="form-group">
-                            <label>Gravity Magnitude</label>
-                            <input type="number" id="live-gravity" step="0.1" value="0.0">
-                        </div>
-                    </div>
-                    <label class="checkbox-label" style="margin-bottom: 20px;">
-                        <input type="checkbox" id="live-bias" checked> Enable Audience Bias (Dramatic Near Misses)
-                    </label>
-
-                    <h2>Branding</h2>
-                    <div class="form-group">
-                        <label>Watermark / Channel Name</label>
-                        <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
                     </div>
                 </div>
 
-                <div class="panel" style="margin-bottom: 20px;">
-                    <h2>Stream & Broadcast Setup</h2>
-                    <div class="form-group">
-                        <label>Stream URL</label>
-                        <input type="text" id="set-stream-url" placeholder="rtmp://a.rtmp.youtube.com/live2">
-                    </div>
-                    <div class="form-group">
-                        <label>Secret Key</label>
-                        <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
-                    </div>
-                    <div class="form-group">
-                        <label>Video Bitrate (Kbps)</label>
-                        <input type="number" id="set-bitrate" value="6800" min="1000" max="20000" step="100">
-                    </div>
-                    
-                    <label class="checkbox-label" style="margin: 15px 0;">
-                        <input type="checkbox" id="set-crop-enable" onchange="updateVisualCrop()"> Enable Area Selection (Crop)
-                    </label>
-                    <div class="settings-grid" style="grid-template-columns: repeat(4, 1fr);">
-                        <div class="form-group"><label>X Offset</label><input type="number" id="set-crop-x" value="0" min="0" oninput="updateVisualCrop()"></div>
-                        <div class="form-group"><label>Y Offset</label><input type="number" id="set-crop-y" value="0" min="0" oninput="updateVisualCrop()"></div>
-                        <div class="form-group"><label>Width</label><input type="number" id="set-crop-w" value="1080" min="10" oninput="updateVisualCrop()"></div>
-                        <div class="form-group"><label>Height</label><input type="number" id="set-crop-h" value="1920" min="10" oninput="updateVisualCrop()"></div>
-                    </div>
-                </div>
-
-                <div class="panel" style="margin-bottom: 20px;">
-                    <h2>Record Gameplay Offline</h2>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:0;">Record gameplay to the server as an MP4, then download it. Runs totally headlessly.</p>
-                    <div class="form-group">
-                        <label>Recording Duration (Minutes)</label>
-                        <input type="number" id="record-duration" value="6.5" min="0.5" max="300" step="0.5">
-                        <small id="duration-suggestion" style="color:var(--success); font-size:11px; display:block; margin-top:4px;">✨ Suggested: 6.5 mins (Covers full match + winner screen)</small>
-                    </div>
-                    <button class="btn btn-outline" id="btn-record" style="margin-bottom: 15px;" onclick="startRecording()">⏺ Start Offline Recording</button>
-                    
-                    <div style="border-top: 1px solid var(--border); padding-top: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <label style="margin:0; font-weight:600; font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Saved Recordings</label>
-                            <button class="btn btn-outline" style="width:auto; padding: 2px 8px; font-size:10px;" onclick="fetchRecordings()">Refresh</button>
+                <!-- TAB: MATCH SETTINGS -->
+                <div id="tab-settings" class="tab-pane">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Game Mechanics & Logic</h2>
                         </div>
-                        <div id="recordings-list" style="font-size: 13px; color: white;">Loading...</div>
+                        <p class="panel-desc">These settings control how the flag battle plays out. Save and they will inject immediately into the live game.</p>
+                        
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Total Countries to Spawn</label>
+                                <input type="number" id="live-total-countries" min="10" max="245" value="195">
+                            </div>
+                            <div class="form-group">
+                                <label>Rounds (Best of X)</label>
+                                <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
+                            </div>
+                            <div class="form-group">
+                                <label>Match Duration (Minutes)</label>
+                                <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
+                            </div>
+                            <div class="form-group">
+                                <label>Team Up Mode</label>
+                                <select id="live-teams">
+                                    <option value="none">Free for All (Solo)</option>
+                                    <option value="2">2 Teams (Red vs Blue)</option>
+                                    <option value="4">4 Teams</option>
+                                    <option value="continents">By Continent</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Physics, Experience & Branding</h2>
+                        </div>
+                        <div class="grid-3">
+                            <div class="form-group">
+                                <label>Game Speed (1-5)</label>
+                                <input type="number" id="live-speed" min="1" max="5" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Gravity Magnitude</label>
+                                <input type="number" id="live-gravity" step="0.1" value="0.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Watermark / Channel Name</label>
+                                <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
+                            </div>
+                        </div>
+                        <label class="checkbox-label" style="margin-top: 10px;">
+                            <input type="checkbox" id="live-bias" checked> 
+                            <span><strong>Enable Audience Bias</strong> (Creates dramatic near misses and dynamic momentum)</span>
+                        </label>
                     </div>
                 </div>
 
-                <button class="btn" onclick="saveAndApplySettings()" style="margin-bottom: 20px;">💾 Save & Apply All Settings</button>
-
-                <div class="panel">
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-                        <h2 style="margin:0; border:none; padding:0;">System Logs</h2>
-                        <button class="btn btn-outline" style="width:auto; padding: 4px 10px; font-size:11px;" onclick="clearLogs()">Clear</button>
+                <!-- TAB: STREAM CONFIG -->
+                <div id="tab-stream" class="tab-pane">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>YouTube RTMP Setup</h2>
+                        </div>
+                        <p class="panel-desc">Configure your destination for the 24/7 headless stream.</p>
+                        
+                        <div class="form-group">
+                            <label>Stream URL</label>
+                            <input type="text" id="set-stream-url" placeholder="rtmp://a.rtmp.youtube.com/live2">
+                        </div>
+                        <div class="form-group">
+                            <label>Secret Key (Keep private!)</label>
+                            <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
+                        </div>
+                        <div class="form-group" style="width: 50%;">
+                            <label>Video Bitrate (Kbps)</label>
+                            <input type="number" id="set-bitrate" value="6800" min="1000" max="20000" step="100">
+                        </div>
                     </div>
-                    <div class="log-box" id="log-content">Loading...</div>
+                </div>
+
+                <!-- TAB: RECORDINGS -->
+                <div id="tab-records" class="tab-pane">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Offline Recording Engine</h2>
+                            <button class="btn" style="padding: 6px 12px; font-size:12px;" onclick="fetchRecordings()">↻ Refresh List</button>
+                        </div>
+                        <p class="panel-desc">
+                            You can record the gameplay completely headlessly on the server. The engine will capture the React game and output a high-quality MP4.
+                        </p>
+                        
+                        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border); padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label>Target Recording Duration (Minutes)</label>
+                                <div style="display: flex; gap: 15px; align-items: center;">
+                                    <input type="number" id="record-duration" value="6.5" min="0.5" max="300" step="0.5" style="width: 150px;">
+                                    <span id="duration-suggestion" style="color:var(--success); font-size:13px; font-weight:500;">✨ Suggested: 6.5 mins</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h3 style="font-size: 14px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px;">Video Library</h3>
+                        <div id="recordings-list">
+                            <div style="color:var(--text-muted); font-style:italic;">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: LOGS -->
+                <div id="tab-logs" class="tab-pane">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>System & FFmpeg Logs</h2>
+                            <button class="btn btn-danger" style="padding: 6px 12px; font-size:12px;" onclick="clearLogs()">🗑 Clear Logs</button>
+                        </div>
+                        <div class="log-box" id="log-content">Loading...</div>
+                    </div>
                 </div>
 
             </div>
@@ -307,12 +496,12 @@
         const alertBox = document.getElementById('alert-box');
 
         function showAlert(msg, isError = false) {
-            alertBox.textContent = msg;
-            alertBox.style.background = isError ? 'rgba(225, 29, 72, 0.9)' : 'rgba(16, 185, 129, 0.9)';
-            alertBox.style.color = '#fff';
-            alertBox.style.border = 'none';
-            alertBox.style.display = 'block';
-            setTimeout(() => { alertBox.style.display = 'none'; }, 4000);
+            alertBox.querySelector('.text').textContent = msg;
+            alertBox.querySelector('.icon').textContent = isError ? '⚠️' : '✅';
+            alertBox.style.background = isError ? 'var(--panel-bg)' : 'var(--panel-bg)';
+            alertBox.style.border = `1px solid ${isError ? 'var(--danger)' : 'var(--success)'}`;
+            alertBox.classList.add('show');
+            setTimeout(() => { alertBox.classList.remove('show'); }, 4000);
         }
 
         function showView(viewId) {
@@ -321,13 +510,26 @@
             document.getElementById(viewId).classList.add('active-view');
         }
 
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+
+        function logout() {
+            localStorage.removeItem('fb_login_key');
+            authKey = null;
+            showView('login-view');
+        }
+
         async function checkAuth() {
             if (!authKey) return showView('login-view');
             try {
                 const res = await fetch('/api/status', { headers: API_HEADERS() });
                 if (res.status === 401) {
-                    localStorage.removeItem('fb_login_key');
-                    return showView('login-view');
+                    logout();
+                    return;
                 }
                 const data = await res.json();
                 showView('dashboard-view');
@@ -354,8 +556,8 @@
 
         function applyStatus(data) {
             const isLive = data.isStreaming || data.isRecording;
-            document.getElementById('btn-start').style.display = isLive ? 'none' : 'block';
-            document.getElementById('btn-stop').style.display = isLive ? 'block' : 'none';
+            document.getElementById('btn-start').style.display = isLive ? 'none' : 'flex';
+            document.getElementById('btn-stop').style.display = isLive ? 'flex' : 'none';
             
             const badge = document.getElementById('status-badge');
             const txt = document.getElementById('status-text');
@@ -363,40 +565,38 @@
             
             if (data.isStreaming) {
                 badge.classList.add('is-live');
-                badge.style.color = 'var(--success)';
                 txt.textContent = 'STREAMING LIVE';
                 btnRecord.disabled = true;
-                btnRecord.textContent = '⏺ Start Offline Recording';
+                btnRecord.innerHTML = '⏺ Start Offline Recording';
             } else if (data.isRecording) {
                 badge.classList.add('is-live');
-                badge.style.color = '#eab308'; // Yellow for recording
+                badge.style.color = '#eab308'; badge.style.borderColor = 'rgba(234, 179, 8, 0.2)';
                 txt.textContent = `RECORDING OFFLINE (${data.progress || 0}%)`;
                 btnRecord.disabled = true;
-                btnRecord.textContent = `⏺ Recording... ${data.progress || 0}%`;
+                btnRecord.innerHTML = `⏳ Recording in progress... ${data.progress || 0}%`;
             } else {
                 badge.classList.remove('is-live');
-                badge.style.color = ''; // Reset to default
+                badge.style.color = ''; badge.style.borderColor = '';
                 txt.textContent = 'OFFLINE';
                 btnRecord.disabled = false;
-                btnRecord.textContent = '⏺ Start Offline Recording';
+                btnRecord.innerHTML = '⏺ Record Gameplay Offline';
             }
         }
 
         async function startStream() {
             document.getElementById('btn-start').disabled = true;
             try {
-                const game = document.getElementById('live-game-version').value;
                 const res = await fetch('/api/start-stream', { 
                     method: 'POST', 
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ game })
+                    body: JSON.stringify({})
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showAlert('Stream booting! FFmpeg starting...');
+                    showAlert('Stream booting! Server starting headless engine...');
                     checkAuth();
                 } else showAlert(data.error || 'Error', true);
-            } catch (e) { showAlert('Error', true); }
+            } catch (e) { showAlert('Network Error', true); }
             document.getElementById('btn-start').disabled = false;
         }
 
@@ -414,14 +614,6 @@
             document.getElementById('set-stream-url').value = s.streamUrl || '';
             document.getElementById('set-stream-key').value = s.streamKey || '';
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
-            if (s.crop) {
-                document.getElementById('set-crop-enable').checked = s.crop.enabled;
-                document.getElementById('set-crop-x').value = s.crop.x;
-                document.getElementById('set-crop-y').value = s.crop.y;
-                document.getElementById('set-crop-w').value = s.crop.w;
-                document.getElementById('set-crop-h').value = s.crop.h;
-                updateVisualCrop();
-            }
             if (s.gameSettings) {
                 if (s.gameSettings.watermark !== undefined) document.getElementById('live-watermark').value = s.gameSettings.watermark;
                 if (s.gameSettings.speed !== undefined) document.getElementById('live-speed').value = s.gameSettings.speed;
@@ -450,13 +642,6 @@
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
-                crop: {
-                    enabled: document.getElementById('set-crop-enable').checked,
-                    x: parseInt(document.getElementById('set-crop-x').value),
-                    y: parseInt(document.getElementById('set-crop-y').value),
-                    w: parseInt(document.getElementById('set-crop-w').value),
-                    h: parseInt(document.getElementById('set-crop-h').value)
-                }
             };
 
             // 1. Save persistently
@@ -490,7 +675,6 @@
                 const frame = document.getElementById('preview-frame');
                 if (frame && frame.contentWindow) {
                     frame.contentWindow.__liveSettings = gamePayload;
-                    
                     if (frame.contentWindow.gameInstance) {
                         const gi = frame.contentWindow.gameInstance;
                         if (gamePayload.watermark !== undefined) gi.ui.setChannel(gamePayload.watermark);
@@ -499,7 +683,7 @@
                         if (gamePayload.bias !== undefined) gi.audienceBias = gamePayload.bias;
                     }
                 }
-                showAlert('Settings saved and applied to Local Preview!');
+                showAlert('Settings saved! Ready for next launch.');
             }
         }
 
@@ -519,7 +703,7 @@
                 } catch(e) { showAlert('Network error', true); }
             }
             
-            // ALWAYS trigger on the local preview frame too, so the user visually sees the pause instantly
+            // ALWAYS trigger on the local preview frame too
             const frame = document.getElementById('preview-frame');
             if (frame && frame.contentWindow) {
                 if (action === 'start') {
@@ -530,27 +714,6 @@
                     frame.contentWindow.document.getElementById('btn-reset')?.click();
                 }
             }
-        }
-
-        // Crop Preview Update
-        function updateVisualCrop() {
-            const enabled = document.getElementById('set-crop-enable').checked;
-            const box = document.getElementById('visual-crop-box');
-            if (!enabled) { box.style.display = 'none'; return; }
-            
-            box.style.display = 'block';
-            const x = parseInt(document.getElementById('set-crop-x').value) || 0;
-            const y = parseInt(document.getElementById('set-crop-y').value) || 0;
-            const w = parseInt(document.getElementById('set-crop-w').value) || 1080;
-            const h = parseInt(document.getElementById('set-crop-h').value) || 1920;
-            
-            // Since preview iframe might scale, we assume it fills 100% width of a 1080x1920 aspect ratio container.
-            // But actually CSS handles width:100% and aspect-ratio:9/16, so the wrapper is proportionally scaled.
-            // The box coordinates must be % based to overlay correctly regardless of actual wrapper pixel size.
-            box.style.left = (x / 1080 * 100) + '%';
-            box.style.top = (y / 1920 * 100) + '%';
-            box.style.width = (w / 1080 * 100) + '%';
-            box.style.height = (h / 1920 * 100) + '%';
         }
 
         // Logs
@@ -575,32 +738,29 @@
             const rounds = parseInt(document.getElementById('live-total-rounds').value) || 1;
             const matchMins = parseInt(document.getElementById('live-time-limit').value) || 5;
             
-            // Formula: For each round -> (Match time) + (60s winner screen) + (5s countdown/buffer)
             const secondsPerRound = (matchMins * 60) + 60 + 5;
-            const totalSeconds = (rounds * secondsPerRound) + 15; // 15s boot buffer
+            const totalSeconds = (rounds * secondsPerRound) + 15; 
             
-            // Convert to minutes, rounded to nearest 0.5
             const totalMins = (Math.ceil((totalSeconds / 60) * 2) / 2).toFixed(1);
             
             document.getElementById('record-duration').value = totalMins;
-            document.getElementById('duration-suggestion').textContent = `✨ Suggested: ${totalMins} mins (Perfectly covers all rounds + winner screens)`;
+            document.getElementById('duration-suggestion').innerHTML = `✨ Suggested: ${totalMins} mins <em>(Covers all rounds + screens)</em>`;
         }
 
         async function startRecording() {
             const btn = document.getElementById('btn-record');
             btn.disabled = true;
             const duration = parseFloat(document.getElementById('record-duration').value) || 5;
-            const game = document.getElementById('live-game-version').value;
             try {
                 const res = await fetch('/api/start-record', { 
                     method: 'POST', 
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ duration, game })
+                    body: JSON.stringify({ duration })
                 });
                 const data = await res.json();
                 if (data.success) {
                     showAlert(`Recording started for ${duration} minutes!`);
-                    checkAuth(); // Updates status
+                    checkAuth();
                 } else {
                     showAlert(data.error || 'Failed to start recording', true);
                 }
@@ -608,16 +768,6 @@
                 showAlert('Network error', true);
             }
             btn.disabled = false;
-        }
-
-        function updatePreviewGame() {
-            const game = document.getElementById('live-game-version').value;
-            const frame = document.getElementById('preview-frame');
-            if (game === 'legacy') {
-                frame.src = "/legacy.html?stream=true";
-            } else {
-                frame.src = "/?stream=true";
-            }
         }
 
         async function fetchRecordings() {
@@ -633,14 +783,14 @@
                 files.forEach(f => {
                     const date = new Date(f.time).toLocaleString();
                     html += `
-                        <div style="background: rgba(0,0,0,0.3); padding: 10px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border);">
+                        <div class="recording-item">
                             <div>
-                                <div style="font-weight:600; margin-bottom:4px;">${f.file}</div>
-                                <div style="font-size:11px; color:var(--text-muted);">${date}</div>
+                                <div style="font-weight:600; margin-bottom:4px; font-size:14px;">${f.file}</div>
+                                <div style="font-size:12px; color:var(--text-muted);">${date}</div>
                             </div>
-                            <div style="display:flex; gap:5px;">
-                                <a href="${f.url}" download class="btn btn-outline" style="width:auto; padding:6px 12px; text-decoration:none;">Download</a>
-                                <button onclick="deleteRecording('${f.file}')" class="btn btn-danger" style="width:auto; padding:6px 12px;">Delete</button>
+                            <div style="display:flex; gap:8px;">
+                                <a href="${f.url}" download class="btn btn-outline" style="text-decoration:none; padding:8px 12px; font-size:12px;">⬇️ Download</a>
+                                <button onclick="deleteRecording('${f.file}')" class="btn btn-danger" style="padding:8px 12px; font-size:12px;">🗑 Delete</button>
                             </div>
                         </div>
                     `;
@@ -652,7 +802,7 @@
         }
 
         async function deleteRecording(file) {
-            if(!confirm('Are you sure you want to permanently delete this video to save storage?')) return;
+            if(!confirm('Permanently delete this video?')) return;
             try {
                 await fetch('/api/recordings/delete', {
                     method: 'POST',
@@ -664,10 +814,8 @@
             } catch (e) {}
         }
 
-        // Initialize suggestion on load
         setTimeout(suggestRecordingDuration, 1000);
 
-        // Background Poller
         async function updateStatusAndLogs() {
             try {
                 const res = await fetch('/api/status', { headers: API_HEADERS() });
@@ -675,8 +823,8 @@
                     const data = await res.json();
                     applyStatus(data);
                 }
-                fetchLogs();
-                fetchRecordings();
+                if (document.getElementById('tab-logs').classList.contains('active')) fetchLogs();
+                if (document.getElementById('tab-records').classList.contains('active')) fetchRecordings();
             } catch (e) {}
         }
 
@@ -684,7 +832,12 @@
             if (document.getElementById('dashboard-view').classList.contains('active-view')) {
                 updateStatusAndLogs();
             }
-        }, 3000); // 3 seconds is good for smooth progress bar
+        }, 3000);
+
+        // Allow 'Enter' to login
+        document.getElementById('login-key').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
 
         checkAuth();
     </script>
