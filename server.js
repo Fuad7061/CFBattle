@@ -142,7 +142,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
-            '--window-size=1080,1920',
+            '--window-size=720,1280',
             '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required',
             '--kiosk'
@@ -158,7 +158,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
         browser = await puppeteer.launch({
             executablePath: chromeExecutable,
             headless: process.platform === 'darwin' ? false : false, 
-            defaultViewport: { width: 1080, height: 1920 },
+            defaultViewport: { width: 720, height: 1280 },
             args: puppeteerArgs,
             ignoreDefaultArgs: ['--enable-automation']
         });
@@ -254,8 +254,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             ffmpegArgs = [
                 '-thread_queue_size', '512',
                 '-f', 'x11grab',
-                '-video_size', '1080x1920',
-                '-framerate', '60',
+                '-video_size', '720x1280',
+                '-framerate', '30',
                 '-draw_mouse', '0',
                 '-i', process.env.DISPLAY || ':99',
                 '-thread_queue_size', '512',
@@ -271,7 +271,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-bufsize', bufsizeStr,
                 '-nal-hrd', 'cbr',
                 '-vf', videoFilter,
-                '-g', '120', 
+                '-g', '60', 
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-ar', '44100',
@@ -330,6 +330,133 @@ app.post('/api/stop-stream', checkAuth, async (req, res) => {
     currentPage = null;
     
     res.json({ success: true, message: 'Stream stopped' });
+});
+
+// Recording Feature
+app.post('/api/start-record', checkAuth, async (req, res) => {
+    if (isStreaming) {
+        return res.status(400).json({ error: 'Engine is already running. Please stop the current stream/recording first.' });
+    }
+    
+    const durationMinutes = req.body.duration || 5;
+    const durationSeconds = durationMinutes * 60;
+    
+    try {
+        isStreaming = true;
+        logMsg(`Starting local recording for ${durationMinutes} minutes...`);
+
+        const defaultChrome = process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/chromium';
+        const chromeExecutable = process.env.CHROME_BIN || defaultChrome;
+
+        const puppeteerArgs = [
+            '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+            '--disable-gpu', '--disable-software-rasterizer',
+            '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+            '--window-size=720,1280', '--window-position=0,0',
+            '--autoplay-policy=no-user-gesture-required', '--kiosk'
+        ];
+
+        if (process.env.DISPLAY) puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
+        else if (process.platform !== 'darwin') puppeteerArgs.push('--display=:99');
+
+        browser = await puppeteer.launch({
+            executablePath: chromeExecutable,
+            headless: false, 
+            defaultViewport: { width: 720, height: 1280 },
+            args: puppeteerArgs,
+            ignoreDefaultArgs: ['--enable-automation']
+        });
+
+        currentPage = await browser.newPage();
+        const gameUrl = `http://localhost:${process.env.PORT || 3000}/game.html?stream=true`;
+        await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
+
+        if (currentSettings.gameSettings) {
+            await currentPage.evaluate((s) => {
+                window.__liveSettings = s;
+                if (window.gameInstance) {
+                    if (s.watermark !== undefined) window.gameInstance.ui.setChannel(s.watermark);
+                    if (s.speed !== undefined) window.gameInstance.physics.setStepsPerFrame(s.speed);
+                    if (s.gravity !== undefined) window.gameInstance.physics.setGravity(s.gravity);
+                    if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
+                }
+            }, currentSettings.gameSettings);
+        }
+
+        await currentPage.evaluate(() => {
+            const btn = document.getElementById('btn-start');
+            if (btn && !btn.disabled) btn.click();
+        });
+
+        const recordDir = path.join(__dirname, 'recordings');
+        if (!fs.existsSync(recordDir)) fs.mkdirSync(recordDir, { recursive: true });
+        const fileName = `gameplay_${Date.now()}.mp4`;
+        const filePath = path.join(recordDir, fileName);
+
+        const ffmpegArgs = [
+            '-thread_queue_size', '512',
+            '-f', 'x11grab',
+            '-video_size', '720x1280',
+            '-framerate', '30',
+            '-draw_mouse', '0',
+            '-i', process.env.DISPLAY || ':99',
+            '-thread_queue_size', '512',
+            '-f', 'pulse',
+            '-i', 'default',
+            '-t', durationSeconds.toString(), // Automatically stop after duration
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-threads', '0',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-ar', '44100',
+            filePath
+        ];
+
+        streamProcess = spawn('ffmpeg', ffmpegArgs);
+
+        streamProcess.on('close', (code) => {
+            logMsg(`Recording finished automatically: ${fileName}`);
+            isStreaming = false;
+            currentPage = null;
+            if (browser) { browser.close(); browser = null; }
+        });
+
+        res.json({ success: true, message: 'Recording started successfully!' });
+    } catch (error) {
+        logMsg(`Failed to start recording: ${error.message}`, true);
+        isStreaming = false;
+        if (browser) browser.close();
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/recordings', checkAuth, (req, res) => {
+    const recordDir = path.join(__dirname, 'recordings');
+    if (!fs.existsSync(recordDir)) return res.json([]);
+    try {
+        const files = fs.readdirSync(recordDir)
+            .filter(f => f.endsWith('.mp4'))
+            .map(f => {
+                const stat = fs.statSync(path.join(recordDir, f));
+                return { file: f, url: `/recordings/${f}`, time: stat.mtimeMs };
+            })
+            .sort((a, b) => b.time - a.time); // Newest first
+        res.json(files);
+    } catch (e) {
+        res.json([]);
+    }
+});
+
+// Delete recording
+app.post('/api/recordings/delete', checkAuth, (req, res) => {
+    const { file } = req.body;
+    if (!file) return res.status(400).json({error:'No file provided'});
+    const filePath = path.join(__dirname, 'recordings', path.basename(file));
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+    res.json({success: true});
 });
 
 // Remote Control for the Game inside the stream
@@ -403,6 +530,7 @@ app.post('/api/control', checkAuth, async (req, res) => {
 });
 
 // Serve Static files (Must be after root route)
+app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
 app.use(express.static(path.join(__dirname, '.')));
 
 const PORT = process.env.PORT || 3000;
