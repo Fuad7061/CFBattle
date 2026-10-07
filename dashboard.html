@@ -324,6 +324,13 @@
                     <div class="panel">
                         <div class="panel-header">
                             <h2>Live Director Studio</h2>
+                            <div style="display:flex; align-items:center; gap: 10px;">
+                                <label style="font-size:13px; color:var(--text-muted); margin:0;">Active Design:</label>
+                                <select id="live-engine-select" style="width: auto; padding: 6px 12px; font-size: 13px;" onchange="updatePreviewSrc()">
+                                    <option value="landscape">Landscape (React V2)</option>
+                                    <option value="vertical">Vertical (Original)</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="preview-container">
                             <div class="controls-col">
@@ -614,6 +621,13 @@
             document.getElementById('set-stream-url').value = s.streamUrl || '';
             document.getElementById('set-stream-key').value = s.streamKey || '';
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
+            if (s.activeEngine !== undefined) {
+                const el = document.getElementById('live-engine-select');
+                if (el) {
+                    el.value = s.activeEngine;
+                    updatePreviewSrc();
+                }
+            }
             if (s.gameSettings) {
                 if (s.gameSettings.watermark !== undefined) document.getElementById('live-watermark').value = s.gameSettings.watermark;
                 if (s.gameSettings.speed !== undefined) document.getElementById('live-speed').value = s.gameSettings.speed;
@@ -642,6 +656,7 @@
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
+                activeEngine: document.getElementById('live-engine-select').value
             };
 
             // 1. Save persistently
@@ -815,6 +830,18 @@
         }
 
         setTimeout(suggestRecordingDuration, 1000);
+
+        // Change preview URL dynamically based on selection
+        function updatePreviewSrc() {
+            const frame = document.getElementById('preview-frame');
+            const select = document.getElementById('live-engine-select');
+            if (frame && select) {
+                const path = select.value === 'vertical' ? '/game.html?stream=true' : '/?stream=true';
+                if (!frame.src.endsWith(path)) {
+                    frame.src = path;
+                }
+            }
+        }
 
         async function updateStatusAndLogs() {
             try {

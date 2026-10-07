@@ -43,7 +43,8 @@ let currentSettings = {
     streamUrl: '',
     streamKey: '',
     bitrate: 6800,
-    crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 }
+    crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
+    activeEngine: 'landscape' // 'landscape' for React, 'vertical' for original
 };
 
 // Load settings on boot
@@ -212,7 +213,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/?stream=true`;
+        let enginePath = currentSettings.activeEngine === 'vertical' ? 'game.html' : '';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${enginePath}?stream=true`;
         logMsg(`Puppeteer navigating to ${gameUrl}`);
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
@@ -422,7 +424,9 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         });
 
         currentPage = await browser.newPage();
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/?stream=true`;
+        
+        let enginePath = currentSettings.activeEngine === 'vertical' ? 'game.html' : '';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${enginePath}?stream=true`;
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
         if (currentSettings.gameSettings) {
