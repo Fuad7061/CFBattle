@@ -22,6 +22,8 @@ class Recorder {
       
       // Hide controls during recording
       document.body.classList.add('recording-active');
+      this._escListener = (e) => { if (e.key === 'Escape') { this.stop(); document.getElementById('btn-stop').click(); } };
+      window.addEventListener('keydown', this._escListener);
 
       // Stop recording if user stops sharing via browser UI
       stream.getVideoTracks()[0].onended = () => {
@@ -44,6 +46,7 @@ class Recorder {
       this._rec.onstop = () => {
         // Restore controls
         document.body.classList.remove('recording-active');
+        if (this._escListener) window.removeEventListener('keydown', this._escListener);
         // Stop all tracks to remove the recording icon
         stream.getTracks().forEach(track => track.stop());
       };
