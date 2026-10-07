@@ -57,6 +57,21 @@ if (fs.existsSync(SETTINGS_FILE)) {
     }
 }
 
+// Clean up stale temp recordings on boot to optimize storage
+try {
+    const recordDir = path.join(__dirname, 'recordings');
+    if (fs.existsSync(recordDir)) {
+        fs.readdirSync(recordDir).forEach(file => {
+            if (file.endsWith('.mp4.tmp')) {
+                fs.unlinkSync(path.join(recordDir, file));
+                logMsg(`Cleaned up stale temp recording file: ${file}`);
+            }
+        });
+    }
+} catch (e) {
+    logMsg("Error during temp recording cleanup: " + e.message, true);
+}
+
 // Auth Middleware
 function checkAuth(req, res, next) {
     const key = req.headers['x-login-key'];
