@@ -18,16 +18,16 @@ ENV DATA_DIR="/app/data"
 # Default Login Key (Can be overridden in Coolify ENV variables)
 ENV LOGIN_KEY="admin"
 
-# Install Node.js dependencies
+# Install Node.js dependencies (Production only to save space)
 COPY package*.json ./
-RUN npm install
+RUN npm install --omit=dev && npm cache clean --force
 
 # Copy project files
 COPY . .
 
-# Build React Game automatically during Docker build
+# Build React Game automatically and clean up node_modules to save huge storage space
 WORKDIR /app/react-game
-RUN npm install && npm run build
+RUN npm install && npm run build && rm -rf node_modules && npm cache clean --force
 WORKDIR /app
 
 # Make the startup script executable
