@@ -33,6 +33,8 @@ let streamProcess = null;
 let browser = null;
 let currentPage = null;
 let isStreaming = false;
+let isRecording = false;
+let recordingProgress = null;
 
 // Default Settings
 let currentSettings = {
@@ -78,7 +80,26 @@ app.post('/api/login', (req, res) => {
 });
 
 app.get('/api/status', checkAuth, (req, res) => {
-    res.json({ isStreaming, settings: currentSettings });
+    let progress = null;
+    if (isRecording && recordingProgress) {
+        const elapsed = Date.now() - recordingProgress.startTime;
+        progress = Math.min(100, Math.round((elapsed / recordingProgress.durationMs) * 100));
+        
+        // Failsafe: if it's stuck 30 seconds past the expected end time, kill it
+        if (elapsed > recordingProgress.durationMs + 30000) {
+            logMsg("Failsafe triggered: FFmpeg hung past expected duration. Force killing...");
+            if (streamProcess) {
+                try { streamProcess.kill('SIGKILL'); } catch(e){}
+                streamProcess = null;
+            }
+            isRecording = false;
+            recordingProgress = null;
+            if (browser) { browser.close(); browser = null; }
+            currentPage = null;
+            progress = null; // Reset
+        }
+    }
+    res.json({ isStreaming, isRecording, progress, settings: currentSettings });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
@@ -115,8 +136,8 @@ app.post('/api/logs/clear', checkAuth, (req, res) => {
 });
 
 app.post('/api/start-stream', checkAuth, async (req, res) => {
-    if (isStreaming) {
-        return res.status(400).json({ error: 'Stream is already running' });
+    if (isStreaming || isRecording) {
+        return res.status(400).json({ error: 'Engine is already running (Stop it first)' });
     }
     
     if (!currentSettings.streamUrl || !currentSettings.streamKey) {
@@ -138,11 +159,10 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu',
-            '--disable-software-rasterizer',
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
-            '--window-size=720,1280',
+            '--window-size=1080,1920',
             '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required',
             '--kiosk',
@@ -159,7 +179,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
         browser = await puppeteer.launch({
             executablePath: chromeExecutable,
             headless: process.platform === 'darwin' ? false : false, 
-            defaultViewport: { width: 720, height: 1280 },
+            defaultViewport: { width: 1080, height: 1920 },
             args: puppeteerArgs,
             ignoreDefaultArgs: ['--enable-automation']
         });
@@ -253,13 +273,13 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
         } else {
             // Linux/VPS mode (Xvfb + Pulse)
             ffmpegArgs = [
-                '-thread_queue_size', '512',
+                '-thread_queue_size', '1024',
                 '-f', 'x11grab',
-                '-video_size', '720x1280',
-                '-framerate', '30',
+                '-video_size', '1080x1920',
+                '-framerate', '60',
                 '-draw_mouse', '0',
                 '-i', process.env.DISPLAY || ':99',
-                '-thread_queue_size', '512',
+                '-thread_queue_size', '1024',
                 '-f', 'pulse',
                 '-i', 'v1.monitor',
                 '-c:v', 'libx264',
@@ -312,12 +332,14 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 });
 
 app.post('/api/stop-stream', checkAuth, async (req, res) => {
-    if (!isStreaming) {
-        return res.status(400).json({ error: 'Stream is not running' });
+    if (!isStreaming && !isRecording) {
+        return res.status(400).json({ error: 'Engine is not running' });
     }
     
-    logMsg("Stopping stream by user request...");
+    logMsg("Stopping engine by user request...");
     isStreaming = false;
+    isRecording = false;
+    recordingProgress = null;
     
     if (streamProcess) {
         streamProcess.kill('SIGINT');
@@ -335,7 +357,7 @@ app.post('/api/stop-stream', checkAuth, async (req, res) => {
 
 // Recording Feature
 app.post('/api/start-record', checkAuth, async (req, res) => {
-    if (isStreaming) {
+    if (isStreaming || isRecording) {
         return res.status(400).json({ error: 'Engine is already running. Please stop the current stream/recording first.' });
     }
     
@@ -343,7 +365,11 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
     const durationSeconds = durationMinutes * 60;
     
     try {
-        isStreaming = true;
+        isRecording = true;
+        recordingProgress = {
+            startTime: Date.now(),
+            durationMs: durationSeconds * 1000
+        };
         logMsg(`Starting local recording for ${durationMinutes} minutes...`);
 
         const defaultChrome = process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/chromium';
@@ -351,9 +377,9 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
 
         const puppeteerArgs = [
             '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-            '--disable-gpu', '--disable-software-rasterizer',
+            '--disable-gpu',
             '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-            '--window-size=720,1280', '--window-position=0,0',
+            '--window-size=1080,1920', '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required', '--kiosk',
             '--js-flags="--max-old-space-size=512"'
         ];
@@ -364,7 +390,7 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         browser = await puppeteer.launch({
             executablePath: chromeExecutable,
             headless: false, 
-            defaultViewport: { width: 720, height: 1280 },
+            defaultViewport: { width: 1080, height: 1920 },
             args: puppeteerArgs,
             ignoreDefaultArgs: ['--enable-automation']
         });
@@ -393,33 +419,62 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         const recordDir = path.join(__dirname, 'recordings');
         if (!fs.existsSync(recordDir)) fs.mkdirSync(recordDir, { recursive: true });
         const fileName = `gameplay_${Date.now()}.mp4`;
-        const filePath = path.join(recordDir, fileName);
+        const tmpPath = path.join(recordDir, fileName + '.tmp');
+        const finalPath = path.join(recordDir, fileName);
 
-        const ffmpegArgs = [
-            '-thread_queue_size', '512',
-            '-f', 'x11grab',
-            '-video_size', '720x1280',
-            '-framerate', '30',
-            '-draw_mouse', '0',
-            '-i', process.env.DISPLAY || ':99',
-            '-thread_queue_size', '512',
-            '-f', 'pulse',
-            '-i', 'v1.monitor',
-            '-t', durationSeconds.toString(), // Automatically stop after duration
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-threads', '0',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-ar', '44100',
-            filePath
-        ];
+        let ffmpegArgs = [];
+        if (process.platform === 'darwin') {
+            logMsg("macOS detected: using avfoundation for local testing capture.");
+            ffmpegArgs = [
+                '-f', 'avfoundation',
+                '-framerate', '60',
+                '-i', '1:0',
+                '-t', durationSeconds.toString(),
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '18',
+                '-threads', '2',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '44100',
+                tmpPath
+            ];
+        } else {
+            ffmpegArgs = [
+                '-thread_queue_size', '1024',
+                '-f', 'x11grab',
+                '-video_size', '1080x1920',
+                '-framerate', '60',
+                '-draw_mouse', '0',
+                '-i', process.env.DISPLAY || ':99',
+                '-thread_queue_size', '1024',
+                '-f', 'pulse',
+                '-i', 'v1.monitor',
+                '-t', durationSeconds.toString(), // Automatically stop after duration
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '18',
+                '-threads', '0',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '44100',
+                tmpPath
+            ];
+        }
 
         streamProcess = spawn('ffmpeg', ffmpegArgs);
 
         streamProcess.on('close', (code) => {
-            logMsg(`Recording finished automatically: ${fileName}`);
-            isStreaming = false;
+            logMsg(`Recording finished. Renaming temp file to ${fileName}`);
+            if (fs.existsSync(tmpPath)) {
+                try {
+                    fs.renameSync(tmpPath, finalPath);
+                } catch (e) {
+                    logMsg(`Failed to rename tmp file: ${e.message}`, true);
+                }
+            }
+            isRecording = false;
+            recordingProgress = null;
             currentPage = null;
             if (browser) { browser.close(); browser = null; }
         });
@@ -427,7 +482,8 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         res.json({ success: true, message: 'Recording started successfully!' });
     } catch (error) {
         logMsg(`Failed to start recording: ${error.message}`, true);
-        isStreaming = false;
+        isRecording = false;
+        recordingProgress = null;
         if (browser) browser.close();
         res.status(500).json({ error: error.message });
     }
@@ -463,8 +519,8 @@ app.post('/api/recordings/delete', checkAuth, (req, res) => {
 
 // Remote Control for the Game inside the stream
 app.post('/api/control', checkAuth, async (req, res) => {
-    if (!isStreaming || !currentPage) {
-        return res.status(400).json({ error: 'Stream is not running. Start the stream first.' });
+    if ((!isStreaming && !isRecording) || !currentPage) {
+        return res.status(400).json({ error: 'Engine is not running. Start the stream or recording first.' });
     }
     
     const { action, payload } = req.body;

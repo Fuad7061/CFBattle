@@ -10,7 +10,7 @@ pactl set-default-sink v1
 pactl set-default-source v1.monitor
 
 # Start X Virtual Framebuffer (Xvfb) for the headless Chrome display
-Xvfb :99 -screen 0 720x1280x24 -ac &
+Xvfb :99 -screen 0 1080x1920x24 -ac &
 export DISPLAY=:99
 
 # Start the Node.js Dashboard / Stream Manager

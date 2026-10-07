@@ -346,18 +346,32 @@
         }
 
         function applyStatus(data) {
-            const isLive = data.isStreaming;
+            const isLive = data.isStreaming || data.isRecording;
             document.getElementById('btn-start').style.display = isLive ? 'none' : 'block';
             document.getElementById('btn-stop').style.display = isLive ? 'block' : 'none';
             
             const badge = document.getElementById('status-badge');
             const txt = document.getElementById('status-text');
-            if (isLive) {
+            const btnRecord = document.getElementById('btn-record');
+            
+            if (data.isStreaming) {
                 badge.classList.add('is-live');
+                badge.style.color = 'var(--success)';
                 txt.textContent = 'STREAMING LIVE';
+                btnRecord.disabled = true;
+                btnRecord.textContent = '⏺ Start Offline Recording';
+            } else if (data.isRecording) {
+                badge.classList.add('is-live');
+                badge.style.color = '#eab308'; // Yellow for recording
+                txt.textContent = `RECORDING OFFLINE (${data.progress || 0}%)`;
+                btnRecord.disabled = true;
+                btnRecord.textContent = `⏺ Recording... ${data.progress || 0}%`;
             } else {
                 badge.classList.remove('is-live');
+                badge.style.color = ''; // Reset to default
                 txt.textContent = 'OFFLINE';
+                btnRecord.disabled = false;
+                btnRecord.textContent = '⏺ Start Offline Recording';
             }
         }
 
@@ -378,7 +392,7 @@
             document.getElementById('btn-stop').disabled = true;
             try {
                 const res = await fetch('/api/stop-stream', { method: 'POST', headers: API_HEADERS() });
-                if (res.ok) { showAlert('Stream stopped'); checkAuth(); }
+                if (res.ok) { showAlert('Engine stopped safely'); checkAuth(); }
             } catch (e) {}
             document.getElementById('btn-stop').disabled = false;
         }
@@ -478,7 +492,8 @@
         }
 
         async function controlGame(action) {
-            const isLive = document.getElementById('status-badge').classList.contains('is-live');
+            const badge = document.getElementById('status-badge');
+            const isLive = badge.textContent.includes('STREAMING') || badge.textContent.includes('RECORDING');
             
             if (isLive) {
                 try {
@@ -490,17 +505,17 @@
                     const data = await res.json();
                     if (!res.ok) showAlert(data.error || 'Control error', true);
                 } catch(e) { showAlert('Network error', true); }
-            } else {
-                // Control local preview frame
-                const frame = document.getElementById('preview-frame');
-                if (frame && frame.contentWindow) {
-                    if (action === 'start') {
-                        frame.contentWindow.document.getElementById('btn-start')?.click();
-                    } else if (action === 'pause') {
-                        frame.contentWindow.document.getElementById('btn-pause')?.click();
-                    } else if (action === 'reset') {
-                        frame.contentWindow.document.getElementById('btn-reset')?.click();
-                    }
+            }
+            
+            // ALWAYS trigger on the local preview frame too, so the user visually sees the pause instantly
+            const frame = document.getElementById('preview-frame');
+            if (frame && frame.contentWindow) {
+                if (action === 'start') {
+                    frame.contentWindow.document.getElementById('btn-start')?.click();
+                } else if (action === 'pause') {
+                    frame.contentWindow.document.getElementById('btn-pause')?.click();
+                } else if (action === 'reset') {
+                    frame.contentWindow.document.getElementById('btn-reset')?.click();
                 }
             }
         }
@@ -629,11 +644,24 @@
         // Initialize suggestion on load
         setTimeout(suggestRecordingDuration, 1000);
 
+        // Background Poller
+        async function updateStatusAndLogs() {
+            try {
+                const res = await fetch('/api/status', { headers: API_HEADERS() });
+                if (res.ok) {
+                    const data = await res.json();
+                    applyStatus(data);
+                }
+                fetchLogs();
+                fetchRecordings();
+            } catch (e) {}
+        }
+
         setInterval(() => {
             if (document.getElementById('dashboard-view').classList.contains('active-view')) {
-                fetchLogs();
+                updateStatusAndLogs();
             }
-        }, 5000);
+        }, 3000); // 3 seconds is good for smooth progress bar
 
         checkAuth();
     </script>
