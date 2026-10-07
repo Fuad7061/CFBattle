@@ -3,6 +3,8 @@
  * Top Supporters leaderboard, live viewer counter, engagement CTAs,
  * milestone celebrations, and champion podium.
  */
+import { getFlagUrl } from './countries.js';
+
 export class UIManager {
   constructor() {
     this.$ = id => document.getElementById(id);

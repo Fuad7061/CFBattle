@@ -877,11 +877,3 @@ export class FlagBattle {
     if (controls) controls.style.maxWidth = `${realW}px`;
   }
 }
-
-/* ==================================================================== */
-/*  ENTRY POINT                                                          */
-/* ==================================================================== */
-
-window.addEventListener('load', () => {
-  window.game = new FlagBattle();
-});
