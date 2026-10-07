@@ -1,7 +1,7 @@
 /**
  * Recorder — MediaRecorder wrapper for canvas capture + WebM download
  */
-class Recorder {
+export class Recorder {
   constructor(canvas) {
     this.canvas   = canvas;
     this._chunks  = [];

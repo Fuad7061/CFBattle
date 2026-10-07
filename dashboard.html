@@ -836,7 +836,7 @@
             const frame = document.getElementById('preview-frame');
             const select = document.getElementById('live-engine-select');
             if (frame && select) {
-                const path = select.value === 'vertical' ? '/game.html?stream=true' : '/?stream=true';
+                const path = select.value === 'vertical' ? '/?view=vertical&stream=true' : '/?stream=true';
                 if (!frame.src.endsWith(path)) {
                     frame.src = path;
                 }

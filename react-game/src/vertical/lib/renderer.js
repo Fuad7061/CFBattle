@@ -2,7 +2,7 @@
  * Renderer — Custom canvas drawing layer with floating country nameplates for Top 5,
  * dramatic Top 3 suspense spotlight, and ping-pong visual motion effects.
  */
-class Renderer {
+export class Renderer {
   constructor(canvas) {
     this.canvas       = canvas;
     this.ctx          = canvas.getContext('2d');

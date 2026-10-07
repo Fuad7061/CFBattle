@@ -1,7 +1,7 @@
 /**
  * AudioManager — TTS (Browser + Google Cloud TTS), SFX, Background Music & Suspense Heartbeat
  */
-class AudioManager {
+export class AudioManager {
   constructor() {
     this.provider     = 'browser';   // 'browser' | 'google'
     this.googleApiKey = '';

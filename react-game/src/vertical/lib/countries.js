@@ -5,7 +5,7 @@
  * Includes audienceWeight for YouTube Live Stream audience retention optimization
  */
 
-const COUNTRIES = [
+export const COUNTRIES = [
   { name: "Afghanistan", code: "af", weight: 1.0 }, 
   { name: "Albania", code: "al", weight: 1.0 }, 
   { name: "Algeria", code: "dz", weight: 2.0 }, 
@@ -204,7 +204,7 @@ const COUNTRIES = [
 ];
 
 // Get flag image URL for a country code
-function getFlagUrl(code, size = 80) {
+export function getFlagUrl(code, size = 80) {
   return `https://flagcdn.com/w${size}/${code}.png`;
 }
 

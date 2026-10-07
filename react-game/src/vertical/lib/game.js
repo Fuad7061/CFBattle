@@ -1,3 +1,10 @@
+import { COUNTRIES, getFlagUrl } from "./countries.js";
+import { PhysicsEngine } from "./physics.js";
+import { Renderer } from "./renderer.js";
+import { UIManager } from "./ui.js";
+import { AudioManager } from "./audio.js";
+import { Recorder } from "./recorder.js";
+import Matter from "matter-js";
 /**
  * FlagBattle — Main game controller
  *
@@ -10,7 +17,7 @@
  *     spotlight darkness vignette, and 1v1 Sudden Death tension.
  *  6. 25x8 CSS grid fitting all 195 flags simultaneously with zero scrollbars.
  */
-class FlagBattle {
+export class FlagBattle {
   constructor() {
     /* ---- Canvas ----------------------------------------- */
     this.canvas = document.getElementById('game-canvas');

@@ -213,8 +213,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        let enginePath = currentSettings.activeEngine === 'vertical' ? 'game.html' : '';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${enginePath}?stream=true`;
+        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true' : '?stream=true';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${queryParam}`;
         logMsg(`Puppeteer navigating to ${gameUrl}`);
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
@@ -425,8 +425,8 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        let enginePath = currentSettings.activeEngine === 'vertical' ? 'game.html' : '';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${enginePath}?stream=true`;
+        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true' : '?stream=true';
+        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${queryParam}`;
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
 
         if (currentSettings.gameSettings) {

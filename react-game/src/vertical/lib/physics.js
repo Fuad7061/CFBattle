@@ -1,3 +1,4 @@
+import Matter from "matter-js";
 /**
  * PhysicsEngine — Matter.js rotating circular arena with leak-proof containment,
  * ping-pong floating physics, and YouTube audience retention engagement mechanics.
@@ -8,7 +9,7 @@
  *  3. Audience Retention Mechanics: clutch near-miss deflections for popular YouTube audience countries.
  *  4. TimeScale / Matrix Slow-Motion for Top 3 suspense.
  */
-class PhysicsEngine {
+export class PhysicsEngine {
   constructor(cx, cy, R) {
     this.cx = cx;   // arena center X (270)
     this.cy = cy;   // arena center Y (445)
