@@ -310,7 +310,7 @@
                     <p style="font-size:12px; color:var(--text-muted); margin-bottom: 15px; line-height: 1.4;">
                         Select your preferred gameplay view below to open it in a new tab. Use this URL in OBS as a Browser Source.
                     </p>
-                    <a href="/" target="_blank" class="game-link-btn" style="background: var(--primary); color: white; display: block; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: 500; margin-bottom: 10px; transition: 0.2s;">
+                    <a href="/?view=landscape" target="_blank" class="game-link-btn" style="background: var(--primary); color: white; display: block; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: 500; margin-bottom: 10px; transition: 0.2s;">
                         🖥️ Launch Landscape (PC/Web)
                     </a>
                     <a href="/?view=vertical" target="_blank" class="game-link-btn" style="background: var(--accent); color: white; display: block; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: 500; transition: 0.2s;">
@@ -449,6 +449,21 @@
                         <div class="form-group" style="width: 50%;">
                             <label>Video Bitrate (Kbps)</label>
                             <input type="number" id="set-bitrate" value="6800" min="1000" max="20000" step="100">
+                        </div>
+                    </div>
+                    
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>YouTube Live Chat Integration</h2>
+                        </div>
+                        <p class="panel-desc">Enable audience interactions by hooking into the Live Chat.</p>
+                        <div class="form-group">
+                            <label>YouTube API Key</label>
+                            <input type="password" id="set-youtube-api-key" placeholder="AIzaSy...">
+                        </div>
+                        <div class="form-group">
+                            <label>Live Video ID (or Channel ID)</label>
+                            <input type="text" id="set-youtube-live-id" placeholder="dQw4w9WgXcQ">
                         </div>
                     </div>
                 </div>
@@ -623,6 +638,8 @@
             if(!s) return;
             document.getElementById('set-stream-url').value = s.streamUrl || '';
             document.getElementById('set-stream-key').value = s.streamKey || '';
+            document.getElementById('set-youtube-api-key').value = s.youtubeApiKey || '';
+            document.getElementById('set-youtube-live-id').value = s.youtubeLiveId || s.youtubeChannelId || '';
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
             if (s.activeEngine !== undefined) {
                 const el = document.getElementById('live-engine-select');
@@ -659,7 +676,9 @@
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
-                activeEngine: document.getElementById('live-engine-select').value
+                activeEngine: document.getElementById('live-engine-select').value,
+                youtubeApiKey: document.getElementById('set-youtube-api-key').value,
+                youtubeLiveId: document.getElementById('set-youtube-live-id').value
             };
 
             // 1. Save persistently
@@ -839,10 +858,12 @@
             const frame = document.getElementById('preview-frame');
             const select = document.getElementById('live-engine-select');
             if (frame && select) {
-                const path = select.value === 'vertical' ? '/?view=vertical&stream=true' : '/?stream=true';
+                const isVertical = select.value === 'vertical';
+                const path = isVertical ? '/?view=vertical&stream=true' : '/?view=landscape&stream=true';
                 if (!frame.src.endsWith(path)) {
                     frame.src = path;
                 }
+                frame.parentElement.style.aspectRatio = isVertical ? '9/16' : '16/9';
             }
         }
 

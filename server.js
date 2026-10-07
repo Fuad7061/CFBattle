@@ -643,8 +643,14 @@ app.post('/api/control', checkAuth, async (req, res) => {
 // Serve Static files (Must be after root route)
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
 
-// Root route goes to React game
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html')));
+// Root route serves dashboard, or game if view param is set
+app.get('/', (req, res) => {
+    if (req.query.view === 'landscape' || req.query.view === 'vertical') {
+        res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html'));
+    } else {
+        res.sendFile(path.join(__dirname, 'dashboard.html'));
+    }
+});
 app.use('/assets', express.static(path.join(__dirname, 'react-game', 'dist', 'assets')));
 app.use('/flags', express.static(path.join(__dirname, 'react-game', 'dist', 'flags')));
 
