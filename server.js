@@ -446,13 +446,15 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             logMsg("macOS detected: using avfoundation for local testing capture.");
             ffmpegArgs = [
                 '-f', 'avfoundation',
-                '-framerate', '30',
-                '-i', '1:none', // Video index 1, no audio
+                '-framerate', '60',
+                '-i', '1:0', // Re-add audio for local test, or keep 1:none if video only desired
                 '-t', durationSeconds.toString(),
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '18',
-                '-threads', '2',
+                '-c:v', 'h264_videotoolbox', // Hardware accelerated encoding
+                '-b:v', '10M', // 10 Mbps for 1080p60 high quality
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '44100',
+                '-y',
                 tmpPath
             ];
         } else {
@@ -628,7 +630,12 @@ app.post('/api/control', checkAuth, async (req, res) => {
 
 // Serve Static files (Must be after root route)
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
-app.use('/game2', express.static(path.join(__dirname, 'react-game', 'dist')));
+
+// Root route goes to React game (V2)
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html')));
+app.use('/assets', express.static(path.join(__dirname, 'react-game', 'dist', 'assets')));
+app.get('/legacy.html', (req, res) => res.sendFile(path.join(__dirname, 'game.html')));
+
 app.use(express.static(path.join(__dirname, '.'), {
     setHeaders: (res, reqPath) => {
         if (reqPath.endsWith('.html')) {

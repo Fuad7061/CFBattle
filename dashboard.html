@@ -163,8 +163,8 @@
                     <div style="margin-bottom: 10px;">
                         <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Game Engine Version</label>
                         <select id="live-game-version" style="margin-top: 5px; margin-bottom: 15px;" onchange="updatePreviewGame()">
-                            <option value="1">Original Engine (Vanilla JS)</option>
-                            <option value="2">V2 Engine (React + Tailwind)</option>
+                            <option value="1">V2 Engine (React + Tailwind)</option>
+                            <option value="legacy">Legacy Engine (Vanilla JS)</option>
                         </select>
                     </div>
                     <div class="preview-wrapper">
@@ -613,10 +613,10 @@
         function updatePreviewGame() {
             const game = document.getElementById('live-game-version').value;
             const frame = document.getElementById('preview-frame');
-            if (game === '1') {
-                frame.src = "/game.html?stream=true";
+            if (game === 'legacy') {
+                frame.src = "/legacy.html?stream=true";
             } else {
-                frame.src = "/game2/?stream=true";
+                frame.src = "/?stream=true";
             }
         }
 
