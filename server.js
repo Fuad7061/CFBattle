@@ -464,8 +464,16 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
 
         streamProcess = spawn('ffmpeg', ffmpegArgs);
 
+        streamProcess.stderr.on('data', (data) => {
+            const str = data.toString();
+            // Log any obvious errors from FFmpeg output
+            if (str.toLowerCase().includes('error') || str.toLowerCase().includes('failed') || str.toLowerCase().includes('cannot open')) {
+                logMsg(`FFmpeg RECORD ERR: ${str.trim()}`, true);
+            }
+        });
+
         streamProcess.on('close', (code) => {
-            logMsg(`Recording finished. Renaming temp file to ${fileName}`);
+            logMsg(`Recording process exited with code ${code}. Renaming temp file...`);
             if (fs.existsSync(tmpPath)) {
                 try {
                     fs.renameSync(tmpPath, finalPath);
