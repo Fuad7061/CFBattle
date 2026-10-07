@@ -261,7 +261,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-i', process.env.DISPLAY || ':99',
                 '-thread_queue_size', '512',
                 '-f', 'pulse',
-                '-i', 'default',
+                '-i', 'v1.monitor',
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
@@ -404,7 +404,7 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             '-i', process.env.DISPLAY || ':99',
             '-thread_queue_size', '512',
             '-f', 'pulse',
-            '-i', 'default',
+            '-i', 'v1.monitor',
             '-t', durationSeconds.toString(), // Automatically stop after duration
             '-c:v', 'libx264',
             '-preset', 'ultrafast',

@@ -1,11 +1,13 @@
 #!/bin/bash
 
-# Start PulseAudio in the background
+# Start PulseAudio in the background (ignore root warning)
 pulseaudio -D --exit-idle-time=-1
-# Load a virtual audio sink so Chrome has an audio output device
-pacmd load-module module-virtual-sink sink_name=v1
-pacmd set-default-sink v1
-pacmd set-default-source v1.monitor
+sleep 2
+
+# Load a null sink so Chrome has an audio output device
+pactl load-module module-null-sink sink_name=v1
+pactl set-default-sink v1
+pactl set-default-source v1.monitor
 
 # Start X Virtual Framebuffer (Xvfb) for the headless Chrome display
 Xvfb :99 -screen 0 720x1280x24 -ac &
