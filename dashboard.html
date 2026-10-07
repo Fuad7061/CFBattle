@@ -192,11 +192,11 @@
                         </div>
                         <div class="form-group">
                             <label>Rounds (Best of X)</label>
-                            <input type="number" id="live-total-rounds" min="1" max="100" value="1">
+                            <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
                         </div>
                         <div class="form-group">
                             <label>Match Duration (Minutes)</label>
-                            <input type="number" id="live-time-limit" min="1" max="120" value="5">
+                            <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
                         </div>
                         <div class="form-group">
                             <label>Team Up Mode</label>
@@ -262,7 +262,8 @@
                     <p style="font-size:12px; color:var(--text-muted); margin-top:0;">Record gameplay to the server as an MP4, then download it. Runs totally headlessly.</p>
                     <div class="form-group">
                         <label>Recording Duration (Minutes)</label>
-                        <input type="number" id="record-duration" value="5" min="1" max="120">
+                        <input type="number" id="record-duration" value="6.5" min="0.5" max="300" step="0.5">
+                        <small id="duration-suggestion" style="color:var(--success); font-size:11px; display:block; margin-top:4px;">✨ Suggested: 6.5 mins (Covers full match + winner screen)</small>
                     </div>
                     <button class="btn btn-outline" id="btn-record" style="margin-bottom: 15px;" onclick="startRecording()">⏺ Start Offline Recording</button>
                     
@@ -543,10 +544,25 @@
         }
 
         // Recordings
+        function suggestRecordingDuration() {
+            const rounds = parseInt(document.getElementById('live-total-rounds').value) || 1;
+            const matchMins = parseInt(document.getElementById('live-time-limit').value) || 5;
+            
+            // Formula: For each round -> (Match time) + (60s winner screen) + (5s countdown/buffer)
+            const secondsPerRound = (matchMins * 60) + 60 + 5;
+            const totalSeconds = (rounds * secondsPerRound) + 15; // 15s boot buffer
+            
+            // Convert to minutes, rounded to nearest 0.5
+            const totalMins = (Math.ceil((totalSeconds / 60) * 2) / 2).toFixed(1);
+            
+            document.getElementById('record-duration').value = totalMins;
+            document.getElementById('duration-suggestion').textContent = `✨ Suggested: ${totalMins} mins (Perfectly covers all rounds + winner screens)`;
+        }
+
         async function startRecording() {
             const btn = document.getElementById('btn-record');
             btn.disabled = true;
-            const duration = parseInt(document.getElementById('record-duration').value) || 5;
+            const duration = parseFloat(document.getElementById('record-duration').value) || 5;
             try {
                 const res = await fetch('/api/start-record', { 
                     method: 'POST', 
@@ -598,16 +614,20 @@
         }
 
         async function deleteRecording(file) {
-            if(!confirm('Delete this recording permanently?')) return;
+            if(!confirm('Are you sure you want to permanently delete this video to save storage?')) return;
             try {
                 await fetch('/api/recordings/delete', {
                     method: 'POST',
                     headers: API_HEADERS(),
                     body: JSON.stringify({ file })
                 });
+                showAlert('Video deleted successfully.');
                 fetchRecordings();
             } catch (e) {}
         }
+
+        // Initialize suggestion on load
+        setTimeout(suggestRecordingDuration, 1000);
 
         setInterval(() => {
             if (document.getElementById('dashboard-view').classList.contains('active-view')) {
