@@ -36,7 +36,8 @@ let isStreaming = false;
 
 // Default Settings
 let currentSettings = {
-    rtmpUrl: '',
+    streamUrl: '',
+    streamKey: '',
     bitrate: 6800,
     crop: { enabled: false, x: 0, y: 0, w: 540, h: 960 }
 };
@@ -118,8 +119,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
         return res.status(400).json({ error: 'Stream is already running' });
     }
     
-    if (!currentSettings.rtmpUrl) {
-        return res.status(400).json({ error: 'RTMP URL is required. Please set it in the Settings tab.' });
+    if (!currentSettings.streamUrl || !currentSettings.streamKey) {
+        return res.status(400).json({ error: 'Stream URL and Secret Key are required. Please set them in the Settings tab.' });
     }
 
     try {
@@ -212,6 +213,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         const bitrateStr = currentSettings.bitrate ? `${currentSettings.bitrate}k` : '6800k';
         const bufsizeStr = currentSettings.bitrate ? `${currentSettings.bitrate * 2}k` : '13600k';
+        const rtmpUrl = (currentSettings.streamUrl.endsWith('/') ? currentSettings.streamUrl : currentSettings.streamUrl + '/') + currentSettings.streamKey;
 
         // Build FFmpeg Args conditionally based on OS
         let ffmpegArgs = [];
@@ -234,7 +236,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-b:a', '128k',
                 '-ar', '44100',
                 '-f', 'flv',
-                currentSettings.rtmpUrl
+                rtmpUrl
             ];
         } else {
             // Linux/VPS mode (Xvfb + Pulse)
@@ -258,7 +260,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-b:a', '128k',
                 '-ar', '44100',
                 '-f', 'flv',
-                currentSettings.rtmpUrl
+                rtmpUrl
             ];
         }
 

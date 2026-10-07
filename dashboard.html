@@ -234,8 +234,12 @@
                 <div class="panel" style="margin-bottom: 20px;">
                     <h2>Stream & Broadcast Setup</h2>
                     <div class="form-group">
-                        <label>YouTube RTMP URL / Key</label>
-                        <input type="password" id="set-rtmp" placeholder="rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx">
+                        <label>Stream URL</label>
+                        <input type="text" id="set-stream-url" placeholder="rtmp://a.rtmp.youtube.com/live2">
+                    </div>
+                    <div class="form-group">
+                        <label>Secret Key</label>
+                        <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
                     </div>
                     <div class="form-group">
                         <label>Video Bitrate (Kbps)</label>
@@ -361,7 +365,8 @@
 
         function populateSettings(s) {
             if(!s) return;
-            document.getElementById('set-rtmp').value = s.rtmpUrl || '';
+            document.getElementById('set-stream-url').value = s.streamUrl || '';
+            document.getElementById('set-stream-key').value = s.streamKey || '';
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
             if (s.crop) {
                 document.getElementById('set-crop-enable').checked = s.crop.enabled;
@@ -396,7 +401,8 @@
             };
             
             const rtmpPayload = {
-                rtmpUrl: document.getElementById('set-rtmp').value,
+                streamUrl: document.getElementById('set-stream-url').value,
+                streamKey: document.getElementById('set-stream-key').value,
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
                 crop: {
                     enabled: document.getElementById('set-crop-enable').checked,
