@@ -227,14 +227,29 @@
 
         /* --- PREVIEW --- */
         .preview-container {
-            display: grid; grid-template-columns: 350px 1fr; gap: 30px;
+            display: grid; grid-template-columns: 320px 1fr; gap: 20px;
         }
         .preview-wrapper {
             position: relative; width: 100%; aspect-ratio: 9/16;
             background: #000; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
             box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            max-height: 80vh; /* Prevent overflowing off the screen vertically */
         }
         .preview-wrapper iframe { width: 100%; height: 100%; border: none; }
+        
+        /* --- RESPONSIVE MEDIA QUERIES --- */
+        @media (max-width: 1200px) {
+            .dashboard-content { padding: 20px; gap: 20px; }
+            .sidebar { width: 220px; }
+            .preview-container { grid-template-columns: 300px 1fr; }
+        }
+        @media (max-width: 992px) {
+            .dashboard-content { flex-direction: column; }
+            .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; }
+            .quick-links { width: 100%; margin-top: 20px; }
+            .preview-container { grid-template-columns: 1fr; }
+            .preview-wrapper { max-width: 600px; margin: 0 auto; }
+        }
         
         /* --- LOGS --- */
         .log-box {
@@ -786,12 +801,22 @@
             // ALWAYS trigger on the local preview frame too
             const frame = document.getElementById('preview-frame');
             if (frame && frame.contentWindow) {
-                if (action === 'start') {
-                    frame.contentWindow.document.getElementById('btn-start')?.click();
-                } else if (action === 'pause') {
-                    frame.contentWindow.document.getElementById('btn-pause')?.click();
-                } else if (action === 'reset') {
-                    frame.contentWindow.document.getElementById('btn-reset')?.click();
+                const cw = frame.contentWindow;
+                if (action === 'new-round') {
+                    if (cw.gameInstance && typeof cw.gameInstance.newRound === 'function') {
+                        cw.gameInstance.newRound();
+                    } else {
+                        cw.document.getElementById('btn-start')?.click();
+                    }
+                } else if (action === 'shrink-arena') {
+                    if (cw.gameInstance && typeof cw.gameInstance.shrinkArena === 'function') {
+                        cw.gameInstance.shrinkArena();
+                    }
+                } else if (action === 'toggle-sound') {
+                    if (cw.gameInstance && typeof cw.gameInstance.setSoundEnabled === 'function') {
+                        cw.gameInstance.primeAudioOnGesture();
+                        cw.gameInstance.setSoundEnabled(!cw.gameInstance.soundEnabled);
+                    }
                 }
             }
         }
