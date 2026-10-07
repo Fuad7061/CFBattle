@@ -356,6 +356,16 @@
     const settingsPanel = document.getElementById('settings-panel');
     if (controlsPanel) controlsPanel.style.display = 'none';
     if (settingsPanel) settingsPanel.style.display = 'none';
+
+    // Auto-start the gameplay once all assets are loaded
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const startBtn = document.getElementById('btn-start');
+        if (startBtn && !startBtn.disabled) {
+          startBtn.click();
+        }
+      }, 1000); // 1 second delay to ensure physics engine is ready
+    });
   }
 </script>
 
