@@ -82,6 +82,10 @@ function checkAuth(req, res, next) {
     res.status(401).json({ error: 'Unauthorized. Invalid Login Key.' });
 }
 
+// Healthcheck endpoints (Public, no auth needed) for Coolify / Docker / Traefik
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+
 // Serve Dashboard at /dashboard
 app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'dashboard.html'));

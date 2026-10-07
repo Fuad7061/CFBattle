@@ -1,4 +1,9 @@
-const COUNTRIES = require('./js/countries.js');
+let COUNTRIES;
+try {
+  COUNTRIES = require('./countries.js');
+} catch (e) {
+  COUNTRIES = require('./js/countries.js');
+}
 
 const YT_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const VOTE_RE = /^!vote\s+([A-Za-z]{2,20})\b/i;

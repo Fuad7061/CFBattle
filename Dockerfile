@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     chromium \
     pulseaudio \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directory
@@ -35,6 +36,10 @@ RUN chmod +x start.sh
 
 # Expose the dashboard port
 EXPOSE 3000
+
+# Container healthcheck for Coolify and Docker
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://127.0.0.1:3000/health || exit 1
 
 # Start Xvfb, PulseAudio, and Node server
 CMD ["./start.sh"]
