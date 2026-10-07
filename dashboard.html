@@ -237,6 +237,10 @@
                         <label>YouTube RTMP URL / Key</label>
                         <input type="password" id="set-rtmp" placeholder="rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx">
                     </div>
+                    <div class="form-group">
+                        <label>Video Bitrate (Kbps)</label>
+                        <input type="number" id="set-bitrate" value="6800" min="1000" max="20000" step="100">
+                    </div>
                     
                     <label class="checkbox-label" style="margin: 15px 0;">
                         <input type="checkbox" id="set-crop-enable" onchange="updateVisualCrop()"> Enable Area Selection (Crop)
@@ -358,6 +362,7 @@
         function populateSettings(s) {
             if(!s) return;
             document.getElementById('set-rtmp').value = s.rtmpUrl || '';
+            if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
             if (s.crop) {
                 document.getElementById('set-crop-enable').checked = s.crop.enabled;
                 document.getElementById('set-crop-x').value = s.crop.x;
@@ -392,6 +397,7 @@
             
             const rtmpPayload = {
                 rtmpUrl: document.getElementById('set-rtmp').value,
+                bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
                 crop: {
                     enabled: document.getElementById('set-crop-enable').checked,
                     x: parseInt(document.getElementById('set-crop-x').value),

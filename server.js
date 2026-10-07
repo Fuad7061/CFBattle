@@ -37,6 +37,7 @@ let isStreaming = false;
 // Default Settings
 let currentSettings = {
     rtmpUrl: '',
+    bitrate: 6800,
     crop: { enabled: false, x: 0, y: 0, w: 540, h: 960 }
 };
 
@@ -139,7 +140,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             '--disable-software-rasterizer',
             '--window-size=540,960',
             '--window-position=0,0',
-            '--autoplay-policy=no-user-gesture-required'
+            '--autoplay-policy=no-user-gesture-required',
+            '--kiosk'
         ];
 
         if (process.env.DISPLAY) {
@@ -208,6 +210,9 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             logMsg(`Applying crop filter: ${videoFilter}`);
         }
 
+        const bitrateStr = currentSettings.bitrate ? `${currentSettings.bitrate}k` : '6800k';
+        const bufsizeStr = currentSettings.bitrate ? `${currentSettings.bitrate * 2}k` : '13600k';
+
         // Build FFmpeg Args conditionally based on OS
         let ffmpegArgs = [];
         if (process.platform === 'darwin') {
@@ -220,9 +225,9 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
                 '-threads', '2',
-                '-b:v', '2000k',
-                '-maxrate', '2000k',
-                '-bufsize', '4000k',
+                '-b:v', bitrateStr,
+                '-maxrate', bitrateStr,
+                '-bufsize', bufsizeStr,
                 '-vf', videoFilter,
                 '-g', '48', 
                 '-c:a', 'aac',
@@ -244,9 +249,9 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
                 '-threads', '2',
-                '-b:v', '2000k',
-                '-maxrate', '2000k',
-                '-bufsize', '4000k',
+                '-b:v', bitrateStr,
+                '-maxrate', bitrateStr,
+                '-bufsize', bufsizeStr,
                 '-vf', videoFilter,
                 '-g', '48', 
                 '-c:a', 'aac',
