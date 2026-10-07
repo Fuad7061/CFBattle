@@ -353,10 +353,10 @@
                                 
                                 <div style="display: flex; flex-direction: column; gap: 10px;">
                                     <div class="grid-2">
-                                        <button class="btn" onclick="controlGame('start')">▶ Play Round</button>
-                                        <button class="btn" onclick="controlGame('pause')">⏸ Pause/Resume</button>
+                                        <button class="btn" onclick="controlGame('new-round')" style="color:var(--accent);">▶ New Round</button>
+                                        <button class="btn" onclick="controlGame('shrink-arena')" style="color:var(--danger);">◎ Shrink Arena</button>
                                     </div>
-                                    <button class="btn" onclick="controlGame('reset')" style="border-color:var(--danger); color:var(--danger);">↺ Reset Match (Hard Restart)</button>
+                                    <button class="btn" onclick="controlGame('toggle-sound')">🔊 Toggle Sound</button>
                                 </div>
                             </div>
                             
@@ -464,6 +464,35 @@
                         <div class="form-group">
                             <label>Live Video ID (or Channel ID)</label>
                             <input type="text" id="set-youtube-live-id" placeholder="dQw4w9WgXcQ">
+                        </div>
+                    </div>
+                    
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Stream Cropping (FFmpeg)</h2>
+                        </div>
+                        <p class="panel-desc">Crop the output stream explicitly (useful for forcing vertical mobile resolution).</p>
+                        <label class="checkbox-label" style="margin-bottom: 15px;">
+                            <input type="checkbox" id="set-crop-enabled"> 
+                            <span><strong>Enable Cropping</strong></span>
+                        </label>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Width</label>
+                                <input type="number" id="set-crop-w" value="1080">
+                            </div>
+                            <div class="form-group">
+                                <label>Height</label>
+                                <input type="number" id="set-crop-h" value="1920">
+                            </div>
+                            <div class="form-group">
+                                <label>X Offset</label>
+                                <input type="number" id="set-crop-x" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Y Offset</label>
+                                <input type="number" id="set-crop-y" value="0">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -641,6 +670,13 @@
             document.getElementById('set-youtube-api-key').value = s.youtubeApiKey || '';
             document.getElementById('set-youtube-live-id').value = s.youtubeLiveId || s.youtubeChannelId || '';
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
+            if (s.crop) {
+                document.getElementById('set-crop-enabled').checked = !!s.crop.enabled;
+                if (s.crop.w !== undefined) document.getElementById('set-crop-w').value = s.crop.w;
+                if (s.crop.h !== undefined) document.getElementById('set-crop-h').value = s.crop.h;
+                if (s.crop.x !== undefined) document.getElementById('set-crop-x').value = s.crop.x;
+                if (s.crop.y !== undefined) document.getElementById('set-crop-y').value = s.crop.y;
+            }
             if (s.activeEngine !== undefined) {
                 const el = document.getElementById('live-engine-select');
                 if (el) {
@@ -678,7 +714,14 @@
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
                 activeEngine: document.getElementById('live-engine-select').value,
                 youtubeApiKey: document.getElementById('set-youtube-api-key').value,
-                youtubeLiveId: document.getElementById('set-youtube-live-id').value
+                youtubeLiveId: document.getElementById('set-youtube-live-id').value,
+                crop: {
+                    enabled: document.getElementById('set-crop-enabled').checked,
+                    w: parseInt(document.getElementById('set-crop-w').value) || 1080,
+                    h: parseInt(document.getElementById('set-crop-h').value) || 1920,
+                    x: parseInt(document.getElementById('set-crop-x').value) || 0,
+                    y: parseInt(document.getElementById('set-crop-y').value) || 0
+                }
             };
 
             // 1. Save persistently

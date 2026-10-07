@@ -578,24 +578,31 @@ app.post('/api/control', checkAuth, async (req, res) => {
     
     const { action, payload } = req.body;
     try {
-        if (action === 'start') {
+        if (action === 'new-round') {
             await currentPage.evaluate(() => {
-                const btn = document.getElementById('btn-start');
-                if (btn && !btn.disabled) btn.click();
+                if (window.gameInstance && typeof window.gameInstance.newRound === 'function') {
+                    window.gameInstance.newRound();
+                } else {
+                    const btn = document.getElementById('btn-start');
+                    if (btn && !btn.disabled) btn.click();
+                }
             });
-            logMsg("Game start triggered remotely.");
-        } else if (action === 'pause') {
+            logMsg("Game new-round triggered remotely.");
+        } else if (action === 'shrink-arena') {
             await currentPage.evaluate(() => {
-                const btn = document.getElementById('btn-pause');
-                if (btn && !btn.disabled) btn.click();
+                if (window.gameInstance && typeof window.gameInstance.shrinkArena === 'function') {
+                    window.gameInstance.shrinkArena();
+                }
             });
-            logMsg("Game pause triggered remotely.");
-        } else if (action === 'reset') {
+            logMsg("Game shrink-arena triggered remotely.");
+        } else if (action === 'toggle-sound') {
             await currentPage.evaluate(() => {
-                const btn = document.getElementById('btn-reset');
-                if (btn) btn.click();
+                if (window.gameInstance && typeof window.gameInstance.setSoundEnabled === 'function') {
+                    window.gameInstance.primeAudioOnGesture();
+                    window.gameInstance.setSoundEnabled(!window.gameInstance.soundEnabled);
+                }
             });
-            logMsg("Game reset triggered remotely.");
+            logMsg("Game toggle-sound triggered remotely.");
         } else if (action === 'settings') {
             await currentPage.evaluate((s) => {
                 window.__liveSettings = s;

@@ -29,6 +29,7 @@ export function useEngine() {
     if (!canvasRef.current) return undefined;
     const engine = new FlagBattleEngine(canvasRef.current, COUNTRIES);
     engineRef.current = engine;
+    window.gameInstance = engine; // Expose globally for remote control
 
     const unsubs = [
       engine.on('hud', setHudState),
