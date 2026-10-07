@@ -156,7 +156,8 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             executablePath: chromeExecutable,
             headless: process.platform === 'darwin' ? false : false, 
             defaultViewport: { width: 1080, height: 1920 },
-            args: puppeteerArgs
+            args: puppeteerArgs,
+            ignoreDefaultArgs: ['--enable-automation']
         });
 
         currentPage = await browser.newPage();

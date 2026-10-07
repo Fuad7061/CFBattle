@@ -518,7 +518,7 @@
         }
         async function clearLogs() {
             try {
-                await fetch('/api/logs', { method: 'DELETE', headers: API_HEADERS() });
+                await fetch('/api/logs/clear', { method: 'POST', headers: API_HEADERS() });
                 fetchLogs();
             } catch (e) {}
         }
