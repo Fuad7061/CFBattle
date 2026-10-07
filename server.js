@@ -286,7 +286,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
             ffmpegArgs = [
                 '-f', 'avfoundation',
                 '-framerate', '60',
-                '-i', '1:0', // Typically 1 is screen, 0 is mic on mac. Or 'default'
+                '-i', '1:none', // Disable audio capture on Mac to avoid device errors
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
@@ -295,10 +295,9 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 '-maxrate', bitrateStr,
                 '-bufsize', bufsizeStr,
                 '-vf', videoFilter,
-                '-g', '48', 
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-ar', '44100',
+                '-g', '48',
+                '-an', // Disable audio completely for local mac tests
+
                 '-f', 'flv',
                 rtmpUrl
             ];
@@ -462,13 +461,11 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             ffmpegArgs = [
                 '-f', 'avfoundation',
                 '-framerate', '60',
-                '-i', '1:0', // Re-add audio for local test, or keep 1:none if video only desired
+                '-i', '1:none', // Disable audio capture on Mac to avoid device errors
                 '-t', durationSeconds.toString(),
                 '-c:v', 'h264_videotoolbox', // Hardware accelerated encoding
                 '-b:v', '10M', // 10 Mbps for 1080p60 high quality
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-ar', '44100',
+                '-an', // Disable audio processing for local mac tests
                 '-y',
                 tmpPath
             ];
