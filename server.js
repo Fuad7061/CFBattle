@@ -733,8 +733,13 @@ function restartYoutubeChat(settings) {
         chatPoller = null;
     }
     const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
-    const liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID;
-    const channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID;
+    let liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID;
+    let channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID;
+    
+    if (liveVideoId && liveVideoId.startsWith('UC') && liveVideoId.length === 24) {
+        channelId = liveVideoId;
+        liveVideoId = null;
+    }
     
     if (apiKey && (liveVideoId || channelId)) {
         chatPoller = startYoutubeChatPolling({
