@@ -22,16 +22,31 @@ function resolveVoteTarget(rawToken) {
 }
 
 function parseVote(text) {
+  // First, check for explicit !vote command
   const match = text.match(VOTE_RE);
-  if (!match) return null;
-  const afterCommand = text.slice(match.index + match[0].indexOf(match[1])).trim();
-  const words = afterCommand.split(/\s+/);
-  for (let take = Math.min(4, words.length); take >= 1; take--) {
-    const candidate = words.slice(0, take).join(' ');
-    const code = resolveVoteTarget(candidate);
-    if (code) {
-      const c = COUNTRIES.find(x => x.code === code);
-      return { code, countryName: c ? c.name : code };
+  if (match) {
+    const afterCommand = text.slice(match.index + match[0].indexOf(match[1])).trim();
+    const words = afterCommand.split(/\s+/);
+    for (let take = Math.min(4, words.length); take >= 1; take--) {
+      const candidate = words.slice(0, take).join(' ');
+      const code = resolveVoteTarget(candidate);
+      if (code) {
+        const c = COUNTRIES.find(x => x.code === code);
+        return { code, countryName: c ? c.name : code };
+      }
+    }
+  }
+  
+  // If no !vote command, search the entire message for any country name
+  const words = text.trim().split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    for (let take = Math.min(4, words.length - i); take >= 1; take--) {
+      const candidate = words.slice(i, i + take).join(' ');
+      const code = resolveVoteTarget(candidate);
+      if (code) {
+        const c = COUNTRIES.find(x => x.code === code);
+        return { code, countryName: c ? c.name : code };
+      }
     }
   }
   return null;
