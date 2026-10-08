@@ -772,9 +772,9 @@
                     frame.contentWindow.__liveSettings = gamePayload;
                     if (frame.contentWindow.gameInstance) {
                         const gi = frame.contentWindow.gameInstance;
-                        if (gamePayload.watermark !== undefined) gi.ui.setChannel(gamePayload.watermark);
-                        if (gamePayload.speed !== undefined) gi.physics.setStepsPerFrame(gamePayload.speed);
-                        if (gamePayload.gravity !== undefined) gi.physics.setGravity(gamePayload.gravity);
+                        if (gamePayload.watermark !== undefined) gi.ui?.setChannel?.(gamePayload.watermark);
+                        if (gamePayload.speed !== undefined) gi.physics?.setStepsPerFrame?.(gamePayload.speed);
+                        if (gamePayload.gravity !== undefined) gi.physics?.setGravity?.(gamePayload.gravity);
                         if (gamePayload.bias !== undefined) gi.audienceBias = gamePayload.bias;
                     }
                 }

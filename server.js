@@ -249,9 +249,9 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 
                 // If game instance exists, apply directly
                 if (window.gameInstance) {
-                    if (s.watermark !== undefined) window.gameInstance.ui.setChannel(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics.setStepsPerFrame(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics.setGravity(s.gravity);
+                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
+                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
+                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
                     if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
                 }
             }, currentSettings.gameSettings);
@@ -436,9 +436,9 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
             await currentPage.evaluate((s) => {
                 window.__liveSettings = s;
                 if (window.gameInstance) {
-                    if (s.watermark !== undefined) window.gameInstance.ui.setChannel(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics.setStepsPerFrame(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics.setGravity(s.gravity);
+                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
+                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
+                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
                     if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
                 }
             }, currentSettings.gameSettings);
@@ -632,9 +632,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 
                 // If game instance exists, apply new liveSettings directly to it
                 if (window.gameInstance) {
-                    if (s.watermark !== undefined) window.gameInstance.ui.setChannel(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics.setStepsPerFrame(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics.setGravity(s.gravity);
+                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
+                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
+                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
                     if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
                 }
             }, payload);
