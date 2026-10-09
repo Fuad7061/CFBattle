@@ -43,13 +43,13 @@ for (const [alias, code] of Object.entries(ALIASES)) {
 // still steer flags and (with `reviveVotes`, default 4) revive a country.
 // ---------------------------------------------------------------------------
 const POWER_ALIASES = {
-  shield: 'shield', save: 'shield', protect: 'shield', guard: 'shield',
-  revive: 'revive', resurrect: 'revive', respawn: 'revive',
-  freeze: 'freeze', ice: 'freeze', frozen: 'freeze',
+  shield: 'shield', save: 'shield', protect: 'shield', guard: 'shield', def: 'shield',
+  revive: 'revive', resurrect: 'revive', respawn: 'revive', rez: 'revive',
+  freeze: 'freeze', ice: 'freeze', frozen: 'freeze', stop: 'freeze', hold: 'freeze',
   quake: 'quake', earthquake: 'quake', shake: 'quake', crater: 'quake',
-  slow: 'slow', slowmo: 'slow', 'slow-mo': 'slow',
-  nuke: 'nuke', eliminate: 'nuke', out: 'nuke', kill: 'nuke', destroy: 'nuke', wipe: 'nuke',
-  boost: 'boost', push: 'boost', steer: 'boost', charge: 'boost',
+  slow: 'slow', slowmo: 'slow', 'slow-mo': 'slow', slomo: 'slow', slowdown: 'slow',
+  nuke: 'nuke', eliminate: 'nuke', out: 'nuke', kill: 'nuke', destroy: 'nuke', wipe: 'nuke', boom: 'nuke',
+  boost: 'boost', push: 'boost', steer: 'boost', charge: 'boost', rush: 'boost',
 };
 const GLOBAL_POWERS = new Set(['quake', 'slow']);
 
@@ -95,6 +95,27 @@ function parseCommand(text) {
         return target ? { kind: 'power', power, ...target } : null;
       }
       // Unknown !command — fall through to the name scan below.
+    }
+  }
+
+  // No recognisable command: first check if message contains a power verb followed by a country
+  // e.g. "slow US", "freeze USA", "quake", "nuke Russia", "shield Canada", "revive Japan".
+  const lowerRaw = raw.toLowerCase();
+  const powerMatch = lowerRaw.match(/(shield|save|protect|guard|def|revive|resurrect|respawn|rez|freeze|ice|frozen|stop|hold|quake|earthquake|shake|crater|slow|slowmo|slomo|slow-mo|slowdown|nuke|eliminate|out|kill|destroy|wipe|boom|boost|push|steer|charge|rush)\b/);
+  if (powerMatch) {
+    const powerKey = powerMatch[1];
+    const power = POWER_ALIASES[powerKey];
+    if (power) {
+      if (GLOBAL_POWERS.has(power)) {
+        return { kind: 'power', power, code: null, countryName: null };
+      }
+      // extract country after the power word
+      const restAfterPower = raw.slice(raw.toLowerCase().indexOf(powerMatch[0]) + powerMatch[0].length);
+      const target = resolveCountry(restAfterPower) || resolveCountry(raw.replace(new RegExp(powerMatch[0], 'i'), ''));
+      if (target) {
+        return { kind: 'power', power, ...target };
+      }
+      // global maybe? otherwise just drop power if no target
     }
   }
 
