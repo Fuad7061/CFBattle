@@ -173,6 +173,14 @@ export class FlagBattle {
     return base;
   }
 
+  // Country codes arrive lowercase from the chat parser ("us") but the roster
+  // stores them uppercase ("US"), so look them up case-insensitively.
+  _findFlag(code) {
+    if (!code) return null;
+    const c = String(code).toUpperCase();
+    return this.flags.find(f => (f.country.code || '').toUpperCase() === c) || null;
+  }
+
   _handlePower(power) {
     const p = (typeof power.power === 'string' ? power.power : '').toLowerCase();
     const code = power.code;
@@ -182,7 +190,7 @@ export class FlagBattle {
     // Paid Super Chat powers last longer / hit harder; free comment powers
     // still work (user-friendly) but are shorter and gentler.
     const dur = (base) => Math.round(paid ? base * 1.75 : base);
-    const flag = code ? this.flags.find(f => f.country.code === code) : null;
+    const flag = this._findFlag(code);
     const alive = flag && !flag.eliminated;
 
     switch (p) {
@@ -194,7 +202,7 @@ export class FlagBattle {
           this.physics.reviveFlag(flag.body, this.CX + Math.cos(ang) * rad, this.CY + Math.sin(ang) * rad);
           flag.reviveEffectEnd = Date.now() + 3500;
           this.aliveCount = this.flags.filter(f => !f.eliminated).length;
-          this.standings = this.standings.filter(c => c.code !== code);
+          this.standings = this.standings.filter(c => c.code !== flag.country.code);
           if (this.ui.reviveFlag) this.ui.reviveFlag(code);
           if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(code);
           if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
@@ -298,7 +306,7 @@ export class FlagBattle {
       try { this.ui.recordSupporterVote(author, vote.weight); } catch (e) {}
     }
     const code = vote.code;
-    const flag = this.flags.find(f => f.country.code === code);
+    const flag = this._findFlag(code);
     if (!flag) return;
 
     if (flag.eliminated) {
@@ -323,7 +331,7 @@ export class FlagBattle {
         flag.reviveEffectEnd = Date.now() + 3500;
         
         this.aliveCount = this.flags.filter(f => !f.eliminated).length;
-        this.standings = this.standings.filter(c => c.code !== code);
+        this.standings = this.standings.filter(c => c.code !== flag.country.code);
 
         if (this.ui.showReviveToast) {
            this.ui.showReviveToast(flag.country, getFlagUrl(code, 80), vote.author || 'CHAT');
