@@ -109,8 +109,8 @@ export default function App() {
         timer={timer}
       />
 
-      <div className="flex flex-col md:flex-row flex-1 min-h-0">
-        <div className="w-full md:w-auto md:absolute md:top-[280px] md:bottom-[100px] md:left-4 z-40 order-2 md:order-none px-2 py-1 md:p-0 flex-none flex items-stretch">
+      <div className="relative flex flex-col md:flex-row flex-1 min-h-0">
+        <div className="w-full md:w-auto md:absolute md:inset-y-2 md:left-4 z-40 order-2 md:order-none px-2 py-1 md:p-0 flex-none flex items-stretch">
           <ChatOverlay 
             messages={chatMessages} 
             commentVotes={commentVotes} 
