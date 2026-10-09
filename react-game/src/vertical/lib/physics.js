@@ -440,7 +440,13 @@ export class PhysicsEngine {
 
   setRotSpeed(v)     { this.rotSpeed = v; }
   setGravity(y)      { this.engine.gravity.y = y; }
-  setStepsPerFrame(n){ this.stepsPerFrame = Math.max(1, n); }
+  setStepsPerFrame(n){
+     // `for (s = 0; s < stepsPerFrame; s++)` rounds a fractional value UP, so
+     // a 1.5x setting would silently run as 2x. Round to a whole number of
+     // steps instead, so the number shown in the UI is the speed you get.
+     const v = Math.round(Number(n));
+     this.stepsPerFrame = Number.isFinite(v) ? Math.max(1, v) : 1;
+  }
   setTimeScale(ts)   { this.timeScale = Math.max(0.1, ts); }
   resetTimeScale()    { this.timeScale = 1.0; }
 

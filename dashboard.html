@@ -566,6 +566,13 @@
                         <div class="form-group">
                             <label>Live Video ID (or Channel ID)</label>
                             <input type="text" id="set-youtube-live-id" placeholder="dQw4w9WgXcQ">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                                Prefer your <strong>Channel ID</strong> (starts with <code>UC</code>, 24 characters). Chat then attaches to whatever broadcast is live, automatically. A one-off <strong>Video ID</strong> only works during that exact broadcast.
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;">
+                            <button class="btn" onclick="testYoutubeChat()">🧪 Test Chat Connection</button>
+                            <span id="yt-chat-state" style="font-size:12px; color:var(--text-muted);">Status: unknown</span>
                         </div>
                     </div>
                     
@@ -1007,6 +1014,7 @@
             }
 
             if (sched) applyScheduleState(sched);
+            if (typeof renderYoutubeChatState === 'function') renderYoutubeChatState(data.youtubeChat);
         }
 
         // ---------------------------------------------- Stream schedule UI
@@ -1212,6 +1220,50 @@
             } catch (e) { showAlert('Network Error', true); }
         }
 
+        async function testYoutubeChat() {
+            const el = document.getElementById('yt-chat-state');
+            el.textContent = 'Testing…';
+            el.style.color = 'var(--text-muted)';
+            try {
+                const res = await fetch('/api/youtube-chat-test', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({})
+                });
+                const d = await res.json();
+                el.dataset.manual = '1';
+                el.textContent = (d.ok ? '✅ ' : '❌ ') + d.message;
+                el.style.color = d.ok ? 'var(--success)' : '#ef8c67';
+                setTimeout(() => { el.dataset.manual = '0'; }, 15000);
+            } catch (e) {
+                el.textContent = '❌ Network Error';
+                el.style.color = '#ef8c67';
+            }
+        }
+
+        // Reflect the live chat poller state so a silent failure is visible.
+        function renderYoutubeChatState(s) {
+            const el = document.getElementById('yt-chat-state');
+            if (!el || !s) return;
+            const map = {
+                'connected': ['✅ Chat connected', 'var(--success)'],
+                'polling': ['✅ Chat connected (polling)', 'var(--success)'],
+                'waiting': ['⏳ Waiting for a live broadcast', '#38bdf8'],
+                'starting': ['⏳ Starting chat poller…', '#38bdf8'],
+                'no-api-key': ['❌ No YouTube API key saved', '#ef8c67'],
+                'no-target': ['❌ No Live Video / Channel ID saved', '#ef8c67'],
+                'resolve-error': ['❌ Could not resolve live chat', '#ef8c67'],
+                'poll-error': ['❌ Polling error', '#ef8c67'],
+                'idle': ['Status: idle', 'var(--text-muted)'],
+            };
+            const [text, color] = map[s.state] || ['Status: ' + s.state, 'var(--text-muted)'];
+            // Don't stomp the Test button's more specific message while it is
+            // still on screen.
+            if (el.dataset.manual === '1') return;
+            el.textContent = text + (s.error ? ' — ' + s.error : '');
+            el.style.color = color;
+        }
+
         async function clearSchedule() {
             try {
                 const res = await fetch('/api/schedule/clear', {
@@ -1314,6 +1366,51 @@
             };
         }
 
+        // Single source of truth for "what does a setting mean". Mirrored verbatim in
+        // server.js (the same function is injected into the streaming page), so
+        // the preview you tune in and the stream that goes on air can never
+        // disagree. `speed` is gameplay speed (1-5); `rotSpeed` is arena
+        // rotation. They used to be crossed over, which made the on-air
+        // vertical stream run many times faster than the preview.
+        function applyGameSettings(gi, s) {
+            if (!gi || !s) return;
+            gi.cfg = { ...(gi.cfg || {}), ...s };
+            gi.settings = { ...(gi.settings || {}), ...s };
+
+            const speed = s.speed !== undefined ? Number(s.speed) : 1;
+            const rot = s.rotSpeed !== undefined ? Number(s.rotSpeed) : undefined;
+            const grav = s.gravity !== undefined ? Number(s.gravity) : undefined;
+
+            // Landscape engine
+            if (gi.settings) {
+                gi.settings.speedMult = speed;
+                if (rot !== undefined) gi.settings.rotSpeed = rot;
+                if (grav !== undefined) gi.settings.gravity = grav;
+            }
+            if (rot !== undefined && 'GATE_SPIN' in gi) gi.GATE_SPIN = rot;
+
+            // Vertical engine
+            if (gi.physics) {
+                if (gi.physics.setStepsPerFrame) gi.physics.setStepsPerFrame(speed);
+                if (rot !== undefined && gi.physics.setRotSpeed) gi.physics.setRotSpeed(rot);
+                if (grav !== undefined && gi.physics.setGravity) gi.physics.setGravity(grav);
+            }
+
+            if (s.watermark !== undefined) {
+                if (gi.ui?.setBranding) gi.ui.setBranding(s.watermark);
+                if (gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
+            }
+            if (s.bias !== undefined) gi.audienceBias = s.bias;
+
+            if (gi.renderer) {
+                if (s.watermark !== undefined) gi.renderer.watermarkText = s.watermark;
+                if (s.wmOpacity !== undefined) gi.renderer.watermarkOpacity = s.wmOpacity;
+                if (s.wmSize !== undefined) gi.renderer.watermarkSize = s.wmSize;
+                if (s.wmCount !== undefined) gi.renderer.watermarkCount = s.wmCount;
+                if (s.wmAngle !== undefined) gi.renderer.watermarkAngle = s.wmAngle;
+            }
+        }
+
         // Push settings into the on-screen preview iframe WITHOUT saving to the
         // server, so the director can see gameplay/branding changes in real time
         // while the settings drawer stays docked on the left.
@@ -1321,22 +1418,7 @@
             const frame = document.getElementById('preview-frame');
             if (!frame || !frame.contentWindow) return;
             frame.contentWindow.__liveSettings = gamePayload;
-            if (frame.contentWindow.gameInstance) {
-                const gi = frame.contentWindow.gameInstance;
-                gi.cfg = { ...(gi.cfg || {}), ...gamePayload };
-                gi.settings = { ...(gi.settings || {}), ...gamePayload };
-                if (gamePayload.watermark !== undefined) {
-                    if (gi.ui?.setBranding) gi.ui.setBranding(gamePayload.watermark);
-                    if (gi.ui?.setChannel) gi.ui.setChannel(gamePayload.watermark);
-                }
-                if (gi.renderer) {
-                    if (gamePayload.watermark !== undefined) gi.renderer.watermarkText = gamePayload.watermark;
-                    if (gamePayload.wmOpacity !== undefined) gi.renderer.watermarkOpacity = gamePayload.wmOpacity;
-                    if (gamePayload.wmSize !== undefined) gi.renderer.watermarkSize = gamePayload.wmSize;
-                    if (gamePayload.wmCount !== undefined) gi.renderer.watermarkCount = gamePayload.wmCount;
-                    if (gamePayload.wmAngle !== undefined) gi.renderer.watermarkAngle = gamePayload.wmAngle;
-                }
-            }
+            applyGameSettings(frame.contentWindow.gameInstance, gamePayload);
             if (frame.contentWindow.postMessage) {
                 frame.contentWindow.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
             }

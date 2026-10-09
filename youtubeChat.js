@@ -280,17 +280,26 @@ async function resolveLiveChatId({ apiKey, liveVideoId, channelId }) {
   return { videoId: null, liveChatId: null };
 }
 
-function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = console }) {
+function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = console, onStatus = () => {} }) {
   let stopped = false;
   let pageToken;
   let lastViewerFetch = 0;
   let viewerTimer = null;
+
+  // Surface exactly where the chat pipeline is, so a silent failure in the
+  // dashboard can be told apart from "nobody has typed anything yet".
+  const report = (state, extra = {}) => {
+    try {
+      onStatus({ state, videoId: extra.videoId ?? null, liveChatId: extra.liveChatId ?? null, error: extra.error ?? null, at: Date.now() });
+    } catch (e) { /* never let status reporting break polling */ }
+  };
 
   async function pollLoop() {
     if (stopped) return;
 
     if (!apiKey) {
       log.warn('[youtubeChat] YOUTUBE_API_KEY is not set — chat polling is disabled.');
+      report('no-api-key', { error: 'No YouTube API key configured.' });
       return;
     }
 
@@ -306,15 +315,23 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
     } catch (err) {
       log.error('[youtubeChat] Failed to resolve live chat id:', err.message);
       liveChatId = null;
+      report('resolve-error', { error: err.message });
     }
 
     if (!liveChatId) {
       log.info('[youtubeChat] No active live video/chat found yet — retrying in 30s.');
+      // Distinguish "not live yet" from "you configured the wrong kind of ID",
+      // which is by far the most common cause of dead chat.
+      const hint = !channelId
+        ? 'No channel ID set. Use a Channel ID (starts with UC, 24 chars) so chat attaches to whatever is live.'
+        : 'Channel has no active live broadcast right now. Chat will attach when you go live.';
+      report('waiting', { error: hint });
       if (!stopped) setTimeout(pollLoop, 30000);
       return;
     }
 
     log.info(`[youtubeChat] Connected to live chat ${liveChatId}. Polling for messages...`);
+    report('connected', { videoId, liveChatId });
     // Refresh the live viewer count every ~15s while polling.
     if (viewerTimer) clearInterval(viewerTimer);
     const fetchViewers = async () => {
@@ -419,10 +436,14 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
         if (power) bus.emit('power', power);
       }
 
-      const interval = Math.max(2000, data.pollingIntervalMillis || 5000);
-      if (!stopped) setTimeout(() => pollMessages(liveChatId), interval);
+const interval = Math.max(2000, data.pollingIntervalMillis || 5000);
+        if (!stopped) {
+          report('polling', { videoId, liveChatId });
+          setTimeout(() => pollMessages(liveChatId), interval);
+        }
     } catch (err) {
       log.error('[youtubeChat] Polling error, retrying in 10s:', err.message);
+      report('poll-error', { error: err.message });
       if (viewerTimer) { clearInterval(viewerTimer); viewerTimer = null; }
       if (!stopped) setTimeout(() => pollLoop(), 10000);
     }
@@ -438,4 +459,54 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
   };
 }
 
-module.exports = { startYoutubeChatPolling, parseVote, parseCommand, superChatWeight, superChatTier };
+/**
+ * One-shot diagnostic used by the dashboard "Test connection" button. Never
+ * starts a polling loop and never emits to the bus.
+ */
+async function testYoutubeChatConnection({ apiKey, liveVideoId, channelId }) {
+  if (!apiKey) {
+    return { ok: false, state: 'no-api-key', message: 'No YouTube API key saved. Add one in Stream Config first.' };
+  }
+  if (!liveVideoId && !channelId) {
+    return { ok: false, state: 'no-target', message: 'No Live Video ID or Channel ID saved.' };
+  }
+
+  // Quota is precious: probe `videos` with the explicit id first, then search.
+  if (liveVideoId) {
+    try {
+      const v = await ytFetch('videos', { key: apiKey, id: liveVideoId, part: 'liveStreamingDetails' });
+      const details = v.items?.[0]?.liveStreamingDetails;
+      if (details?.activeLiveChatId) {
+        return { ok: true, state: 'connected', videoId: liveVideoId, liveChatId: details.activeLiveChatId, message: 'Connected to this video\'s live chat.' };
+      }
+      const exists = !!v.items?.[0];
+      if (!exists) {
+        return { ok: false, state: 'bad-video', message: 'That video ID was not found. Check for typos.' };
+      }
+    } catch (err) {
+      return { ok: false, state: 'api-error', message: err.message };
+    }
+  }
+
+  if (channelId) {
+    try {
+      const search = await ytFetch('search', { key: apiKey, channelId, eventType: 'live', type: 'video', part: 'id', maxResults: 1 });
+      const vid = search.items?.[0]?.id?.videoId;
+      if (!vid) {
+        return { ok: false, state: 'not-live', message: 'API key works, but this channel has no live broadcast right now. Chat will attach automatically when you go live.' };
+      }
+      const v = await ytFetch('videos', { key: apiKey, id: vid, part: 'liveStreamingDetails' });
+      const details = v.items?.[0]?.liveStreamingDetails;
+      if (details?.activeLiveChatId) {
+        return { ok: true, state: 'connected', videoId: vid, liveChatId: details.activeLiveChatId, message: 'Found your current live broadcast and its chat.' };
+      }
+      return { ok: false, state: 'no-chat-id', message: 'A live video was found but YouTube returned no activeLiveChatId yet. Try again in a few seconds.' };
+    } catch (err) {
+      return { ok: false, state: 'api-error', message: err.message };
+    }
+  }
+
+  return { ok: false, state: 'unknown', message: 'Could not determine chat status.' };
+}
+
+module.exports = { startYoutubeChatPolling, parseVote, parseCommand, superChatWeight, superChatTier, testYoutubeChatConnection };

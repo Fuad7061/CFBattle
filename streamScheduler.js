@@ -188,7 +188,7 @@ class StreamScheduler {
      */
     startNow(durationMinutes) {
         const res = StreamScheduler.validate({ mode: 'now', durationMinutes }, this.now());
-        if (!res.ok) return res;
+        if (!res.ok) return Promise.resolve(res);
         this.config = res.config;
         this.lastFiredAt = null;
         this.lastAttemptAt = null;
@@ -196,8 +196,15 @@ class StreamScheduler {
         this.activeRun = null;
         this.save();
         this.onLog(`Scheduler: go live now for ${durationMinutes} minutes.`);
-        // Fire synchronously so the dashboard gets an immediate answer.
-        return this.tick().then(() => ({ ok: true, config: this.config }));
+        // Fire synchronously so the dashboard gets an immediate answer, and
+        // propagate a failed start instead of reporting a false success
+        // (e.g. missing RTMP credentials).
+        return this.tick().then((outcome) => {
+            if (outcome && outcome.ok === false) {
+                return { ok: false, error: outcome.error, config: this.config };
+            }
+            return { ok: true, config: this.config };
+        });
     }
 
     /** Human-readable one-liner for logs and the UI. */

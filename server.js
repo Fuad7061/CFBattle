@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const { EventEmitter } = require('events');
-const { startYoutubeChatPolling } = require('./youtubeChat.js');
+const { startYoutubeChatPolling, testYoutubeChatConnection } = require('./youtubeChat.js');
 const { StreamScheduler } = require('./streamScheduler.js');
 
 const app = express();
@@ -123,7 +123,7 @@ app.get('/api/status', checkAuth, (req, res) => {
             progress = null; // Reset
         }
     }
-    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState() });
+    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState(), youtubeChat: youtubeChatStatus });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
@@ -146,6 +146,22 @@ app.post('/api/settings', checkAuth, (req, res) => {
         logMsg("Failed to save settings: " + err.message, true);
         res.status(500).json({ error: 'Failed to save settings' });
     }
+});
+
+// Let the director verify the chat pipeline instead of guessing why it is dead.
+app.post('/api/youtube-chat-test', checkAuth, async (req, res) => {
+    const apiKey = currentSettings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
+    const { liveVideoId, channelId } = youtubeTargets();
+    try {
+        const result = await testYoutubeChatConnection({ apiKey, liveVideoId, channelId });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ ok: false, state: 'error', message: err.message });
+    }
+});
+
+app.get('/api/youtube-chat-status', checkAuth, (req, res) => {
+    res.json(youtubeChatStatus);
 });
 
 app.get('/api/logs', checkAuth, (req, res) => {
@@ -231,7 +247,48 @@ async function beginStream() {
 
         if (currentSettings.gameSettings) {
             await currentPage.evaluate((s) => {
+                // Single source of truth for "what does a setting mean". The
+                // same mapping is mirrored in dashboard.html
+                // (applyGameToPreview) and in both engines' live-settings
+                // handlers, so the preview, the in-game drawer and the on-air
+                // stream can never disagree.
+                window.applyGameSettings = function (gi, s) {
+                    if (!gi || !s) return;
+                    gi.cfg = { ...(gi.cfg || {}), ...s };
+                    gi.settings = { ...(gi.settings || {}), ...s };
+
+                    // `speed` is GAMEPLAY speed (1-5), never arena rotation.
+                    const speed = s.speed !== undefined ? Number(s.speed) : 1;
+                    const rot = s.rotSpeed !== undefined ? Number(s.rotSpeed) : undefined;
+                    const grav = s.gravity !== undefined ? Number(s.gravity) : undefined;
+
+                    // Landscape engine reads these off `settings`.
+                    if (gi.settings) {
+                        gi.settings.speedMult = speed;
+                        if (rot !== undefined) gi.settings.rotSpeed = rot;
+                        if (grav !== undefined) gi.settings.gravity = grav;
+                    }
+                    if (rot !== undefined && 'GATE_SPIN' in gi) gi.GATE_SPIN = rot;
+
+                    // Vertical engine drives its own physics object.
+                    if (gi.physics) {
+                        if (gi.physics.setStepsPerFrame) gi.physics.setStepsPerFrame(speed);
+                        if (rot !== undefined && gi.physics.setRotSpeed) gi.physics.setRotSpeed(rot);
+                        if (grav !== undefined && gi.physics.setGravity) gi.physics.setGravity(grav);
+                    }
+
+                    if (s.watermark !== undefined) {
+                        if (gi.ui?.setBranding) gi.ui.setBranding(s.watermark);
+                        if (gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
+                    }
+                    if (s.bias !== undefined) gi.audienceBias = s.bias;
+                };
+
                 window.__liveSettings = s;
+                // Mirror the values into the vertical settings form so its
+                // "APPLY" button reads sane values. NOTE: speed and rotation
+                // are separate settings - writing `speed` into the rotation
+                // field used to spin the arena orders of magnitude too fast.
                 const setVal = (id, val) => {
                     const el = document.getElementById(id);
                     if (el && val !== undefined) {
@@ -248,20 +305,13 @@ async function beginStream() {
                     }
                 };
                 if (s.watermark !== undefined) setVal('setting-channel', s.watermark);
-                if (s.speed !== undefined) setVal('setting-rot-speed', s.speed);
+                if (s.rotSpeed !== undefined) setVal('setting-rot-speed', s.rotSpeed);
                 if (s.gravity !== undefined) setVal('setting-gravity', s.gravity);
                 if (s.bias !== undefined) setChk('setting-audience-bias', s.bias);
                 const closeBtn = document.getElementById('settings-close');
                 if (closeBtn) closeBtn.click();
-                
-                // If game instance exists, apply directly
-                if (window.gameInstance) {
-                    window.gameInstance.settings = { ...(window.gameInstance.settings || {}), ...s };
-                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
-                    if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
-                }
+
+                applyGameSettings(window.gameInstance, s);
             }, currentSettings.gameSettings);
             logMsg("Applied saved game settings on stream boot.");
         }
@@ -464,11 +514,29 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         if (currentSettings.gameSettings) {
             await currentPage.evaluate((s) => {
                 window.__liveSettings = s;
-                if (window.gameInstance) {
-                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
-                    if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
+                if (window.applyGameSettings) {
+                    window.applyGameSettings(window.gameInstance, s);
+                } else if (window.gameInstance) {
+                    const gi = window.gameInstance;
+                    const speed = s.speed !== undefined ? Number(s.speed) : 1;
+                    gi.settings = { ...(gi.settings || {}), ...s };
+                    gi.cfg = { ...(gi.cfg || {}), ...s };
+                    if (gi.settings) {
+                        gi.settings.speedMult = speed;
+                        if (s.rotSpeed !== undefined) gi.settings.rotSpeed = Number(s.rotSpeed);
+                        if (s.gravity !== undefined) gi.settings.gravity = Number(s.gravity);
+                    }
+                    if (s.rotSpeed !== undefined && 'GATE_SPIN' in gi) gi.GATE_SPIN = Number(s.rotSpeed);
+                    if (gi.physics) {
+                        if (gi.physics.setStepsPerFrame) gi.physics.setStepsPerFrame(speed);
+                        if (s.rotSpeed !== undefined && gi.physics.setRotSpeed) gi.physics.setRotSpeed(Number(s.rotSpeed));
+                        if (s.gravity !== undefined && gi.physics.setGravity) gi.physics.setGravity(Number(s.gravity));
+                    }
+                    if (s.watermark !== undefined) {
+                        if (gi.ui?.setBranding) gi.ui.setBranding(s.watermark);
+                        if (gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
+                    }
+                    if (s.bias !== undefined) gi.audienceBias = s.bias;
                 }
             }, currentSettings.gameSettings);
         }
@@ -662,12 +730,26 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 // If game instance exists, apply new liveSettings directly to it
                 if (window.gameInstance) {
                     const gi = window.gameInstance;
+                    const speed = s.speed !== undefined ? Number(s.speed) : 1;
                     gi.settings = { ...(gi.settings || {}), ...s };
-                    if (s.watermark !== undefined && gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
-                    if (s.speed !== undefined && gi.physics?.setStepsPerFrame) gi.physics.setStepsPerFrame(s.speed);
-                    if (s.gravity !== undefined && gi.physics?.setGravity) gi.physics.setGravity(s.gravity);
+                    gi.cfg = { ...(gi.cfg || {}), ...s };
+                    if (gi.settings) {
+                        gi.settings.speedMult = speed;
+                        if (s.rotSpeed !== undefined) gi.settings.rotSpeed = Number(s.rotSpeed);
+                        if (s.gravity !== undefined) gi.settings.gravity = Number(s.gravity);
+                    }
+                    if (s.rotSpeed !== undefined && 'GATE_SPIN' in gi) gi.GATE_SPIN = Number(s.rotSpeed);
+                    if (gi.physics) {
+                        if (gi.physics.setStepsPerFrame) gi.physics.setStepsPerFrame(speed);
+                        if (s.rotSpeed !== undefined && gi.physics.setRotSpeed) gi.physics.setRotSpeed(Number(s.rotSpeed));
+                        if (s.gravity !== undefined && gi.physics.setGravity) gi.physics.setGravity(Number(s.gravity));
+                    }
+                    if (s.watermark !== undefined) {
+                        if (gi.ui?.setBranding) gi.ui.setBranding(s.watermark);
+                        if (gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
+                    }
                     if (s.bias !== undefined) gi.audienceBias = s.bias;
-                    
+
                     if (gi.renderer) {
                         if (s.watermark !== undefined) gi.renderer.watermarkText = s.watermark;
                         if (s.wmOpacity !== undefined) gi.renderer.watermarkOpacity = s.wmOpacity;
@@ -847,6 +929,7 @@ app.post('/api/test-chat', express.json(), (req, res) => {
 });
 
 let chatPoller = null;
+let youtubeChatStatus = { state: 'idle', videoId: null, liveChatId: null, error: null, at: null };
 function restartYoutubeChat(settings) {
     if (chatPoller) {
         chatPoller.stop();
@@ -855,23 +938,42 @@ function restartYoutubeChat(settings) {
     const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
     let liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID;
     let channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID;
-    
+
     if (liveVideoId && liveVideoId.startsWith('UC') && liveVideoId.length === 24) {
         channelId = liveVideoId;
         liveVideoId = null;
     }
-    
+
+    youtubeChatStatus = { state: 'starting', videoId: liveVideoId, liveChatId: null, error: null, at: Date.now() };
+
     if (apiKey && (liveVideoId || channelId)) {
         chatPoller = startYoutubeChatPolling({
             apiKey, liveVideoId, channelId, bus,
+            onStatus: (s) => { youtubeChatStatus = s; },
             log: {
                 info: msg => logMsg(msg),
                 warn: msg => logMsg(msg, true),
                 error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
             }
         });
+    } else if (!apiKey) {
+        youtubeChatStatus = { state: 'no-api-key', videoId: null, liveChatId: null, error: 'No YouTube API key configured.', at: Date.now() };
+    } else {
+        youtubeChatStatus = { state: 'no-target', videoId: null, liveChatId: null, error: 'No Live Video ID or Channel ID configured.', at: Date.now() };
     }
 }
+
+// Normalise the ID fields the same way restartYoutubeChat does.
+function youtubeTargets(settings = currentSettings) {
+    let liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID || '';
+    let channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID || '';
+    if (liveVideoId && liveVideoId.startsWith('UC') && liveVideoId.length === 24) {
+        channelId = liveVideoId;
+        liveVideoId = '';
+    }
+    return { liveVideoId, channelId };
+}
+
 
 // --------------------------------
 // Stream scheduler

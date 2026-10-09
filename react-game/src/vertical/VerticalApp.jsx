@@ -32,9 +32,17 @@ export default function VerticalApp() {
              if (settings.watermarkCount !== undefined) gi.renderer.watermarkCount = settings.watermarkCount;
              if (settings.watermarkAngle !== undefined) gi.renderer.watermarkAngle = settings.watermarkAngle;
           }
-          if (settings.speed !== undefined && gi.physics?.setRotSpeed) {
-             gi.physics.setRotSpeed(0.0028 * settings.speed); // Base speed
+          if (settings.speed !== undefined && gi.physics?.setStepsPerFrame) {
+             // `speed` is gameplay speed (1-5), NOT arena rotation.
+             gi.physics.setStepsPerFrame(Number(settings.speed));
           }
+          if (settings.rotSpeed !== undefined && gi.physics?.setRotSpeed) {
+             gi.physics.setRotSpeed(Number(settings.rotSpeed));
+          }
+          if (settings.gravity !== undefined && gi.physics?.setGravity) {
+             gi.physics.setGravity(Number(settings.gravity));
+          }
+          if (settings.bias !== undefined) gi.audienceBias = settings.bias;
         }
       }
     };

@@ -76,10 +76,18 @@ export default function App() {
     onMessage: (msg) => {
       if (msg.type === 'SETTINGS_UPDATE' || msg.type === 'SYNC_STATE') {
         if (engineRef.current && msg.settings) {
-          engineRef.current.settings = { ...engineRef.current.settings, ...msg.settings };
-          if (msg.settings.rotSpeed !== undefined) {
-            engineRef.current.GATE_SPIN = Number(msg.settings.rotSpeed);
+          const e = engineRef.current;
+          const s = msg.settings;
+          e.settings = { ...e.settings, ...s };
+          // Same mapping the dashboard preview and the stream boot use:
+          // `speed` is gameplay speed, `rotSpeed` is arena rotation.
+          if (s.speed !== undefined) e.settings.speedMult = Number(s.speed);
+          if (s.rotSpeed !== undefined) {
+            e.settings.rotSpeed = Number(s.rotSpeed);
+            e.GATE_SPIN = Number(s.rotSpeed);
           }
+          if (s.gravity !== undefined) e.settings.gravity = Number(s.gravity);
+          if (s.bias !== undefined) e.settings.bias = s.bias;
         }
         if (msg.type === 'SETTINGS_UPDATE') return;
       }
