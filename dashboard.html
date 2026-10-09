@@ -282,6 +282,49 @@
             transition: border-color 0.2s;
         }
         .recording-item:hover { border-color: rgba(255,255,255,0.1); }
+
+        /* --- SETTINGS MODAL --- */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(4,4,6,0.75); backdrop-filter: blur(6px);
+            display: none; align-items: flex-start; justify-content: center;
+            padding: 40px 16px; overflow-y: auto;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-card {
+            width: 100%; max-width: 780px; background: var(--panel-bg);
+            border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; margin: auto;
+            animation: fadeIn 0.25s ease-out;
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 18px 22px; border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; background: var(--panel-bg);
+            border-radius: var(--radius) var(--radius) 0 0; z-index: 2;
+        }
+        .modal-header h2 { margin: 0; font-size: 17px; color: white; display: flex; align-items: center; gap: 8px; }
+        .modal-close {
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 22px; cursor: pointer; line-height: 1; padding: 4px 10px; border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .modal-close:hover { background: rgba(255,255,255,0.08); color: white; }
+        .modal-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 20px; }
+        .modal-body .panel { margin-bottom: 0; padding: 18px; }
+        .modal-body .panel-header { padding-bottom: 12px; margin-bottom: 16px; }
+        .modal-footer {
+            display: flex; justify-content: flex-end; gap: 12px;
+            padding: 16px 22px; border-top: 1px solid var(--border);
+            position: sticky; bottom: 0; background: var(--panel-bg);
+            border-radius: 0 0 var(--radius) var(--radius);
+        }
+        .settings-hint {
+            display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--success);
+            background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25);
+            padding: 10px 14px; border-radius: 8px; line-height: 1.4;
+        }
     </style>
 </head>
 <body>
@@ -333,7 +376,7 @@
             <!-- SIDEBAR -->
             <div class="sidebar">
                 <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview & Controls</button>
-                <button class="tab-btn" onclick="switchTab('tab-settings')">⚙️ Match Settings</button>
+                <button class="tab-btn" onclick="openSettingsModal()">⚙️ Match Settings</button>
                 <button class="tab-btn" onclick="switchTab('tab-stream')">📡 Stream Config</button>
                 <button class="tab-btn" onclick="switchTab('tab-records')">🎥 Saved Recordings</button>
                 <button class="tab-btn" onclick="switchTab('tab-logs')">📋 System Logs</button>
@@ -402,7 +445,7 @@
                                     <div style="display: flex; align-items: center; gap: 6px;">
                                         <button class="btn" onclick="sendDirectorCmd('mute')" title="Toggle Sound" style="padding: 6px 10px; font-size: 12px;">🔊 MUTE</button>
                                         <button class="btn" onclick="sendDirectorCmd('fullscreen')" title="Fullscreen Preview" style="padding: 6px 10px; font-size: 12px;">⛶ FULLSCREEN</button>
-                                        <button class="btn" onclick="switchTab('tab-settings')" style="padding: 6px 12px; font-size: 12px; background: rgba(255,255,255,0.06);">⚙ MATCH SETTINGS</button>
+                                        <button class="btn" onclick="openSettingsModal()" title="Watermark, gameplay &amp; physics settings" style="padding: 6px 12px; font-size: 12px; background: rgba(212,175,55,0.25); border-color: #ffd700; color: #ffd700; font-weight: 700;">⚙ SETTINGS</button>
                                     </div>
                                 </div>
                             </div>
@@ -414,89 +457,10 @@
                 <div id="tab-settings" class="tab-pane">
                     <div class="panel">
                         <div class="panel-header">
-                            <h2>Game Mechanics & Logic</h2>
+                            <h2>Match Settings</h2>
                         </div>
-                        <p class="panel-desc">These settings control how the flag battle plays out. Save and they will inject immediately into the live game.</p>
-                        
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>Total Countries to Spawn</label>
-                                <input type="number" id="live-total-countries" min="10" max="245" value="195">
-                            </div>
-                            <div class="form-group">
-                                <label>Rounds (Best of X)</label>
-                                <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
-                            </div>
-                            <div class="form-group">
-                                <label>Match Duration (Minutes)</label>
-                                <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
-                            </div>
-                            <div class="form-group">
-                                <label>Team Up Mode</label>
-                                <select id="live-teams">
-                                    <option value="none">Free for All (Solo)</option>
-                                    <option value="2">2 Teams (Red vs Blue)</option>
-                                    <option value="4">4 Teams</option>
-                                    <option value="continents">By Continent</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Gameplay Interaction Rules</h2>
-                        </div>
-                        <p class="panel-desc">Customize how viewer interactions affect the active game.</p>
-                        
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>Votes Needed to Revive</label>
-                                <input type="number" id="live-revive-votes" min="1" max="50" value="4">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Physics, Experience & Branding</h2>
-                        </div>
-                        <div class="grid-3">
-                            <div class="form-group">
-                                <label>Game Speed (1-5)</label>
-                                <input type="number" id="live-speed" min="1" max="5" value="1">
-                            </div>
-                            <div class="form-group">
-                                <label>Gravity Magnitude</label>
-                                <input type="number" id="live-gravity" step="0.1" value="0.0">
-                            </div>
-                            <div class="form-group">
-                                <label>Watermark / Channel Name</label>
-                                <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
-                            </div>
-                        </div>
-                        <div class="grid-2" style="margin-top: 10px;">
-                            <div class="form-group">
-                                <label>Watermark Opacity</label>
-                                <input type="number" id="live-wm-opacity" min="0" max="1" step="0.01" value="0.15">
-                            </div>
-                            <div class="form-group">
-                                <label>Watermark Size</label>
-                                <input type="number" id="live-wm-size" min="10" max="150" step="1" value="36">
-                            </div>
-                            <div class="form-group">
-                                <label>Watermark Count</label>
-                                <input type="number" id="live-wm-count" min="1" max="10" step="1" value="3">
-                            </div>
-                            <div class="form-group">
-                                <label>Watermark Angle</label>
-                                <input type="number" id="live-wm-angle" min="-90" max="90" step="1" value="-15">
-                            </div>
-                        </div>
-                        <label class="checkbox-label" style="margin-top: 10px;">
-                            <input type="checkbox" id="live-bias" checked> 
-                            <span><strong>Enable Audience Bias</strong> (Creates dramatic near misses and dynamic momentum)</span>
-                        </label>
+                        <p class="panel-desc">Watermark, gameplay rules, and physics now live in a single settings panel. Changes apply immediately to the live stream (or the preview) and are saved as your defaults for the next launch.</p>
+                        <button class="btn btn-primary" onclick="openSettingsModal()" style="padding: 12px 22px;">⚙ Open Game &amp; Branding Settings</button>
                     </div>
                 </div>
 
@@ -610,6 +574,125 @@
         </div>
     </div>
 
+    <!-- SETTINGS MODAL (opened from the director bar / Match Settings tab) -->
+    <div id="settings-modal" class="modal-overlay" onclick="if (event.target === this) closeSettingsModal()">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Game and Branding Settings">
+            <div class="modal-header">
+                <h2>⚙ Game &amp; Branding Settings</h2>
+                <button class="modal-close" onclick="closeSettingsModal()" title="Close">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="settings-hint">
+                    💾 Changes are applied to the live stream / preview and saved as your default settings.
+                </div>
+
+                <!-- BRANDING & WATERMARK -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Branding &amp; Watermark</h2>
+                    </div>
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label>Watermark / Channel Name</label>
+                            <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
+                        </div>
+                        <div class="form-group">
+                            <label>Watermark Opacity (0-1)</label>
+                            <input type="number" id="live-wm-opacity" min="0" max="1" step="0.01" value="0.15">
+                        </div>
+                        <div class="form-group">
+                            <label>Watermark Size (px)</label>
+                            <input type="number" id="live-wm-size" min="10" max="150" step="1" value="36">
+                        </div>
+                    </div>
+                    <div class="grid-3" style="margin-top: 10px;">
+                        <div class="form-group">
+                            <label>Watermark Count (1-10)</label>
+                            <input type="number" id="live-wm-count" min="1" max="10" step="1" value="3">
+                        </div>
+                        <div class="form-group">
+                            <label>Watermark Angle (-90 to 90°)</label>
+                            <input type="number" id="live-wm-angle" min="-90" max="90" step="1" value="-15">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GAMEPLAY RULES -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Gameplay Interaction Rules</h2>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Votes Needed to Revive</label>
+                            <input type="number" id="live-revive-votes" min="1" max="50" value="4">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <label class="checkbox-label" style="width: 100%;">
+                                <input type="checkbox" id="live-bias" checked>
+                                <span><strong>Enable Audience Bias</strong> (dramatic near misses &amp; momentum)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PHYSICS & SPEED -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Physics &amp; Speed</h2>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Game Speed (1-5)</label>
+                            <input type="number" id="live-speed" min="1" max="5" step="0.5" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Gravity Magnitude (0 = float)</label>
+                            <input type="number" id="live-gravity" step="0.1" value="0.0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADVANCED MATCH SETUP -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Advanced Match Setup</h2>
+                    </div>
+                    <p class="panel-desc" style="margin-top: 0;">Tournament structure. These are saved with your defaults for engines that support them.</p>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Total Countries to Spawn</label>
+                            <input type="number" id="live-total-countries" min="10" max="245" value="195">
+                        </div>
+                        <div class="form-group">
+                            <label>Rounds (Best of X)</label>
+                            <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
+                        </div>
+                        <div class="form-group">
+                            <label>Match Duration (Minutes)</label>
+                            <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
+                        </div>
+                        <div class="form-group">
+                            <label>Team Up Mode</label>
+                            <select id="live-teams">
+                                <option value="none">Free for All (Solo)</option>
+                                <option value="2">2 Teams (Red vs Blue)</option>
+                                <option value="4">4 Teams</option>
+                                <option value="continents">By Continent</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn" onclick="closeSettingsModal()">Cancel</button>
+                <button class="btn btn-primary" id="modal-save-btn" onclick="saveAndApplySettings()">💾 Save &amp; Apply</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_HEADERS = () => ({
             'Content-Type': 'application/json',
@@ -646,6 +729,26 @@
             const target = document.getElementById(tabId);
             if (target) target.classList.add('active');
         }
+
+        // Open the single source-of-truth settings panel. Refreshes the inputs
+        // from the persisted defaults first so what you see is what's stored.
+        function openSettingsModal() {
+            fetch('/api/status', { headers: API_HEADERS() })
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => { if (data) populateSettings(data.settings); })
+                .catch(() => {});
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.classList.add('open');
+        }
+
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeSettingsModal();
+        });
 
         function logout() {
             localStorage.removeItem('fb_login_key');
@@ -862,6 +965,8 @@
                 }
                 showAlert('Settings saved! Ready for next launch.');
             }
+
+            closeSettingsModal();
         }
 
         async function sendTestChat() {
