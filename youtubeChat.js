@@ -8,14 +8,25 @@ try {
 const YT_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const VOTE_RE = /^!vote\s+([A-Za-z]{2,20})\b/i;
 
+// Two maps on purpose:
+//   NAME_TO_CODE — full lookup (codes + names + aliases) used by explicit
+//                  commands like "!vote us" / "freeze USA".
+//   SCAN_TO_CODE — names + aliases ONLY, used when scanning ordinary comments
+//                  for a country mention. Bare 2-letter ISO codes are excluded
+//                  here so everyday words ("is", "my", "in", "it") don't get
+//                  mis-counted as Iceland/Malaysia/India/Italy.
 const NAME_TO_CODE = new Map();
+const SCAN_TO_CODE = new Map();
 for (const country of COUNTRIES) {
   const code = country.code;
   const name = country.name;
   NAME_TO_CODE.set(code.toLowerCase(), code);
-  if (name) NAME_TO_CODE.set(name.toLowerCase(), code);
+  if (name) {
+    NAME_TO_CODE.set(name.toLowerCase(), code);
+    SCAN_TO_CODE.set(name.toLowerCase(), code);
+  }
 }
-// Common shorthand aliases
+// Common shorthand aliases (unambiguous, so safe for free-text scanning too)
 const ALIASES = {
   'usa': 'us',
   'america': 'us',
@@ -30,9 +41,13 @@ const ALIASES = {
   'russia': 'ru'
 };
 for (const [alias, code] of Object.entries(ALIASES)) {
-  if (!NAME_TO_CODE.has(alias)) {
-    NAME_TO_CODE.set(alias, code);
-  }
+  NAME_TO_CODE.set(alias, code);
+  SCAN_TO_CODE.set(alias, code);
+}
+
+// Normalise a token: lowercase and strip punctuation (keeps letters/spaces).
+function normalizeToken(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -51,22 +66,41 @@ const POWER_ALIASES = {
   nuke: 'nuke', eliminate: 'nuke', out: 'nuke', kill: 'nuke', destroy: 'nuke', wipe: 'nuke', boom: 'nuke',
   boost: 'boost', push: 'boost', steer: 'boost', charge: 'boost', rush: 'boost',
 };
-const GLOBAL_POWERS = new Set(['quake', 'slow']);
+// Powers that have no single target. 'slow' is kept OUT so that
+// "slow US" can slow down just that country's flag; a bare "slow" /
+// "!slow" still falls back to global slow-motion below.
+const GLOBAL_POWERS = new Set(['quake']);
+
+// Curated words that may trigger a power WITHOUT the `!` prefix (user-friendly
+// natural language, e.g. "slow US" / "freeze USA"). Deliberately excludes
+// ambiguous everyday words (stop/hold/out/push/bo...) so normal chat doesn't
+// accidentally fire powers; those still work when written as `!stop` etc.
+const NL_POWER_WORDS = [
+  'shield', 'protect', 'save',
+  'revive', 'resurrect',
+  'freeze', 'ice',
+  'quake', 'earthquake',
+  'slow', 'slowmo', 'slomo',
+  'nuke', 'eliminate', 'destroy',
+  'boost',
+];
 
 function resolveVoteTarget(rawToken) {
-  const key = rawToken.trim().toLowerCase();
+  const key = normalizeToken(rawToken);
   return NAME_TO_CODE.get(key) || null;
 }
 
+function findCountryName(code) {
+  const c = COUNTRIES.find(x => x.code === code);
+  return c ? c.name : code;
+}
+
 function resolveCountry(candidate) {
-  const words = String(candidate || '').trim().split(/\s+/).filter(Boolean);
+  const words = normalizeToken(candidate).split(' ').filter(Boolean);
   for (let take = Math.min(4, words.length); take >= 1; take--) {
     const probe = words.slice(0, take).join(' ');
-    const code = resolveVoteTarget(probe);
-    if (code) {
-      const c = COUNTRIES.find(x => x.code === code);
-      return { code, countryName: c ? c.name : code };
-    }
+    const code = NAME_TO_CODE.get(probe);
+    if (code) return { code, countryName: findCountryName(code) };
   }
   return null;
 }
@@ -92,44 +126,60 @@ function parseCommand(text) {
           return { kind: 'power', power, code: null, countryName: null };
         }
         const target = resolveCountry(rest);
-        return target ? { kind: 'power', power, ...target } : null;
+        if (target) return { kind: 'power', power, ...target };
+        // "!slow" with no country = global slow-motion.
+        if (power === 'slow') return { kind: 'power', power, code: null, countryName: null };
+        return null;
       }
       // Unknown !command — fall through to the name scan below.
     }
   }
 
-  // No recognisable command: first check if message contains a power verb followed by a country
-  // e.g. "slow US", "freeze USA", "quake", "nuke Russia", "shield Canada", "revive Japan".
-  const lowerRaw = raw.toLowerCase();
-  const powerMatch = lowerRaw.match(/(shield|save|protect|guard|def|revive|resurrect|respawn|rez|freeze|ice|frozen|stop|hold|quake|earthquake|shake|crater|slow|slowmo|slomo|slow-mo|slowdown|nuke|eliminate|out|kill|destroy|wipe|boom|boost|push|steer|charge|rush)\b/);
+  // No `!` command: check for a curated natural-language power verb, e.g.
+  // "slow US", "freeze USA", "quake", "nuke Russia", "shield Canada".
+  const normalized = normalizeToken(raw);
+  const wordCount = normalized.split(' ').filter(Boolean).length;
+  const nlRe = new RegExp(`\\b(${NL_POWER_WORDS.join('|')})\\b`);
+  const powerMatch = normalized.match(nlRe);
   if (powerMatch) {
     const powerKey = powerMatch[1];
     const power = POWER_ALIASES[powerKey];
     if (power) {
       if (GLOBAL_POWERS.has(power)) {
-        return { kind: 'power', power, code: null, countryName: null };
+        // Global powers need to be deliberate: explicit "!quake" or a short
+        // trigger like "quake" — not buried in a sentence.
+        if (raw[0] === '!' || wordCount <= 2) {
+          return { kind: 'power', power, code: null, countryName: null };
+        }
       }
-      // extract country after the power word
-      const restAfterPower = raw.slice(raw.toLowerCase().indexOf(powerMatch[0]) + powerMatch[0].length);
-      const target = resolveCountry(restAfterPower) || resolveCountry(raw.replace(new RegExp(powerMatch[0], 'i'), ''));
+      // Extract a country that follows the power word, else anywhere else.
+      const idx = normalized.indexOf(powerMatch[0]);
+      const restAfterPower = normalized.slice(idx + powerMatch[0].length);
+      const beforePower = normalized.slice(0, idx);
+      const target = resolveCountry(restAfterPower) ||
+        resolveCountry(beforePower) ||
+        resolveCountry(normalized.replace(new RegExp(`\\b${powerMatch[0]}\\b`, 'g'), ''));
       if (target) {
         return { kind: 'power', power, ...target };
       }
-      // global maybe? otherwise just drop power if no target
+      // "slow" (short, no country) = global slow-motion.
+      if (power === 'slow') {
+        if (raw[0] === '!' || wordCount <= 2) {
+          return { kind: 'power', power, code: null, countryName: null };
+        }
+      }
     }
   }
 
-  // No recognisable command: scan the whole message for any country name, so
-  // an ordinary comment like "go Brazil!!" still registers as a vote.
-  const words = raw.split(/\s+/);
+  // No recognisable command: scan the whole message for any country NAME, so
+  // an ordinary comment like "go Brazil!!" still registers as a vote. Uses the
+  // name-only map to avoid false positives from everyday 2-letter words.
+  const words = normalized.split(' ').filter(Boolean);
   for (let i = 0; i < words.length; i++) {
     for (let take = Math.min(4, words.length - i); take >= 1; take--) {
       const candidate = words.slice(i, i + take).join(' ');
-      const code = resolveVoteTarget(candidate);
-      if (code) {
-        const c = COUNTRIES.find(x => x.code === code);
-        return { kind: 'vote', code, countryName: c ? c.name : code };
-      }
+      const code = SCAN_TO_CODE.get(candidate);
+      if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
     }
   }
   return null;
@@ -309,14 +359,31 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
             superChat: Boolean(superChat),
             tier,
           };
-        } else if (command && command.kind === 'power' && superChat && tier >= POWER_MIN_TIER) {
-          power = {
-            power: command.power,
-            code: command.code,
-            countryName: command.countryName,
-            weight: superWeight,
-            tier,
-          };
+        } else if (command && command.kind === 'power') {
+          // User-friendly: free comments can trigger utility powers too
+          // (slow/freeze/shield/quake/boost). Only the destructive NUKE and
+          // the instant REVIVE are reserved for Super Chats; a free "revive X"
+          // simply counts as a normal vote toward the regular revive threshold.
+          const isNuke = command.power === 'nuke';
+          const isInstantRevive = command.power === 'revive';
+          if (superChat || (!isNuke && !isInstantRevive)) {
+            power = {
+              power: command.power,
+              code: command.code,
+              countryName: command.countryName,
+              weight: superWeight,
+              tier,
+              superChat: Boolean(superChat),
+            };
+          } else if (isInstantRevive && command.code) {
+            vote = {
+              code: command.code,
+              countryName: command.countryName,
+              weight: 1,
+              superChat: false,
+              tier: 0,
+            };
+          }
         }
 
         const chatMessage = {

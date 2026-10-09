@@ -152,6 +152,10 @@ export class FlagBattleEngine extends EventEmitter {
     // ---- Vote-boost (temporary speed/resilience multiplier for a code) ----
     this._voteBoosts = new Map(); // code -> { factor, until }
 
+    // ---- Power states ----
+    this._slowUntil = 0;   // global slow-motion end timestamp
+    this._slowFactor = 1;  // global speed multiplier while slowing
+
     this._sprites = new Map(); // code -> { img, canvas, ready }
     this._timerInterval = null;
     this._qpRotationInterval = null;
@@ -229,62 +233,118 @@ export class FlagBattleEngine extends EventEmitter {
     this._voteBoosts.set(upper, { factor: boostFactor, until });
   }
 
-  // Hybrid Super Chat powers (parity with vertical engine). For Phase 2 we
-  // implement 'revive' fully and add no-ops/scaffolds for others so both
-  // engines accept the same POWER stream.
+  // Hybrid Super Chat powers (parity with vertical engine). Utility powers
+  // work for free comments too; NUKE/instant-REVIVE are gated server-side.
   applyPower(power = {}) {
     const p = (power.power || '').toLowerCase();
     if (!p) return;
     const code = power.code;
-    if (p === 'revive' && code) {
-      const targetCode = this._resolveCountryCode(code);
-      if (!targetCode) return;
-      const isElim = this.eliminatedList.some(e => (e.code || '').toUpperCase() === targetCode);
-      if (!isElim) {
-        const flag = this.flags.find(f => (f.code || '').toUpperCase() === targetCode);
-        if (flag && !flag.alive) {
-          flag.alive = true;
-          flag.x = this.CENTER.x + (Math.random() * 30 - 15);
-          flag.y = this.CENTER.y + (Math.random() * 30 - 15);
-          const rndA = Math.random() * Math.PI * 2;
-          flag.vx = Math.cos(rndA) * 1.2;
-          flag.vy = Math.sin(rndA) * 1.2;
-          flag.flashUntil = Date.now() + 4500;
-          flag.immunityUntil = Date.now() + 4500;
-          this._emitHud();
+    const paid = Boolean(power.superChat);
+    const weight = Math.max(1, Number(power.weight) || 1);
+    const dur = (base) => Math.round(paid ? base * 1.75 : base);
+    const targetCode = code ? this._resolveCountryCode(code) : null;
+    const flag = targetCode ? this.flags.find(f => (f.code || '').toUpperCase() === targetCode) : null;
+
+    switch (p) {
+      case 'revive': {
+        if (!targetCode) return;
+        const isElim = this.eliminatedList.some(e => (e.code || '').toUpperCase() === targetCode);
+        if (!isElim) {
+          if (flag && !flag.alive) {
+            flag.alive = true;
+            flag.x = this.CENTER.x + (Math.random() * 30 - 15);
+            flag.y = this.CENTER.y + (Math.random() * 30 - 15);
+            const rndA = Math.random() * Math.PI * 2;
+            flag.vx = Math.cos(rndA) * 1.2;
+            flag.vy = Math.sin(rndA) * 1.2;
+            flag.flashUntil = Date.now() + 4500;
+            flag.immunityUntil = Date.now() + 4500;
+            this._emitHud();
+          }
+          return;
+        }
+        const elimEntry = this.eliminatedList.find(e => (e.code || '').toUpperCase() === targetCode);
+        if (!flag) {
+          this.flags.push({
+            code: targetCode,
+            country: { code: targetCode, name: this.countryNames[targetCode] || elimEntry?.name || targetCode },
+            x: this.CENTER.x, y: this.CENTER.y, r: this.FLAG_R, vx: 0, vy: 0, alive: false,
+          });
+        }
+        const rf = this.flags.find(f => (f.code || '').toUpperCase() === targetCode);
+        rf.alive = true;
+        rf.x = this.CENTER.x + (Math.random() * 30 - 15);
+        rf.y = this.CENTER.y + (Math.random() * 30 - 15);
+        const rndA = Math.random() * Math.PI * 2;
+        rf.vx = Math.cos(rndA) * 1.2;
+        rf.vy = Math.sin(rndA) * 1.2;
+        rf.flashUntil = Date.now() + 4500;
+        rf.immunityUntil = Date.now() + 4500;
+        this.eliminatedList = this.eliminatedList.filter(e => (e.code || '').toUpperCase() !== targetCode);
+        this.emit('eliminated', this.eliminatedList.slice());
+        this._emitHud();
+        return;
+      }
+      case 'shield': {
+        if (flag && flag.alive) {
+          flag.immunityUntil = Date.now() + dur(6000);
+          flag.flashUntil = Date.now() + dur(6000);
+        }
+        this.emit('power', { power: 'shield', code: targetCode });
+        return;
+      }
+      case 'freeze': {
+        if (flag && flag.alive) {
+          flag.frozenUntil = Date.now() + dur(4500);
+          flag.vx = 0; flag.vy = 0;
+        }
+        this.emit('power', { power: 'freeze', code: targetCode });
+        return;
+      }
+      case 'slow': {
+        if (targetCode && flag && flag.alive) {
+          // Targeted: "slow US" slows down just that country's flag.
+          flag.slowUntil = Date.now() + dur(5000);
+          this.emit('power', { power: 'slow', code: targetCode });
+        } else {
+          this._slowUntil = Date.now() + dur(5000);
+          this._slowFactor = 0.4;
+          this.emit('power', { power: 'slow' });
         }
         return;
       }
-      // revive from eliminatedList
-      const elimEntry = this.eliminatedList.find(e => (e.code || '').toUpperCase() === targetCode);
-      let flag = this.flags.find(f => (f.code || '').toUpperCase() === targetCode);
-      if (!flag) {
-        flag = {
-          code: targetCode,
-          country: { code: targetCode, name: this.countryNames[targetCode] || elimEntry?.name || targetCode },
-          x: this.CENTER.x,
-          y: this.CENTER.y,
-          r: this.FLAG_R,
-          vx: 0,
-          vy: 0,
-          alive: false,
-        };
-        this.flags.push(flag);
+      case 'quake': {
+        const mag = paid ? 9 : 6;
+        this.flags.filter(f => f.alive).forEach(f => {
+          const a = Math.random() * Math.PI * 2;
+          f.vx = Math.cos(a) * mag;
+          f.vy = Math.sin(a) * mag;
+        });
+        this._playWhoosh();
+        this.emit('power', { power: 'quake' });
+        return;
       }
-      flag.alive = true;
-      flag.x = this.CENTER.x + (Math.random() * 30 - 15);
-      flag.y = this.CENTER.y + (Math.random() * 30 - 15);
-      const rndA = Math.random() * Math.PI * 2;
-      flag.vx = Math.cos(rndA) * 1.2;
-      flag.vy = Math.sin(rndA) * 1.2;
-      flag.flashUntil = Date.now() + 4500;
-      flag.immunityUntil = Date.now() + 4500;
-      this.eliminatedList = this.eliminatedList.filter(e => (e.code || '').toUpperCase() !== targetCode);
-      this.emit('eliminated', this.eliminatedList.slice());
-      this._emitHud();
-      return;
+      case 'boost': {
+        if (flag && flag.alive) {
+          const dx = this.CENTER.x - flag.x;
+          const dy = this.CENTER.y - flag.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const mag = (paid ? 11 : 8) + Math.min(weight, 30) * 0.1;
+          flag.vx = (dx / d) * mag;
+          flag.vy = (dy / d) * mag;
+          flag.flashUntil = Date.now() + dur(2500);
+        }
+        this.emit('power', { power: 'boost', code: targetCode });
+        return;
+      }
+      case 'nuke': {
+        if (flag && flag.alive) this._eliminate(flag);
+        this.emit('power', { power: 'nuke', code: targetCode });
+        return;
+      }
+      default:
+        return;
     }
-    // Other powers: scaffold (shield/freeze/quake/slow/nuke/boost) — can extend per user needs
   }
 
   _resolveCountryCode(input) {
@@ -987,14 +1047,26 @@ export class FlagBattleEngine extends EventEmitter {
 
     const alive = this.flags.filter((f) => f.alive);
     const grav = (this.settings?.gravity !== undefined) ? Number(this.settings.gravity) : 0;
-    const speedMult = (this.settings?.speedMult !== undefined) ? Number(this.settings.speedMult) : 1;
+    let speedMult = (this.settings?.speedMult !== undefined) ? Number(this.settings.speedMult) : 1;
+
+    // 🐌 SLOW: global slow-motion while active.
+    if (this._slowUntil && Date.now() > this._slowUntil) { this._slowUntil = 0; this._slowFactor = 1; }
+    if (this._slowUntil) speedMult *= this._slowFactor;
 
     alive.forEach((f) => {
+      // ❄️ FREEZE: hold still while frozen.
+      if (f.frozenUntil && f.frozenUntil > Date.now()) {
+        f.vx = 0; f.vy = 0;
+        return;
+      }
+      // 🐌 SLOW (targeted): damp and crawl while active.
+      const slowFactor = (f.slowUntil && f.slowUntil > Date.now()) ? 0.55 : 1;
+      if (slowFactor < 1) { f.vx *= 0.97; f.vy *= 0.97; }
       if (grav > 0) {
         f.vy += grav * 0.08;
       }
-      f.x += f.vx * speedMult;
-      f.y += f.vy * speedMult;
+      f.x += f.vx * speedMult * slowFactor;
+      f.y += f.vy * speedMult * slowFactor;
     });
 
     for (let i = 0; i < alive.length; i++) {

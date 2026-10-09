@@ -351,6 +351,45 @@ export class UIManager {
     }, 2500);
   }
 
+  showPowerToast(label, country, flagUrl, author) {
+    const feed = this.$('elimination-feed');
+    if (!feed) return;
+    const name = country && country.name ? country.name : '';
+    const toast = document.createElement('div');
+    toast.className = 'elim-toast';
+    toast.style.background = 'rgba(30, 15, 45, 0.9)';
+    toast.style.borderColor = 'rgba(190, 120, 255, 0.85)';
+    toast.innerHTML = `<img src="${flagUrl}" alt=""> <span style="color:#c792ff">${label}${author ? ' · ' + author : ''}:</span> ${name}`;
+    feed.insertBefore(toast, feed.firstChild);
+    while (feed.children.length > 3) feed.removeChild(feed.lastChild);
+    setTimeout(() => {
+      if (toast.parentNode === feed) {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => toast.remove(), 500);
+      }
+    }, 2800);
+  }
+
+  showGlobalPowerToast(label, author) {
+    const feed = this.$('elimination-feed');
+    if (!feed) return;
+    const toast = document.createElement('div');
+    toast.className = 'elim-toast';
+    toast.style.background = 'rgba(45, 25, 10, 0.92)';
+    toast.style.borderColor = 'rgba(255, 170, 60, 0.85)';
+    toast.innerHTML = `<span style="color:#ffbb66">${label}${author ? ' · ' + author : ''}</span>`;
+    feed.insertBefore(toast, feed.firstChild);
+    while (feed.children.length > 3) feed.removeChild(feed.lastChild);
+    setTimeout(() => {
+      if (toast.parentNode === feed) {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => toast.remove(), 500);
+      }
+    }, 2800);
+  }
+
   showReviveProgress(country, flagUrl, current, target) {
     let container = this.$('revive-trackers');
     if (!container) {

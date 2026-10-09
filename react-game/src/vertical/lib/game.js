@@ -147,8 +147,11 @@ export class FlagBattle {
       try {
         const msg = JSON.parse(e.data);
         if (this.running && !this.paused) {
-          if (msg.type === 'POWER' || msg.power) {
-            this._handlePower({ ...msg.power, ...msg, author: msg.author });
+          // Only act on the dedicated typed POWER broadcast; plain chat
+          // messages also embed a nested `power` object which must not be
+          // applied a second time.
+          if (msg.type === 'POWER') {
+            this._handlePower({ ...msg, author: msg.author });
           }
           if (msg.vote) {
             this._handleChatVote(msg.vote, msg.author);
@@ -166,32 +169,128 @@ export class FlagBattle {
     };
   }
 
+  _powerDuration(base) {
+    return base;
+  }
+
   _handlePower(power) {
-    // Hybrid: Super Chat of sufficient tier granted this power. For now, vertical
-    // focuses on parity of vote+revive; full power set will be added across both
-    // engines. Only 'revive' is directly actionable on an eliminated flag.
-    const p = (power.power || '').toLowerCase();
-    if (p === 'revive' && power.code) {
-      const flag = this.flags.find(f => f.country.code === power.code);
-      if (flag && flag.eliminated) {
-        flag.eliminated = false;
-        const ang = Math.random() * Math.PI * 2;
-        const rad = 25 + Math.random() * 35;
-        const spawnX = this.CX + Math.cos(ang) * rad;
-        const spawnY = this.CY + Math.sin(ang) * rad;
-        this.physics.reviveFlag(flag.body, spawnX, spawnY);
-        flag.reviveEffectEnd = Date.now() + 3500;
-        this.aliveCount = this.flags.filter(f => !f.eliminated).length;
-        this.standings = this.standings.filter(c => c.code !== power.code);
-        if (this.ui.reviveFlag) this.ui.reviveFlag(power.code);
-        if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(power.code);
-        if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
-        if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(power.code);
-        if (this.audio.playDramaticHit) this.audio.playDramaticHit();
-        if (this.ui.showReviveToast && flag.country) {
-          this.ui.showReviveToast(flag.country, getFlagUrl(power.code, 80), power.author || 'SUPERCHAT');
+    const p = (typeof power.power === 'string' ? power.power : '').toLowerCase();
+    const code = power.code;
+    const author = power.author || 'CHAT';
+    const paid = Boolean(power.superChat);
+    const weight = Math.max(1, Number(power.weight) || 1);
+    // Paid Super Chat powers last longer / hit harder; free comment powers
+    // still work (user-friendly) but are shorter and gentler.
+    const dur = (base) => Math.round(paid ? base * 1.75 : base);
+    const flag = code ? this.flags.find(f => f.country.code === code) : null;
+    const alive = flag && !flag.eliminated;
+
+    switch (p) {
+      case 'revive': {
+        if (flag && flag.eliminated) {
+          flag.eliminated = false;
+          const ang = Math.random() * Math.PI * 2;
+          const rad = 25 + Math.random() * 35;
+          this.physics.reviveFlag(flag.body, this.CX + Math.cos(ang) * rad, this.CY + Math.sin(ang) * rad);
+          flag.reviveEffectEnd = Date.now() + 3500;
+          this.aliveCount = this.flags.filter(f => !f.eliminated).length;
+          this.standings = this.standings.filter(c => c.code !== code);
+          if (this.ui.reviveFlag) this.ui.reviveFlag(code);
+          if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(code);
+          if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
+          if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(code);
+          if (this.audio.playDramaticHit) this.audio.playDramaticHit();
+          if (this.ui.showReviveToast && flag.country) {
+            this.ui.showReviveToast(flag.country, getFlagUrl(code, 80), author);
+          }
+          if (this.ui.showPowerToast) this.ui.showPowerToast('⚡ REVIVE', flag.country, getFlagUrl(code, 40), author);
         }
+        break;
       }
+      case 'shield': {
+        if (alive) {
+          flag.body.immunityUntil = Date.now() + dur(6000);
+          flag.reviveEffectEnd = Date.now() + dur(6000);
+          if (this.ui.showPowerToast) this.ui.showPowerToast('🛡️ SHIELD', flag.country, getFlagUrl(code, 40), author);
+        }
+        break;
+      }
+      case 'freeze': {
+        if (alive) {
+          flag.body.frozenUntil = Date.now() + dur(4500);
+          Matter.Body.setVelocity(flag.body, { x: 0, y: 0 });
+          Matter.Body.setAngularVelocity(flag.body, 0);
+          if (this.ui.showPowerToast) this.ui.showPowerToast('❄️ FREEZE', flag.country, getFlagUrl(code, 40), author);
+        }
+        break;
+      }
+      case 'slow': {
+        if (code && flag && !flag.eliminated) {
+          // Targeted: "slow US" slows down just that country's flag.
+          flag.body.slowUntil = Date.now() + dur(5000);
+          if (this.ui.showPowerToast) this.ui.showPowerToast('🐌 SLOWED', flag.country, getFlagUrl(code, 40), author);
+        } else {
+          // Global full-arena slow-motion.
+          this.physics.setTimeScale(0.45);
+          clearTimeout(this._slowTimer);
+          this._slowTimer = setTimeout(() => this.physics.resetTimeScale(), dur(5000));
+          if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('🐌 SLOW MOTION', author);
+        }
+        break;
+      }
+      case 'quake': {
+        const mag = paid ? 9 : 6;
+        for (const f of this.flags) {
+          if (f.eliminated) continue;
+          const a = Math.random() * Math.PI * 2;
+          Matter.Body.setVelocity(f.body, { x: Math.cos(a) * mag, y: Math.sin(a) * mag });
+          Matter.Body.setAngularVelocity(f.body, (Math.random() - 0.5) * 1.5);
+        }
+        if (this.audio.playDramaticHit) this.audio.playDramaticHit();
+        if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('💥 EARTHQUAKE!', author);
+        break;
+      }
+      case 'boost': {
+        if (alive) {
+          const b = flag.body;
+          const dx = this.CX - b.position.x;
+          const dy = this.CY - b.position.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 1;
+          const mag = (paid ? 11 : 8) + Math.min(weight, 30) * 0.1;
+          Matter.Body.setVelocity(b, { x: (dx / d) * mag, y: (dy / d) * mag });
+          flag.reviveEffectEnd = Date.now() + dur(2500);
+          if (this.ui.showPowerToast) this.ui.showPowerToast('🚀 BOOST', flag.country, getFlagUrl(code, 40), author);
+        }
+        break;
+      }
+      case 'nuke': {
+        if (alive) {
+          this._forceEliminate(flag, author);
+          if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('☢️ NUKE!', author);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  _forceEliminate(flag, author) {
+    if (!flag || flag.eliminated) return;
+    const body = flag.body;
+    flag.eliminated = true;
+    body.eliminated = true;
+    this.aliveCount = Math.max(0, this.aliveCount - 1);
+    this.standings.push(flag.country);
+    const img = this.images[flag.country.code];
+    this.renderer.addFallingFlag(flag.country, body.position.x, body.position.y, body.velocity.x, body.velocity.y, body.angle, img);
+    this.renderer.addBurst(body.position.x, body.position.y);
+    this.audio.playElimination();
+    this.ui.eliminateFlag(flag.country.code);
+    this.ui.updateCounter(this.aliveCount, this.totalCount);
+    this.ui.showEliminationToast(flag.country, getFlagUrl(flag.country.code, 40));
+    if (this._top5Triggered && this.aliveCount < 5) {
+      this.ui.eliminateTop5Card(flag.country.code, this.aliveCount + 1);
     }
   }
 

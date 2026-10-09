@@ -430,10 +430,21 @@
                     <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:12px; text-transform:uppercase;">Test Demo Comment</h3>
                     <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
                         <input type="text" id="demo-author" placeholder="Author Name" value="Director" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
-                        <input type="text" id="demo-text" placeholder="Comment (e.g. 'Brazil')" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
-                        <label class="checkbox-label" style="padding: 5px 0; font-size: 12px;">
-                            <input type="checkbox" id="demo-superchat" /> Simulate SuperChat
-                        </label>
+                        <input type="text" id="demo-text" placeholder="Comment: 'Brazil' / 'slow US' / 'freeze USA' / '!nuke Russia'" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <label class="checkbox-label" style="padding: 5px 0; font-size: 12px; flex: 1; display: flex; align-items: center; gap: 4px;">
+                                <input type="checkbox" id="demo-superchat" /> SuperChat
+                            </label>
+                            <select id="demo-tier" style="padding: 6px; border-radius: 4px; font-size: 12px; flex: 1;">
+                                <option value="1">🟦 Tier 1 ($1)</option>
+                                <option value="2">🟦 Tier 2 ($5)</option>
+                                <option value="3" selected>🟩 Tier 3 ($10) + Power</option>
+                                <option value="4">🟨 Tier 4 ($20)</option>
+                                <option value="5">🟧 Tier 5 ($50)</option>
+                                <option value="6">🟥 Tier 6 ($100)</option>
+                                <option value="7">🟪 Tier 7 ($200)</option>
+                            </select>
+                        </div>
                         <button class="btn btn-primary" onclick="sendTestChat()" style="font-size: 13px; padding: 6px;">Send Comment</button>
                     </div>
                 </div>
@@ -992,6 +1003,7 @@
             const author = document.getElementById('demo-author').value.trim();
             const text = document.getElementById('demo-text').value.trim();
             const superChat = document.getElementById('demo-superchat').checked;
+            const tier = parseInt(document.getElementById('demo-tier').value) || 1;
             
             if (!text) {
                 showAlert('Please enter a comment text.', true);
@@ -1002,7 +1014,7 @@
                 const res = await fetch('/api/test-chat', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ author, text, superChat })
+                    body: JSON.stringify({ author, text, superChat, tier })
                 });
                 if (res.ok) {
                     document.getElementById('demo-text').value = '';

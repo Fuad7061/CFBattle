@@ -52,6 +52,11 @@ bus.on('vote', ({ code, weight }) => {
   voteTally[code] = (voteTally[code] || 0) + (weight || 1);
 });
 
+let liveViewerCount = null;
+bus.on('viewers', ({ count }) => {
+  if (typeof count === 'number' && count >= 0) liveViewerCount = count;
+});
+
 // ---- SSE: GET /api/chat-stream ----
 const sseClients = new Set();
 
@@ -76,6 +81,8 @@ function broadcastChat(msg) {
   }
 }
 bus.on('chat', broadcastChat);
+bus.on('power', (p) => broadcastChat({ type: 'POWER', ...p, timestamp: new Date().toISOString() }));
+bus.on('viewers', ({ count }) => broadcastChat({ type: 'VIEWER_COUNT', count }));
 
 // Keep-alive ping so intermediary proxies don't time out idle SSE connections.
 setInterval(() => {
@@ -93,7 +100,7 @@ app.post('/api/votes/reset', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, hasApiKey: Boolean(YOUTUBE_API_KEY), messagesBuffered: recentMessages.length });
+  res.json({ ok: true, hasApiKey: Boolean(YOUTUBE_API_KEY), messagesBuffered: recentMessages.length, viewerCount: liveViewerCount });
 });
 
 app.listen(PORT, () => {

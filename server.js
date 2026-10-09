@@ -785,8 +785,14 @@ app.post('/api/test-chat', express.json(), (req, res) => {
   let power = null;
   if (command && command.kind === 'vote') {
     vote = { code: command.code, countryName: command.countryName, weight: superWeight, superChat: Boolean(superChat), tier: scTier };
-  } else if (command && command.kind === 'power' && superChat && scTier >= 3) {
-    power = { power: command.power, code: command.code, countryName: command.countryName, weight: superWeight, tier: scTier };
+  } else if (command && command.kind === 'power') {
+    const isNuke = command.power === 'nuke';
+    const isInstantRevive = command.power === 'revive';
+    if (superChat || (!isNuke && !isInstantRevive)) {
+      power = { power: command.power, code: command.code, countryName: command.countryName, weight: superWeight, tier: scTier, superChat: Boolean(superChat) };
+    } else if (isInstantRevive && command.code) {
+      vote = { code: command.code, countryName: command.countryName, weight: 1, superChat: false, tier: 0 };
+    }
   }
 
   const msg = {

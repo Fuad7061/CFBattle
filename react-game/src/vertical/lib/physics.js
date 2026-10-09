@@ -247,7 +247,21 @@ export class PhysicsEngine {
     // Pure Newtonian Motion - Only intervene if a flag loses too much energy from micro-collisions
     for (const b of this.flagBodies) {
       if (b.eliminated) continue;
-      
+
+      // ❄️ FREEZE power: hold the flag perfectly still while active.
+      if (b.frozenUntil && b.frozenUntil > Date.now()) {
+        Matter.Body.setVelocity(b, { x: 0, y: 0 });
+        Matter.Body.setAngularVelocity(b, 0);
+        continue;
+      }
+
+      // 🐌 SLOW (targeted) power: damp the flag so it crawls, and skip the
+      // kinetic-energy agitation so it actually stays slow.
+      if (b.slowUntil && b.slowUntil > Date.now()) {
+        Matter.Body.setVelocity(b, { x: b.velocity.x * 0.55, y: b.velocity.y * 0.55 });
+        continue;
+      }
+
       const speedSq = b.velocity.x * b.velocity.x + b.velocity.y * b.velocity.y;
       if (speedSq < 6.25) { // speed < 2.5
          // Boost it slightly in its current direction to maintain kinetic energy
