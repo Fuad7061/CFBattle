@@ -20,14 +20,6 @@ export class UIManager {
     this._nextTournamentTimer = null;
 
     // Fake supporters pool
-    this._supporterNames = [
-      '@TurkeyFan_99', '@Sakura_JP', '@BrazilVibes', '@IndiaGaming',
-      '@MexicoLindo', '@USAStrong', '@GermanyPower', '@FranceViewer',
-      '@PH_Proud', '@NigeriaRise', '@EgyptKing', '@ArgentinaFan',
-      '@PakistanZindabad', '@ThailandSmile', '@VietnamStar',
-      '@PolandGamer', '@ItalyForza', '@SpainOle', '@UKViewer',
-      '@CanadaMaple', '@AustraliaOz', '@SaudiArabia', '@ColombiaHot'
-    ];
     this._supporters = [];
   }
 
@@ -77,13 +69,17 @@ export class UIManager {
   }
 
   recordSupporterVote(author, weight) {
-    const existing = this._supporters.find(s => s.name === author);
+    const name = author || 'Viewer';
+    const w = Math.max(0, Number(weight) || 0);
+    if (w === 0) return;
+    const existing = this._supporters.find(s => s.name === name);
     if (existing) {
-        existing.gifts += weight;
+      existing.gifts += w;
     } else {
-        this._supporters.push({ name: author, gifts: weight });
+      this._supporters.push({ name, gifts: w });
     }
     this._supporters.sort((a, b) => b.gifts - a.gifts);
+    this._supporters = this._supporters.slice(0, 20);
     this._updateSupportersUI();
   }
 
@@ -94,11 +90,11 @@ export class UIManager {
       list.innerHTML = '<div class="sup-empty">No supporters yet</div>';
       return;
     }
-    list.innerHTML = this._supporters.slice(0, 3).map((s, i) => `
+    list.innerHTML = this._supporters.slice(0, 5).map((s, i) => `
       <div class="sup-row">
         <span class="sup-rank">${i + 1}</span>
         <span class="sup-name">${s.name}</span>
-        <span class="sup-gifts">\u2605 ${s.gifts}</span>
+        <span class="sup-gifts">\u2605 ${Math.round(s.gifts)}</span>
       </div>
     `).join('');
   }
@@ -112,21 +108,23 @@ export class UIManager {
   /*  LIVE VIEWER COUNTER                                               */
   /* ------------------------------------------------------------------ */
 
-  startViewerCount() {
-    this._viewerCount = 120 + Math.floor(Math.random() * 80);
+  setViewerCount(count) {
+    const c = typeof count === 'number' && count >= 0 ? count : this._viewerCount;
+    this._viewerCount = c;
     const el = this.$('live-viewers');
     if (el) el.classList.remove('hidden');
-    this.$('viewer-count').textContent = this._viewerCount.toLocaleString();
-    
-    this._viewerInterval = setInterval(() => {
-      const delta = Math.floor(Math.random() * 12) - 3;
-      this._viewerCount = Math.max(50, this._viewerCount + delta);
-      this.$('viewer-count').textContent = this._viewerCount.toLocaleString();
-    }, 4000 + Math.random() * 3000);
+    const vc = this.$('viewer-count');
+    if (vc) vc.textContent = this._viewerCount.toLocaleString();
+  }
+
+  startViewerCount() {
+    this.setViewerCount(this._viewerCount || 0);
+    if (this._viewerInterval) clearInterval(this._viewerInterval);
+    this._viewerInterval = null;
   }
 
   stopViewerCount() {
-    clearInterval(this._viewerInterval);
+    if (this._viewerInterval) { clearInterval(this._viewerInterval); this._viewerInterval = null; }
     const el = this.$('live-viewers');
     if (el) el.classList.add('hidden');
   }

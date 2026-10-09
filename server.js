@@ -37,6 +37,7 @@ let currentPage = null;
 let isStreaming = false;
 let isRecording = false;
 let recordingProgress = null;
+let liveViewerCount = null;
 
 // Default Settings
 let currentSettings = {
@@ -121,7 +122,7 @@ app.get('/api/status', checkAuth, (req, res) => {
             progress = null; // Reset
         }
     }
-    res.json({ isStreaming, isRecording, progress, settings: currentSettings });
+    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
@@ -709,6 +710,19 @@ bus.on('vote', ({ code, weight }) => {
   voteTally[code] = (voteTally[code] || 0) + (weight || 1);
 });
 
+// Hybrid Super Chat: POWER tokens are broadcast to every running engine.
+bus.on('power', (power) => {
+  recentMessages.push({ type: 'POWER', ...power, timestamp: new Date().toISOString() });
+  if (recentMessages.length > RECENT_MESSAGES_CAP) {
+    recentMessages = recentMessages.slice(-RECENT_MESSAGES_CAP);
+  }
+});
+
+// Best-effort live YouTube concurrent viewer count (real data, never faked).
+bus.on('viewers', ({ count }) => {
+  if (typeof count === 'number' && count >= 0) liveViewerCount = count;
+});
+
 const sseClients = new Set();
 app.get('/api/chat-stream', (req, res) => {
   res.writeHead(200, {
@@ -731,6 +745,8 @@ function broadcastChat(msg) {
   }
 }
 bus.on('chat', broadcastChat);
+bus.on('power', (p) => broadcastChat({ type: 'POWER', ...p, timestamp: new Date().toISOString() }));
+bus.on('viewers', ({ count }) => broadcastChat({ type: 'VIEWER_COUNT', count }));
 
 setInterval(() => {
   for (const client of sseClients) client.write(': ping\n\n');
@@ -743,19 +759,35 @@ app.post('/api/votes/reset', (req, res) => {
 });
 
 app.post('/api/test-chat', express.json(), (req, res) => {
-  const { author, text, superChat } = req.body;
+  const { author, text, superChat, tier, amount } = req.body;
   if (!text) return res.status(400).json({ error: 'Missing text' });
-  
-  const { parseVote } = require('./youtubeChat.js');
-  const rawVote = parseVote(text);
-  
-  const vote = rawVote
-    ? {
-        ...rawVote,
-        weight: superChat ? 5 : 1,
-        superChat: Boolean(superChat),
-      }
-    : null;
+
+  const { parseCommand, superChatWeight, superChatTier } = require('./youtubeChat.js');
+  const command = parseCommand(text);
+
+  // Simulate a Super Chat from either an explicit `tier` (1-7) or `amount` (whole units).
+  let amountMicros = 0;
+  const TIER_UNITS = [1, 5, 10, 20, 50, 100, 200];
+  if (superChat) {
+    if (amount != null) {
+      amountMicros = Math.max(0, Number(amount)) * 1_000_000;
+    } else {
+      const t = Math.max(1, Math.min(7, Number(tier) || 1));
+      amountMicros = TIER_UNITS[t - 1] * 1_000_000;
+    }
+  }
+  const scTier = superChat
+    ? (tier ? Math.max(1, Math.min(7, Number(tier))) : superChatTier(amountMicros))
+    : 0;
+  const superWeight = superChat ? superChatWeight(amountMicros) : 1;
+
+  let vote = null;
+  let power = null;
+  if (command && command.kind === 'vote') {
+    vote = { code: command.code, countryName: command.countryName, weight: superWeight, superChat: Boolean(superChat), tier: scTier };
+  } else if (command && command.kind === 'power' && superChat && scTier >= 3) {
+    power = { power: command.power, code: command.code, countryName: command.countryName, weight: superWeight, tier: scTier };
+  }
 
   const msg = {
     id: `test-${Date.now()}`,
@@ -763,12 +795,22 @@ app.post('/api/test-chat', express.json(), (req, res) => {
     text,
     timestamp: new Date().toISOString(),
     vote,
-    superChat: superChat ? { amountDisplayString: '$5.00' } : null,
+    power,
+    superChat: superChat
+      ? {
+          amountMicros,
+          amountDisplayString: `$${(amountMicros / 1_000_000).toFixed(2)}`,
+          currency: 'USD',
+          tier: scTier,
+        }
+      : null,
+    tier: scTier,
   };
-  
+
   bus.emit('chat', msg);
   if (vote) bus.emit('vote', vote);
-  
+  if (power) bus.emit('power', power);
+
   res.json({ ok: true, msg });
 });
 

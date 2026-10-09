@@ -146,8 +146,16 @@ export class FlagBattle {
       if (e.data === ': ping') return;
       try {
         const msg = JSON.parse(e.data);
-        if (msg.vote && this.running && !this.paused) {
-          this._handleChatVote(msg.vote);
+        if (this.running && !this.paused) {
+          if (msg.type === 'POWER' || msg.power) {
+            this._handlePower({ ...msg.power, ...msg, author: msg.author });
+          }
+          if (msg.vote) {
+            this._handleChatVote(msg.vote, msg.author);
+          }
+        }
+        if (msg.type === 'VIEWER_COUNT' && msg.count != null && this.ui?.setViewerCount) {
+          this.ui.setViewerCount(msg.count);
         }
       } catch (err) {
         console.error('Error parsing chat message', err);
@@ -158,7 +166,39 @@ export class FlagBattle {
     };
   }
 
-  _handleChatVote(vote) {
+  _handlePower(power) {
+    // Hybrid: Super Chat of sufficient tier granted this power. For now, vertical
+    // focuses on parity of vote+revive; full power set will be added across both
+    // engines. Only 'revive' is directly actionable on an eliminated flag.
+    const p = (power.power || '').toLowerCase();
+    if (p === 'revive' && power.code) {
+      const flag = this.flags.find(f => f.country.code === power.code);
+      if (flag && flag.eliminated) {
+        flag.eliminated = false;
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 25 + Math.random() * 35;
+        const spawnX = this.CX + Math.cos(ang) * rad;
+        const spawnY = this.CY + Math.sin(ang) * rad;
+        this.physics.reviveFlag(flag.body, spawnX, spawnY);
+        flag.reviveEffectEnd = Date.now() + 3500;
+        this.aliveCount = this.flags.filter(f => !f.eliminated).length;
+        this.standings = this.standings.filter(c => c.code !== power.code);
+        if (this.ui.reviveFlag) this.ui.reviveFlag(power.code);
+        if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(power.code);
+        if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
+        if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(power.code);
+        if (this.audio.playDramaticHit) this.audio.playDramaticHit();
+        if (this.ui.showReviveToast && flag.country) {
+          this.ui.showReviveToast(flag.country, getFlagUrl(power.code, 80), power.author || 'SUPERCHAT');
+        }
+      }
+    }
+  }
+
+  _handleChatVote(vote, author) {
+    if (vote.weight) {
+      try { this.ui.recordSupporterVote(author, vote.weight); } catch (e) {}
+    }
     const code = vote.code;
     const flag = this.flags.find(f => f.country.code === code);
     if (!flag) return;
