@@ -419,6 +419,7 @@ export class PhysicsEngine {
   setGravity(y)      { this.engine.gravity.y = y; }
   setStepsPerFrame(n){ this.stepsPerFrame = Math.max(1, n); }
   setTimeScale(ts)   { this.timeScale = Math.max(0.1, ts); }
+  resetTimeScale()    { this.timeScale = 1.0; }
 
   getAlive() { return this.flagBodies.filter(b => !b.eliminated); }
 }
