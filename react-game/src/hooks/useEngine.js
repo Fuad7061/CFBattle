@@ -26,6 +26,8 @@ export function useEngine() {
   const [soundEnabled, setSoundEnabledState] = useState(true);
   const [commentVotes, setCommentVotes] = useState({});
   const [targetReviveVotes, setTargetReviveVotes] = useState(4);
+  const [teamStats, setTeamStats] = useState(null);
+  const [top5, setTop5] = useState({ show: false, rows: [] });
 
   useEffect(() => {
     if (!canvasRef.current) return undefined;
@@ -46,6 +48,8 @@ export function useEngine() {
       engine.on('timer', setTimer),
       engine.on('soundChanged', ({ enabled }) => setSoundEnabledState(enabled)),
       engine.on('commentVotes', setCommentVotes),
+      engine.on('teams', setTeamStats),
+      engine.on('top5', setTop5),
       engine.on('settingsChanged', (s) => {
         if (s?.reviveVotes) setTargetReviveVotes(Number(s.reviveVotes));
       }),
@@ -86,6 +90,8 @@ export function useEngine() {
     timer,
     commentVotes,
     targetReviveVotes,
+    teamStats,
+    top5,
     controls: { newRound, shrinkArena, toggleSound, soundEnabled, applyVoteBoost, instantPush },
   };
 }

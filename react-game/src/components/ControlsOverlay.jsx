@@ -13,9 +13,11 @@ export default function ControlsOverlay({ engineRef, isStream }) {
   const [audienceBias, setAudienceBias] = useState(true);
 
   // Physics
-  const [rotSpeed, setRotSpeed] = useState(0.0035);
-  const [gravity, setGravity] = useState(0.0);
+  const [rotSpeed, setRotSpeed] = useState(0.0028);
+  const [gravity, setGravity] = useState(0);
   const [speedMult, setSpeedMult] = useState(1);
+  const [particles, setParticles] = useState(true);
+  const [mesh, setMesh] = useState(false);
   const [sfx, setSfx] = useState(true);
 
   // Load existing settings on mount
@@ -38,6 +40,8 @@ export default function ControlsOverlay({ engineRef, isStream }) {
           if (gs.bias !== undefined) setAudienceBias(Boolean(gs.bias));
           if (gs.speed !== undefined) setSpeedMult(Number(gs.speed));
           if (gs.gravity !== undefined) setGravity(Number(gs.gravity));
+          if (gs.particles !== undefined) setParticles(Boolean(gs.particles));
+          if (gs.mesh !== undefined) setMesh(Boolean(gs.mesh));
         }
       })
       .catch(() => {});
@@ -56,6 +60,35 @@ export default function ControlsOverlay({ engineRef, isStream }) {
           if (gs.bias !== undefined) setAudienceBias(Boolean(gs.bias));
           if (gs.speed !== undefined) setSpeedMult(Number(gs.speed));
           if (gs.gravity !== undefined) setGravity(Number(gs.gravity));
+          if (gs.rotSpeed !== undefined) setRotSpeed(Number(gs.rotSpeed));
+          if (gs.particles !== undefined) setParticles(Boolean(gs.particles));
+          if (gs.mesh !== undefined) setMesh(Boolean(gs.mesh));
+
+          // Full live-apply parity with the dashboard: mirror the settings onto
+          // the running engine (and the global live-settings bag the engine's
+          // _readSetting reads) without needing an Apply & Save round-trip.
+          const engine = engineRef.current;
+          if (engine) {
+            engine.settings = engine.settings || {};
+            if (gs.watermark !== undefined) engine.settings.watermark = gs.watermark;
+            if (gs.wmOpacity !== undefined) engine.settings.wmOpacity = Number(gs.wmOpacity);
+            if (gs.wmSize !== undefined) engine.settings.wmSize = Number(gs.wmSize);
+            if (gs.wmCount !== undefined) engine.settings.wmCount = Number(gs.wmCount);
+            if (gs.wmAngle !== undefined) engine.settings.wmAngle = Number(gs.wmAngle);
+            if (gs.reviveVotes !== undefined) engine.settings.reviveVotes = Number(gs.reviveVotes);
+            if (gs.bias !== undefined) engine.settings.bias = Boolean(gs.bias);
+            if (gs.speed !== undefined) engine.settings.speedMult = Number(gs.speed);
+            if (gs.gravity !== undefined) engine.settings.gravity = Number(gs.gravity);
+            if (gs.particles !== undefined) engine.settings.particles = Boolean(gs.particles);
+            if (gs.mesh !== undefined) engine.settings.mesh = Boolean(gs.mesh);
+            if (gs.rotSpeed !== undefined) {
+              engine.settings.rotSpeed = Number(gs.rotSpeed);
+              engine.GATE_SPIN = Number(gs.rotSpeed);
+            }
+          }
+          if (typeof window !== 'undefined') {
+            window.__liveSettings = { ...(window.__liveSettings || {}), ...gs };
+          }
         }
       }
     };
@@ -79,9 +112,11 @@ export default function ControlsOverlay({ engineRef, isStream }) {
     engine.settings.rotSpeed = Number(rotSpeed);
     engine.settings.gravity = Number(gravity);
     engine.settings.speedMult = Number(speedMult);
-    
+    engine.settings.particles = Boolean(particles);
+    engine.settings.mesh = Boolean(mesh);
+
     engine.GATE_SPIN = Number(rotSpeed);
-  }, [engineRef, channelWatermark, wmOpacity, wmSize, wmCount, wmAngle, reviveVotes, audienceBias, rotSpeed, gravity, speedMult]);
+  }, [engineRef, channelWatermark, wmOpacity, wmSize, wmCount, wmAngle, reviveVotes, audienceBias, rotSpeed, gravity, speedMult, particles, mesh]);
 
   // Handle Keyboard shortcuts
   useEffect(() => {
@@ -125,6 +160,8 @@ export default function ControlsOverlay({ engineRef, isStream }) {
       engine.settings.rotSpeed = Number(rotSpeed);
       engine.settings.gravity = Number(gravity);
       engine.settings.speedMult = Number(speedMult);
+      engine.settings.particles = Boolean(particles);
+      engine.settings.mesh = Boolean(mesh);
       engine.GATE_SPIN = Number(rotSpeed);
     }
     if (typeof window !== 'undefined') {
@@ -139,6 +176,8 @@ export default function ControlsOverlay({ engineRef, isStream }) {
         rotSpeed: Number(rotSpeed),
         gravity: Number(gravity),
         speed: Number(speedMult),
+        particles: Boolean(particles),
+        mesh: Boolean(mesh),
       };
     }
 
@@ -162,6 +201,8 @@ export default function ControlsOverlay({ engineRef, isStream }) {
             rotSpeed: Number(rotSpeed),
             gravity: Number(gravity),
             speed: Number(speedMult),
+            particles: Boolean(particles),
+            mesh: Boolean(mesh),
           }
         })
       });
@@ -218,8 +259,8 @@ export default function ControlsOverlay({ engineRef, isStream }) {
           justifyContent: 'center', 
           gap: '8px', 
           padding: '6px 10px',
-          background: 'rgba(8, 4, 4, 0.95)',
-          borderTop: '1px solid rgba(180, 12, 12, 0.4)'
+          background: 'rgba(13, 17, 20, 0.95)',
+          borderTop: '1px solid var(--border)'
         }}
       >
         <div className="ctrl-group" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -441,16 +482,30 @@ export default function ControlsOverlay({ engineRef, isStream }) {
             />
           </div>
 
+          <div className="sg">
+            <div className="toggle-row">
+              <input type="checkbox" id="setting-particles-chk" checked={particles} onChange={e => setParticles(e.target.checked)} />
+              <label htmlFor="setting-particles-chk">Impact particles</label>
+            </div>
+          </div>
+
+          <div className="sg">
+            <div className="toggle-row">
+              <input type="checkbox" id="setting-mesh-chk" checked={mesh} onChange={e => setMesh(e.target.checked)} />
+              <label htmlFor="setting-mesh-chk">Show particle mesh</label>
+            </div>
+          </div>
+
           <div style={{ marginTop: '20px' }}>
             <button 
               onClick={handleApplyAndSave}
               style={{
                 width: '100%',
                 padding: '10px',
-                background: 'linear-gradient(135deg, #b91c1c, #dc2626)',
-                border: '1px solid #ef4444',
+                background: 'linear-gradient(135deg, #ef8c67, #e9bc73)',
+                border: '1px solid #e9bc73',
                 borderRadius: '4px',
-                color: 'white',
+                color: '#1a0f09',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 letterSpacing: '1px',

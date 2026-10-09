@@ -1,0 +1,544 @@
+/* ============================================================================
+   Landscape view — full-bleed "live broadcast" HUD.
+
+   The gameplay canvas fills the whole 16:9 frame (like the vertical view fills
+   its 9:16 frame) and every HUD element is layered on top and anchored to the
+   edges, so the arena stays the hero and the empty side/top/bottom bands are
+   used for the on-stream elements: round header, campaign winners, supporters,
+   top-5, revive trackers, live chat, elimination feed and the active-countries
+   roster.
+
+   Scoped under .landscape-shell so it can load alongside the vertical view.
+   ============================================================================ */
+
+.landscape-shell {
+  color-scheme: dark;
+  --bg: #0d1114;
+  --panel: 21, 27, 30;
+  --line: #303a3e;
+  --muted: #94a1a3;
+  --text: #edf0e9;
+  --lime: #e9bc73;
+  --orange: #ef8c67;
+  --font-head: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'DM Sans', Arial, sans-serif;
+  --roster-cols: 39;
+
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0d1114;
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.landscape-shell *,
+.landscape-shell *::before,
+.landscape-shell *::after { box-sizing: border-box; }
+
+/* ----------------------------------------------------------- arena canvas */
+.landscape-shell .arena-stage {
+  position: absolute;
+  inset: 0;
+  /* No z-index: keep this from forming a stacking context so the winner
+     banner (z-20) and stage announcement (z-30) inside it paint above the
+     HUD (z-10) instead of being trapped underneath it. The canvas itself has
+     no z-index, so the HUD still renders over it. */
+  z-index: auto;
+}
+
+/* --------------------------------------------------------------- HUD shell */
+.landscape-shell .hud {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none; /* canvas stays clickable; interactive bits opt back in */
+}
+.landscape-shell .hud button,
+.landscape-shell .hud input,
+.landscape-shell .rail-chat,
+.landscape-shell .rail-chat * { pointer-events: auto; }
+
+/* ---------------------------------------------------------------- top bar */
+.landscape-shell .hud-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 20px 12px;
+  background: linear-gradient(180deg, rgba(9, 13, 16, 0.94), rgba(9, 13, 16, 0));
+}
+.landscape-shell .rh-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.landscape-shell .rh-label {
+  font-family: var(--font-head);
+  font-size: 16px;
+  letter-spacing: 2.5px;
+  color: var(--lime);
+  text-shadow: 0 0 12px rgba(233, 188, 115, 0.55);
+}
+.landscape-shell .rh-sep { color: #5c6a6a; font-size: 12px; }
+.landscape-shell .rh-timer {
+  font-family: var(--font-head);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.landscape-shell .rh-phase {
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--orange);
+  text-shadow: 0 0 10px rgba(239, 140, 103, 0.5);
+}
+.landscape-shell .hud-top-center {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-head);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.landscape-shell .rh-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.landscape-shell .rh-right .live-dot {
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--orange);
+  animation: ls-pulse 1.4s ease infinite;
+}
+@keyframes ls-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ------------------------------------------------------ side rails (mid) */
+.landscape-shell .hud-rails {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 20px 10px;
+}
+.landscape-shell .rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.landscape-shell .rail-left { width: 224px; }
+.landscape-shell .rail-right { width: 256px; }
+.landscape-shell .rail-center { flex: 1; }
+
+.landscape-shell .rail-title {
+  font-family: var(--font-head);
+  font-size: 10px;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--lime);
+  padding: 5px 8px;
+  background: rgba(9, 13, 16, 0.72);
+  border-left: 2px solid var(--lime);
+  border-radius: 2px;
+}
+
+/* live chat fills the rest of the right rail */
+.landscape-shell .rail-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.landscape-shell .rail-chat > div {
+  width: 100% !important;
+  max-height: 100% !important;
+  height: 100%;
+}
+
+/* revive trackers */
+/* Revive counters float over the arena (vertical parity) instead of taking up
+   rail space, so the chat column keeps its height. */
+.landscape-shell .revive-trackers {
+  position: absolute;
+  top: 13%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+.landscape-shell .revive-progress-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 5px;
+  background: rgba(10, 25, 40, 0.88);
+  border: 1px solid rgba(233, 188, 115, 0.6);
+  border-radius: 8px;
+  color: var(--lime);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  box-shadow: 0 0 10px rgba(233, 188, 115, 0.25);
+  animation: ls-revive-pop 0.32s ease;
+}
+.landscape-shell .revive-progress-item.pop {
+  animation: ls-revive-pop 0.32s ease;
+}
+@keyframes ls-revive-pop {
+  0% { transform: scale(0.86); opacity: 0.4; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.landscape-shell .revive-progress-item img {
+  width: 24px; height: 16px;
+  border-radius: 2px; object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.landscape-shell .revive-text { color: #ffdf9e; }
+.landscape-shell .revive-name {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.landscape-shell .revive-meter {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.landscape-shell .revive-meter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #e9bc73, #ffd98a);
+  transition: width 0.25s ease;
+}
+
+/* chat CTA */
+.landscape-shell .chat-cta {
+  text-align: center;
+  background: rgba(21, 27, 30, 0.92);
+  border: 1.5px solid rgba(233, 188, 115, 0.55);
+  color: #ffdf9e;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 7px 11px;
+  border-radius: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 10px rgba(233, 188, 115, 0.25);
+  animation: ls-cta 2s infinite alternate;
+}
+@keyframes ls-cta {
+  from { box-shadow: 0 0 5px rgba(233, 188, 115, 0.15); border-color: rgba(233, 188, 115, 0.25); }
+  to   { box-shadow: 0 0 15px rgba(233, 188, 115, 0.5); border-color: rgba(233, 188, 115, 0.7); }
+}
+
+/* floating elimination feed (bottom of the left rail) */
+.landscape-shell .elim-feed {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 5px;
+  max-height: 46%;
+  overflow: hidden;
+}
+.landscape-shell .elim-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(34, 24, 19, 0.86);
+  border: 1px solid rgba(239, 140, 103, 0.45);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #fff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+  animation: ls-slide-in 0.3s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.landscape-shell .elim-toast img {
+  width: 18px; height: 12px; border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.landscape-shell .elim-toast span { color: var(--orange); }
+@keyframes ls-slide-in {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* --------------------------------------------------------------- bottom */
+.landscape-shell .hud-bottom {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+.landscape-shell .counter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 20px 5px;
+  background: linear-gradient(0deg, rgba(9, 13, 16, 0.9), rgba(9, 13, 16, 0));
+}
+.landscape-shell .progress-bg {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.landscape-shell .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--orange), var(--lime));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 8px rgba(233, 188, 115, 0.5);
+}
+.landscape-shell .counter-text {
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Slimmed so the floating revive popup and chat keep their room. */
+.landscape-shell .roster-section {
+  background: rgba(9, 13, 16, 0.94);
+  border-top: 1px solid var(--line);
+  padding: 4px 20px 6px;
+}
+.landscape-shell .roster-header {
+  font-family: var(--font-head);
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.42);
+  margin-bottom: 3px;
+}
+.landscape-shell .roster-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--roster-cols), 1fr);
+  gap: 1.5px;
+  width: 100%;
+}
+.landscape-shell .roster-grid img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.5px;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+.landscape-shell .roster-grid img.dead {
+  opacity: 0.15;
+  filter: grayscale(1) brightness(0.4);
+}
+
+/* ---------------------------------------------------- center hint (paused) */
+.landscape-shell .arena-center-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.landscape-shell .arena-center-hint > span {
+  font-size: 10px; letter-spacing: 3px; color: #829277;
+}
+.landscape-shell .arena-center-hint strong {
+  font-family: var(--font-head);
+  font-size: 30px;
+  text-transform: uppercase;
+  color: #cbd6c2;
+}
+
+/* -------------------------------------------------- floating controls bar */
+.landscape-shell #controls-panel {
+  position: absolute !important;
+  left: 50% !important;
+  bottom: 10px !important;
+  right: auto !important;
+  top: auto !important;
+  transform: translateX(-50%) !important;
+  width: auto !important;
+  max-width: calc(100% - 32px) !important;
+  z-index: 60 !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 10px !important;
+  background: rgba(9, 13, 16, 0.96) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+}
+.landscape-shell #key-hint {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  transform: translateX(-50%);
+  z-index: 59;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ responsive */
+@media (min-width: 1500px) {
+  .landscape-shell { --roster-cols: 46; }
+}
+@media (min-width: 1900px) {
+  .landscape-shell { --roster-cols: 52; }
+}
+@media (max-width: 1100px) {
+  .landscape-shell { --roster-cols: 32; }
+  .landscape-shell .rail-left { width: 190px; }
+  .landscape-shell .rail-right { width: 220px; }
+}
+@media (max-width: 860px) {
+  .landscape-shell { --roster-cols: 24; }
+  .landscape-shell .rail-left { display: none; }
+}
+@media (max-width: 620px) {
+  .landscape-shell { --roster-cols: 24; }
+  .landscape-shell .rail-right { width: 170px; }
+  .landscape-shell .hud-top { padding: 7px 12px 10px; }
+  .landscape-shell .rh-label { font-size: 13px; }
+  .landscape-shell .hud-rails { padding: 4px 12px 8px; }
+  .landscape-shell .counter-row, .landscape-shell .roster-section { padding-left: 12px; padding-right: 12px; }
+}
+
+/* Short viewports (landscape phones): pack the roster into a slim strip so the
+   arena keeps the vertical space. Placed last so it wins over the width rules. */
+@media (max-height: 560px) {
+  .landscape-shell { --roster-cols: 48; }
+  .landscape-shell .roster-header { display: none; }
+  .landscape-shell .hud-top { padding: 5px 16px 8px; }
+  .landscape-shell .roster-section { padding: 4px 16px 6px; }
+}
+@media (max-height: 440px) {
+  .landscape-shell { --roster-cols: 60; }
+  .landscape-shell .counter-row { padding: 4px 16px 3px; }
+}
+
+/* Portrait phones: the rails can't sit beside the arena, so tuck Live Chat
+   into a collapsible full-width bottom sheet instead. */
+.landscape-shell .portrait-chat-toggle,
+.landscape-shell .portrait-chat-sheet { display: none; }
+
+@media (orientation: portrait) and (max-width: 820px) {
+  .landscape-shell .rail-right { display: none; }
+
+  .landscape-shell .portrait-chat-toggle {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    right: 14px;
+    bottom: 96px;
+    z-index: 45;
+    padding: 9px 15px;
+    border-radius: 999px;
+    border: 1px solid rgba(233, 188, 115, 0.45);
+    background: rgba(9, 14, 26, 0.92);
+    color: #f4d9a6;
+    font-family: var(--font-body, inherit);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+  .landscape-shell .portrait-chat-toggle:active { transform: translateY(1px); }
+
+  .landscape-shell .portrait-chat-sheet {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 48;
+    height: 58%;
+    min-height: 240px;
+    background: linear-gradient(180deg, rgba(8, 12, 22, 0.96), rgba(6, 9, 16, 0.99));
+    border-top: 1px solid rgba(233, 188, 115, 0.35);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .landscape-shell .pcs-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(233, 188, 115, 0.2);
+  }
+  .landscape-shell .pcs-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f4d9a6;
+  }
+  .landscape-shell .pcs-close {
+    background: transparent;
+    border: none;
+    color: rgba(244, 217, 166, 0.75);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .landscape-shell .portrait-chat-sheet .chat-cta {
+    flex: none;
+    margin: 8px 14px 0;
+  }
+  .landscape-shell .pcs-body {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 10px 12px;
+  }
+  .landscape-shell .pcs-body > div {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landscape-shell * { animation: none !important; transition: none !important; }
+}

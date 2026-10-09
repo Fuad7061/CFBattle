@@ -1,5 +1,7 @@
 import { COUNTRIES, getFlagUrl } from "./countries.js";
+import { getRegion, REGION_ORDER, REGION_META } from "../../data/regions.js";
 import { PhysicsEngine } from "./physics.js";
+
 import { Renderer } from "./renderer.js";
 import { UIManager } from "./ui.js";
 import { AudioManager } from "./audio.js";
@@ -17,6 +19,8 @@ import Matter from "matter-js";
  *     spotlight darkness vignette, and 1v1 Sudden Death tension.
  *  6. 25x8 CSS grid fitting all 195 flags simultaneously with zero scrollbars.
  */
+
+
 export class FlagBattle {
   constructor() {
     /* ---- Canvas ----------------------------------------- */
@@ -26,7 +30,7 @@ export class FlagBattle {
 
     /* ---- Arena parameters (perfect vertical balance) ---- */
     this.CX = 270;   // center X
-    this.CY = 445;   // center Y
+    this.CY = 490;   // center Y (lowered so the ring clears the Top 5 tracker)
     this.AR = 205;   // arena radius
 
     /* ---- Subsystems ------------------------------------- */
@@ -46,6 +50,17 @@ export class FlagBattle {
     this.roundNum   = 1;
     this.qualifiedList = [];
 
+    /* ---- Campaign / Team Up state ----------------------- */
+    this.campaignNum     = 1;             // which campaign (season) we're on
+    this.phase           = 'qualifier';   // 'qualifier' | 'final'
+    this.finalists       = [];            // top-4 country objects for the final
+    this.teams           = null;          // [{id,name,color,emoji,codes:Set}]
+    this.teamStats       = null;          // [{id,name,color,alive,total}]
+    this._teamSig        = null;          // signature to throttle team DOM updates
+    this._roundEnding    = false;
+    this._lastTeamUpdate = 0;             // throttle team leaderboard DOM writes
+    this._epoch          = 0;             // bumped on every reset to cancel stale timers
+
     /* ---- Suspense Phase Milestones ---------------------- */
     this._top5Triggered = false;
     this._top3Triggered = false;
@@ -64,6 +79,12 @@ export class FlagBattle {
     this._100elimTriggered = false;
     this._quarterTriggered = false;
     this._10leftTriggered  = false;
+
+    /* ---- Comment shoutout voice queue ------------------- */
+    this._shoutoutQueue        = [];
+    this._shoutoutBusy         = false;
+    this._shoutoutCooldownUntil = 0;
+    this._shoutoutTimer        = null;
 
     /* ---- Configuration --------------------------------- */
     this.cfg = {
@@ -130,10 +151,43 @@ export class FlagBattle {
 
     // 8. Load images in background
     this.ui.showLoading(`Loading ${COUNTRIES.length} official countries…`);
-    this._loadImages();
+    const imagesReady = this._loadImages();
 
     // 9. Initialize YouTube Chat SSE
     this._initYoutubeChat();
+
+    // 10. OBS / recorder / dashboard-preview loads hide the control bar, so
+    // nobody can ever press START. Kick the first round off automatically once
+    // the flag art is in, otherwise those views sit on "READY" forever.
+    this._autoStartIfStream(imagesReady);
+  }
+
+  /* Start the opening round without user input when the controls are hidden.
+     Landscape already auto-starts; this keeps vertical parity for stream URLs
+     (?stream / ?headless / ?clean) while leaving the manual START button for
+     normal interactive use. */
+  _autoStartIfStream(imagesReady) {
+    let isStream = false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      isStream =
+        params.get('stream') === 'true' ||
+        params.get('headless') === 'true' ||
+        params.get('clean') === 'true';
+    } catch (e) {
+      return;
+    }
+    if (!isStream) return;
+    // Don't stomp a round the dashboard already started via /api/control.
+    const kick = () => {
+      if (this.running || this.flags.length) return;
+      this.start();
+    };
+    const fallback = setTimeout(kick, 300);
+    Promise.resolve(imagesReady)
+      .then(kick)
+      .catch(() => {})
+      .finally(() => clearTimeout(fallback));
   }
 
   /* ================================================================== */
@@ -146,7 +200,10 @@ export class FlagBattle {
       if (e.data === ': ping') return;
       try {
         const msg = JSON.parse(e.data);
-        if (this.running && !this.paused) {
+        // Process chat powers/votes whenever the game is not paused — even
+        // during the short between-round transitions — so revives and saves
+        // are never silently dropped.
+        if (!this.paused && this.flags && this.flags.length) {
           // Only act on the dedicated typed POWER broadcast; plain chat
           // messages also embed a nested `power` object which must not be
           // applied a second time.
@@ -156,9 +213,6 @@ export class FlagBattle {
           if (msg.vote) {
             this._handleChatVote(msg.vote, msg.author);
           }
-        }
-        if (msg.type === 'VIEWER_COUNT' && msg.count != null && this.ui?.setViewerCount) {
-          this.ui.setViewerCount(msg.count);
         }
       } catch (err) {
         console.error('Error parsing chat message', err);
@@ -212,6 +266,7 @@ export class FlagBattle {
             this.ui.showReviveToast(flag.country, getFlagUrl(code, 80), author);
           }
           if (this.ui.showPowerToast) this.ui.showPowerToast('⚡ REVIVE', flag.country, getFlagUrl(code, 40), author);
+          this._queueShoutout(author, flag.country?.name || code, 'revived');
         }
         break;
       }
@@ -219,6 +274,7 @@ export class FlagBattle {
         if (alive) {
           flag.body.immunityUntil = Date.now() + dur(6000);
           if (this.ui.showPowerToast) this.ui.showPowerToast('🛡️ SHIELD', flag.country, getFlagUrl(code, 40), author);
+          this._queueShoutout(author, flag.country?.name || code, 'shielded');
         }
         break;
       }
@@ -228,6 +284,7 @@ export class FlagBattle {
           Matter.Body.setVelocity(flag.body, { x: 0, y: 0 });
           Matter.Body.setAngularVelocity(flag.body, 0);
           if (this.ui.showPowerToast) this.ui.showPowerToast('❄️ FREEZE', flag.country, getFlagUrl(code, 40), author);
+          this._queueShoutout(author, flag.country?.name || code, 'froze');
         }
         break;
       }
@@ -236,12 +293,14 @@ export class FlagBattle {
           // Targeted: "slow US" slows down just that country's flag.
           flag.body.slowUntil = Date.now() + dur(5000);
           if (this.ui.showPowerToast) this.ui.showPowerToast('🐌 SLOWED', flag.country, getFlagUrl(code, 40), author);
+          this._queueShoutout(author, flag.country?.name || code, 'slowed');
         } else {
           // Global full-arena slow-motion.
           this.physics.setTimeScale(0.45);
           clearTimeout(this._slowTimer);
           this._slowTimer = setTimeout(() => this.physics.resetTimeScale(), dur(5000));
           if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('🐌 SLOW MOTION', author);
+          this._queueShoutout(author, 'the whole arena', 'slowed');
         }
         break;
       }
@@ -255,6 +314,7 @@ export class FlagBattle {
         }
         if (this.audio.playDramaticHit) this.audio.playDramaticHit();
         if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('💥 EARTHQUAKE!', author);
+        this._queueShoutout(author, 'the whole arena', 'shook');
         break;
       }
       case 'boost': {
@@ -267,6 +327,7 @@ export class FlagBattle {
           Matter.Body.setVelocity(b, { x: (dx / d) * mag, y: (dy / d) * mag });
           flag.chatBoostEnd = Date.now() + dur(2500);
           if (this.ui.showPowerToast) this.ui.showPowerToast('🚀 BOOST', flag.country, getFlagUrl(code, 40), author);
+          this._queueShoutout(author, flag.country?.name || code, 'boosted');
         }
         break;
       }
@@ -274,6 +335,7 @@ export class FlagBattle {
         if (alive) {
           this._forceEliminate(flag, author);
           if (this.ui.showGlobalPowerToast) this.ui.showGlobalPowerToast('☢️ NUKE!', author);
+          this._queueShoutout(author, flag.country?.name || code, 'nuked');
         }
         break;
       }
@@ -345,6 +407,7 @@ export class FlagBattle {
         if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(code);
         if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
         if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(code);
+        this._queueShoutout(vote.author || author || 'CHAT', flag.country?.name || code, 'revived');
       } else {
         if (this.ui.showReviveProgress) {
            this.ui.showReviveProgress(flag.country, getFlagUrl(code, 80), this.reviveVotes[code], targetVotes);
@@ -386,6 +449,7 @@ export class FlagBattle {
     } else if (this.ui.showChatBoostToast) {
       this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
     }
+    this._queueShoutout(author, flag.country?.name || code, 'saved');
   }
 
   /* ================================================================== */
@@ -421,8 +485,9 @@ export class FlagBattle {
   start() {
     const btn = document.getElementById('btn-start');
     if (btn && btn.disabled) return;
+    this.roundNum = 1;
     this._cleanRound();
-    this._beginRound();
+    this._beginQualifier();
   }
 
   pause() {
@@ -439,6 +504,23 @@ export class FlagBattle {
     this.audio.playBgMusic();
     const btn = document.getElementById('btn-pause');
     if (btn) btn.textContent = '⏸ PAUSE';
+  }
+
+  /* Restart the tournament from scratch (fresh campaign 1, qualifying round).
+     Used by the dashboard "Reset Tournament" button and /api/control. */
+  newRound() {
+    this._cleanRound();
+    this.roundNum      = 1;
+    this.qualifiedList = [];
+    this.campaignNum   = 1;
+    this.phase         = 'qualifier';
+    this.finalists     = [];
+    this.teams         = null;
+    this.teamStats     = null;
+    this._teamSig      = null;
+    this.ui.clearQualified();
+    if (this.ui.updateTeams) this.ui.updateTeams(null);
+    this._beginQualifier();
   }
 
   reset() {
@@ -586,30 +668,189 @@ export class FlagBattle {
   }
 
   /* ================================================================== */
+  /*  TEAM UP MODE                                                      */
+  /* ================================================================== */
+
+  /* Assign every country to a team based on the dashboard "Team Up Mode". */
+  _setupTeams(countries) {
+    const mode = this._readSetting('teams', this.cfg.teams || 'none');
+    this.cfg.teams = mode;
+
+    if (!mode || mode === 'none') {
+      this.teams = null;
+      this.teamStats = null;
+      this._teamSig = null;
+      if (this.ui.updateTeams) this.ui.updateTeams(null);
+      return;
+    }
+
+    if (mode === '2' || mode === '4') {
+      const n = mode === '2' ? 2 : 4;
+      const palette = [
+        { name: 'Red',   color: '#ff4d4d' },
+        { name: 'Blue',  color: '#4d8dff' },
+        { name: 'Green', color: '#2ecc71' },
+        { name: 'Gold',  color: '#f5c518' },
+      ];
+      // Use the stable global index so a country keeps its team across rounds.
+      if (!this._codeIndex) {
+        this._codeIndex = {};
+        COUNTRIES.forEach((c, i) => { this._codeIndex[String(c.code).toUpperCase()] = i; });
+      }
+      this.teams = palette.slice(0, n).map((p, i) => ({
+        id: 't' + i, name: p.name, color: p.color, emoji: '', codes: new Set(),
+      }));
+      countries.forEach((c, i) => {
+        const ci = this._codeIndex[String(c.code).toUpperCase()];
+        this.teams[(ci === undefined ? i : ci) % n].codes.add(String(c.code).toUpperCase());
+      });
+    } else {
+      // "continents" (or any unknown non-off value): one team per region.
+      this.teams = REGION_ORDER
+        .filter(r => r !== 'Other')
+        .map(r => ({
+          id: r.toLowerCase(),
+          name: REGION_META[r].label,
+          color: REGION_META[r].color,
+          emoji: REGION_META[r].emoji,
+          codes: new Set(),
+        }));
+      for (const c of countries) {
+        const r = getRegion(c.code);
+        const t = this.teams.find(x => x.name === REGION_META[r]?.label);
+        if (t) t.codes.add(String(c.code).toUpperCase());
+      }
+    }
+    this.teams = this.teams.filter(t => t.codes.size > 0);
+    this._teamSig = null;
+    this._updateTeamsIfChanged(true);
+  }
+
+  _readSetting(key, fallback) {
+    const ls = (typeof window !== 'undefined' && window.__liveSettings) || {};
+    const v = ls[key];
+    return (v === undefined || v === null || v === '') ? fallback : v;
+  }
+
+  _teamOfFlag(flagOrCountry) {
+    if (!this.teams || !flagOrCountry) return null;
+    const code = String(flagOrCountry.code || flagOrCountry).toUpperCase();
+    return this.teams.find(t => t.codes.has(code)) || null;
+  }
+
+  _updateTeamsIfChanged(force = false) {
+    if (!this.teams) return;
+    // Throttle: physics can call this several times per frame; the leaderboard
+    // only needs a few updates per second.
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (!force && now - this._lastTeamUpdate < 120) return;
+    this._lastTeamUpdate = now;
+    const alive = new Set(
+      this.flags.filter(f => !f.eliminated).map(f => String(f.country.code).toUpperCase())
+    );
+    const stats = this.teams.map(t => {
+      let a = 0;
+      for (const code of t.codes) if (alive.has(code)) a++;
+      return { id: t.id, name: t.name, color: t.color, emoji: t.emoji, alive: a, total: t.codes.size };
+    });
+    const sig = stats.map(s => s.alive).join(',');
+    this.teamStats = stats;
+    if (force || sig !== this._teamSig) {
+      this._teamSig = sig;
+      if (this.ui.updateTeams) this.ui.updateTeams(stats);
+    }
+  }
+
+  /* True when the current Team Up Mode uses teams + a grand final. */
+  _isTeamCampaign() {
+    const m = this.cfg.teams;
+    return m === '2' || m === '4' || m === 'continents';
+  }
+
+  /* A fresh qualifying round with the full (or configured) country pool. */
+  async _beginQualifier() {
+    this.phase = 'qualifier';
+    this.finalists = [];
+    let pool = this._shuffled(COUNTRIES);
+    const numToSpawn = parseInt(this._readSetting('totalCountries', 195)) || 195;
+    pool = pool.slice(0, Math.min(numToSpawn, pool.length));
+    await this._startRound(pool, { slowMo: false, countdown: true });
+  }
+
+  /* The Grand Final: the top 4 flags battle in slow motion. */
+  async _beginFinal() {
+    this.phase = 'final';
+    await this._startRound(this.finalists.slice(0, 4), { slowMo: true, countdown: false });
+  }
+
+  /* Called the moment only one flag remains in the current round. */
+  _handleRoundEnd() {
+    if (this._roundEnding) return;
+    this._roundEnding = true;
+    this.running = false;
+    this.physics.setTimeScale(1.0);
+    this.audio.stopHeartbeat();
+    this.ui.stopTimer();
+    this.audio.pauseBgMusic();
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = true;
+
+    const winnerFlag = this.flags.find(f => !f.eliminated);
+    if (!winnerFlag) return;
+    const winner = winnerFlag.country;
+    const team = this._teamOfFlag(winner);
+
+    if (this.phase === 'final') {
+      this._crownChampion(winner, team);
+      return;
+    }
+
+    if (this._isTeamCampaign()) {
+      // Team mode: top 4 = winner + last three eliminated (2nd, 3rd, 4th).
+      this.finalists = [winner, ...this.standings.slice().reverse()].slice(0, 4);
+      this._showFinalists(this.finalists);
+      const epoch = this._epoch;
+      setTimeout(() => {
+        if (this._abortCountdown || epoch !== this._epoch) return;
+        this._cleanRound();
+        this._beginFinal();
+      }, 5000);
+    } else {
+      // Solo mode: the round winner is the campaign champion.
+      this._crownChampion(winner, team);
+    }
+  }
+
+  /* Brief on-stream reveal of the four grand-finalists. */
+  _showFinalists(top4) {
+    this._updateTeamsIfChanged(true);
+    if (this.ui.setRoundHeader) this.ui.setRoundHeader('GRAND FINAL', 'TOP 4 \u00b7 SLOW MOTION');
+    // Show the four finalists one per line (centred) so long country names
+    // never get clipped by the single-line milestone banner.
+    if (this.ui.showFinalLineup) this.ui.showFinalLineup(top4);
+    this._speakNatural(`The Grand Final is set! ${top4.length} flags battle in slow motion for the crown!`);
+  }
+
+
   /*  ROUND LIFECYCLE                                                   */
   /* ================================================================== */
 
-  async _beginRound() {
+  async _startRound(countries, { slowMo = false, countdown = true } = {}) {
+    const epoch = this._epoch;
     this._abortCountdown = false;
+    this._roundEnding = false;
     const startBtn = document.getElementById('btn-start');
     if (startBtn) startBtn.disabled = true;
 
-    // Countdown
-    if (this.cfg.countdownSecs > 0) {
-      await this._runCountdown(this.cfg.countdownSecs);
+    // Intro countdown (qualifier only — the final begins instantly in slow-mo)
+    if (countdown && this.cfg.countdownSecs > 0) {
+      await this._runCountdown(this.cfg.countdownSecs, epoch);
     }
-    
-    if (startBtn) startBtn.disabled = false;
-    if (this._abortCountdown) return;
 
-    let countries = this._shuffled(COUNTRIES);
-    
-    // Check if totalCountries is set in liveSettings
-    if (window.__liveSettings && window.__liveSettings.totalCountries) {
-        const numToSpawn = parseInt(window.__liveSettings.totalCountries) || 195;
-        countries = countries.slice(0, Math.min(numToSpawn, countries.length));
-    }
-    
+    if (startBtn) startBtn.disabled = false;
+    // A reset/clean happened while we were counting down → abandon this round.
+    if (this._abortCountdown || epoch !== this._epoch) return;
+
+    countries = countries || [];
     this.totalCount = countries.length;
     this.aliveCount = countries.length;
 
@@ -620,12 +861,14 @@ export class FlagBattle {
     this._ctaAudioTriggered = false;
     this._boostTimer    = 0;
     this._nextBoostMs   = 8000 + Math.random() * 5000;
-    this.physics.setTimeScale(1.0);
+    this.physics.setTimeScale(slowMo ? 0.45 : 1.0);
     this.audio.stopHeartbeat();
     this.ui.hideTop5Finalists();
 
     // Fermat spiral ping-pong spawn
     this.flags = [];
+    this.standings = [];
+    this.reviveVotes = {};
     const count = countries.length;
     const maxRadius = 140; // Safe inner core
     const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -637,17 +880,30 @@ export class FlagBattle {
       const x     = this.CX + Math.cos(theta) * r;
       const y     = this.CY + Math.sin(theta) * r;
       // Start slightly closer to center to let them burst outward
-      const body  = this.physics.spawnFlag(this.CX + (x - this.CX)*0.5, this.CY + (y - this.CY)*0.5, 20, 13, country);
+      const body  = this.physics.spawnFlag(this.CX + (x - this.CX)*0.5, this.CY + (y - this.CY)*0.5, 28, 18, country);
       this.flags.push({ body, country, eliminated: false });
     });
 
     // UI Updates
-    this.ui.setRound(this.roundNum);
-    this.ui.setPhase('QUALIFYING');
+    this._setupTeams(countries);
+    const roundText = this.phase === 'final'
+      ? `CAMPAIGN ${this.campaignNum} \u00b7 GRAND FINAL`
+      : `CAMPAIGN ${this.campaignNum} \u00b7 QUALIFIER`;
+    const phaseText = this.phase === 'final'
+      ? 'SLOW-MOTION FINAL'
+      : (this._isTeamCampaign() ? 'QUALIFY TOP 4' : 'LAST FLAG STANDING');
+    if (this.ui.setRoundHeader) {
+      this.ui.setRoundHeader(roundText, phaseText);
+    } else {
+      this.ui.setRound(this.roundNum);
+      this.ui.setPhase(phaseText);
+    }
     this.ui.buildRoster(countries);
     this.ui.updateCounter(this.aliveCount, this.totalCount);
     this.ui.hideWinner();
     this.ui.startTimer();
+    this._teamSig = null;
+    this._updateTeamsIfChanged(true);
 
     // Hole timer reset
     this._holeMs   = 0;
@@ -671,13 +927,19 @@ export class FlagBattle {
     this._quarterTriggered = false;
     this._10leftTriggered  = false;
 
-    // Start engagement systems
+    // Comment shoutout voice queue reset
+    clearTimeout(this._shoutoutTimer);
+    clearTimeout(this._shoutoutFallback);
+    this._shoutoutQueue         = [];
+    this._shoutoutBusy          = false;
+    this._shoutoutCooldownUntil = 0;
     this.ui.startSupporters();
-    this.ui.startViewerCount();
     this.ui.startEngagementCTA();
   }
 
   _cleanRound() {
+    this._epoch++;          // cancel any pending round/final/winner timers
+    this._roundEnding = true;
     this.running = false;
     this.paused  = false;
     this.flags   = [];
@@ -685,6 +947,7 @@ export class FlagBattle {
     this.physics.reset();
     this.renderer.clearFallingFlags();
     this.audio.stopHeartbeat();
+    this.ui.hideCountdown();
     this.ui.stopTimer();
     this.ui.hideWinner();
     this.ui.hideTop5Finalists();
@@ -699,6 +962,12 @@ export class FlagBattle {
     this._cleanRound();
     this.roundNum      = 1;
     this.qualifiedList = [];
+    this.campaignNum   = 1;
+    this.phase         = 'qualifier';
+    this.finalists     = [];
+    this.teams         = null;
+    this.teamStats     = null;
+    this._teamSig      = null;
     this.ui.clearQualified();
     this.ui.setRound(1);
     this.ui.setPhase('READY');
@@ -706,84 +975,75 @@ export class FlagBattle {
     this.ui.buildRoster(COUNTRIES);
     this.ui.resetRoster();
     this.ui.resetSupporters();
-    this.ui.stopViewerCount();
     this.ui.stopEngagementCTA();
+    if (this.ui.updateTeams) this.ui.updateTeams(null);
     this.audio.pauseBgMusic();
     if (document.getElementById('btn-start')) document.getElementById('btn-start').textContent = '▶ START';
     if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = true;
     if (document.getElementById('btn-pause')) document.getElementById('btn-pause').textContent = '⏸ PAUSE';
   }
 
-  async _runCountdown(secs) {
+  async _runCountdown(secs, epoch = this._epoch) {
     for (let i = secs; i >= 0; i--) {
-      if (this._abortCountdown) break;
+      if (this._abortCountdown || epoch !== this._epoch) break;
       this.ui.showCountdown(i);
       this.ui.updateCountdown(i);
       this.audio.playTick(i === 0);
       await new Promise(r => setTimeout(r, 1000));
     }
-    this.ui.hideCountdown();
+    // Only clear the overlay if no newer round has taken over the countdown.
+    if (epoch === this._epoch) this.ui.hideCountdown();
   }
 
   /* ================================================================== */
   /*  WINNER HANDLING                                                   */
   /* ================================================================== */
 
-  _handleWinner() {
-    this.running = false;
-    this.physics.setTimeScale(1.0);
-    this.audio.stopHeartbeat();
-    this.ui.stopTimer();
-    this.audio.pauseBgMusic();
-    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = true;
-
-    const winner = this.flags.find(f => !f.eliminated);
-    if (!winner) return;
-
-    const c = winner.country;
+  /* Crown the campaign champion, celebrate, then loop a fresh campaign. */
+  _crownChampion(c, team) {
     this.qualifiedList.push(c);
-    
-    // Check if we hit the total rounds requested from liveSettings
-    const targetRounds = (window.__liveSettings && window.__liveSettings.totalRounds) ? parseInt(window.__liveSettings.totalRounds) : 1;
-    if (this.roundNum < targetRounds) {
-        // Transition to next round automatically
-        setTimeout(() => {
-            this.roundNum++;
-            this._cleanRound();
-            this._beginRound();
-        }, 8000); // Wait 8 seconds before auto-starting the next round
-    }
-    
+
     // Get 2nd and 3rd place (last ones eliminated)
     const second = this.standings.length > 0 ? this.standings[this.standings.length - 1] : null;
     const third = this.standings.length > 1 ? this.standings[this.standings.length - 2] : null;
+
+    // Record the champion, then update team standings
+    this._updateTeamsIfChanged(true);
 
     this.ui.showWinner(
       c, getFlagUrl(c.code, 160),
       second, second ? getFlagUrl(second.code, 80) : null,
       third, third ? getFlagUrl(third.code, 80) : null
     );
-    this.ui.addQualified(c, getFlagUrl(c.code, 40));
+    const wTitle = document.getElementById('winner-title');
+    if (wTitle) wTitle.textContent = `CAMPAIGN ${this.campaignNum} CHAMPION`;
+    const wTeam = document.getElementById('winner-team');
+    if (wTeam) wTeam.textContent = team ? `${team.emoji ? team.emoji + ' ' : ''}${team.name} team wins the campaign` : '';
+    this.ui.addWinner(c, getFlagUrl(c.code, 40), this.campaignNum);
     this.ui.setPhase('CHAMPION');
 
     this.audio.playWinnerFanfare();
 
     // Voice: Winner + engagement CTA
-    this._speakNatural(`The champion is ${c.name}! Incredible battle!`);
+    this._speakNatural(`The champion is ${c.name}!${team ? ' Team ' + team.name + ' wins the campaign!' : ''} Incredible battle!`);
     setTimeout(() => {
-      this._speakNatural('Like and subscribe for more epic battles! Comment your country to join the next round!');
+      this._speakNatural('Like and subscribe for more epic battles! A brand new tournament begins now!');
     }, 3500);
 
     // Burst particles at winner position
-    if (winner.body) {
-      this.renderer.addBurst(winner.body.position.x, winner.body.position.y, '#ffcc00');
+    const wf = this.flags.find(f => !f.eliminated);
+    if (wf && wf.body) {
+      this.renderer.addBurst(wf.body.position.x, wf.body.position.y, '#ffcc00');
     }
 
-    // Auto-advance to next round after 8s (matching podium countdown)
+    // Full match complete: loop from the beginning with a brand new campaign
+    const epoch = this._epoch;
     setTimeout(() => {
-      this.roundNum++;
+      if (this._abortCountdown || epoch !== this._epoch) return;
+      this.campaignNum++;
+      this.roundNum = 1;
       this._cleanRound();
-      this._beginRound();
+      this._beginQualifier();
     }, 8000);
   }
 
@@ -933,41 +1193,42 @@ export class FlagBattle {
       // Milestone: 8 flags — voice CTA
       if (this.aliveCount <= 8 && !this._ctaAudioTriggered) {
         this._ctaAudioTriggered = true;
-        this._speakNatural('Comment your country to boost your flag!');
+        this._speakNatural('Comment your country to save your flag!');
       }
 
-      // Milestone: TOP 5 FINALISTS
+      // Late-round drama: top 5 tracker, top 3 slow-motion, 1v1 sudden death
       if (this.aliveCount === 5 && !this._top5Triggered) {
         this._top5Triggered = true;
         this.audio.playDramaticHit();
-        this.ui.showSuspense('🔥 TOP 5 FINAL SHOWDOWN!');
+        this.ui.showSuspense('🔥 TOP 5 SURVIVORS!');
         const top5 = this.flags.filter(x => !x.eliminated).map(x => x.country);
         this.ui.showTop5Finalists(top5);
       }
 
-      // Milestone: TOP 3 SUSPENSE (Matrix Slow-Motion + Heartbeat)
       if (this.aliveCount === 3 && !this._top3Triggered) {
         this._top3Triggered = true;
         this.audio.playDramaticHit();
         this.audio.startHeartbeat(false);
         this.physics.setTimeScale(0.45); // Dramatic 0.45x slow-motion
-        this.ui.showSuspense('⚡ TOP 3 SURVIVORS — WHO WILL TAKE THE CROWN?!');
+        this.ui.showSuspense('⚡ FINAL 3 — WHO WILL TAKE THE CROWN?!');
       }
 
-      // Milestone: 1V1 SUDDEN DEATH FINAL
       if (this.aliveCount === 2 && !this._top2Triggered) {
         this._top2Triggered = true;
         this.audio.playDramaticHit();
         this.audio.startHeartbeat(true); // Fast heartbeat
-        this.ui.showSuspense('🔥 1V1 SUDDEN DEATH FINAL!');
+        this.ui.showSuspense('🔥 1V1 SUDDEN DEATH!');
       }
 
-      // Check for winner
-      if (this.aliveCount <= 1) {
-        this._handleWinner();
+      // One flag left → qualifier finished, grand final, or campaign champion.
+      if (!this._roundEnding && this.aliveCount <= 1) {
+        this._handleRoundEnd();
         break;
       }
     }
+
+    // Team Up Mode leaderboard (only touches the DOM when counts change)
+    this._updateTeamsIfChanged();
   }
 
   /* ================================================================== */
@@ -1069,8 +1330,8 @@ export class FlagBattle {
   /*  VOICE CTA ENGINE — Natural engagement prompts                     */
   /* ================================================================== */
 
-  _speakNatural(text) {
-    if (!('speechSynthesis' in window)) return;
+  _speakNatural(text, onEnd) {
+    if (!('speechSynthesis' in window)) { if (onEnd) onEnd(); return; }
     window.speechSynthesis.cancel(); // prevent overlap
     const u = new SpeechSynthesisUtterance(text);
     u.lang  = 'en-US';
@@ -1082,9 +1343,79 @@ export class FlagBattle {
     if (this.audio?.voiceIndex != null && voices[this.audio.voiceIndex]) {
       u.voice = voices[this.audio.voiceIndex];
     }
-    
+
+    if (onEnd) u.onend = u.onerror = () => onEnd();
     window.speechSynthesis.speak(u);
   }
+
+  /* ------------------------------------------------------------------ */
+  /*  COMMENT SHOUTOUTS — voice thanks for anyone who gives power by     */
+  /*  commenting or Super Chat, to keep viewers engaged.                 */
+  /* ------------------------------------------------------------------ */
+
+  _cleanAuthorName(author) {
+    let n = String(author ?? '').replace(/^@+/, '').replace(/\s+/g, ' ').trim();
+    if (!n || /^(chat|unknown|undefined|null|nan)$/i.test(n)) return '';
+    if (n.length > 18) {
+      n = n.slice(0, 18);
+      const sp = n.lastIndexOf(' ');
+      if (sp > 8) n = n.slice(0, sp);
+    }
+    return n;
+  }
+
+  _queueShoutout(author, target, verb) {
+    const name = this._cleanAuthorName(author);
+    if (!name) return;
+    const key = `${name}|${verb}|${target}`;
+    // Ignore repeats while queued OR recently spoken (a drained item leaves the
+    // queue, so the recent-key guard stops the same commenter re-joining).
+    if (this._shoutoutQueue.some(s => s.key === key)) return;
+    if (this._lastShoutoutKey === key && Date.now() - (this._lastShoutoutAt || 0) < 20000) return;
+    this._shoutoutQueue.push({ key, name, target, verb });
+    if (this._shoutoutQueue.length > 6) {
+      this._shoutoutQueue.splice(0, this._shoutoutQueue.length - 6);
+    }
+    this._drainShoutouts();
+  }
+
+  _drainShoutouts() {
+    clearTimeout(this._shoutoutTimer);
+    if (this._shoutoutBusy || !this._shoutoutQueue.length) return;
+
+    const now = Date.now();
+    if (now < this._shoutoutCooldownUntil) {
+      this._shoutoutTimer = setTimeout(() => this._drainShoutouts(), this._shoutoutCooldownUntil - now + 25);
+      return;
+    }
+    // Never talk over a priority announcement / voice CTA that is already playing.
+    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+      this._shoutoutTimer = setTimeout(() => this._drainShoutouts(), 1200);
+      return;
+    }
+
+    const s = this._shoutoutQueue.shift();
+    this._lastShoutoutKey = s.key;
+    this._lastShoutoutAt  = Date.now();
+    const lead = ['Shoutout to', 'Big thanks to', 'Power from', 'Respect to'][Math.floor(Math.random() * 4)];
+    const line = `${lead} ${s.name}! You ${s.verb} ${s.target}!`;
+
+    this._shoutoutBusy = true;
+    const finish = () => {
+      if (!this._shoutoutBusy) return;
+      this._shoutoutBusy = false;
+      this._shoutoutCooldownUntil = Date.now() + 1500; // small gap between shoutouts
+      this._drainShoutouts();
+    };
+    this._speakNatural(line, finish);
+    // Fallback in case `onend` never fires (e.g. cancelled by a priority line).
+    clearTimeout(this._shoutoutFallback);
+    this._shoutoutFallback = setTimeout(() => {
+      if (this._shoutoutBusy) { this._shoutoutBusy = false; this._shoutoutCooldownUntil = Date.now() + 1200; this._drainShoutouts(); }
+    }, Math.max(3200, line.length * 90));
+  }
+
+
 
   _triggerVoiceCTA() {
     if (!this.running || this.paused) return;
@@ -1097,7 +1428,7 @@ export class FlagBattle {
     const prompts = [
       'Like and subscribe if you are watching!',
       'Drop a comment with your country name!',
-      `${randomCountry || 'Your country'} is still alive! Comment to boost it!`,
+      `${randomCountry || 'Your country'} is still alive! Comment your country to save it!`,
       'Send a gift to appear on the Top Supporters leaderboard!',
       'Share this battle with your friends!',
       `${aliveFlags.length} flags still fighting! Who will survive?`,

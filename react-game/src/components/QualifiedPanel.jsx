@@ -1,29 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-
-function MiniFlag({ code, engineRef }) {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const engine = engineRef.current;
-    if (!canvas || !engine) return;
-    const ctx = canvas.getContext('2d');
-    let raf;
-    // Sprites load asynchronously, so keep trying for a few frames until
-    // the real flag is ready instead of drawing the placeholder forever.
-    let attempts = 0;
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      engine.drawFlagInto(ctx, code, 0, 0, canvas.width, canvas.height);
-      attempts++;
-      if (attempts < 30) raf = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => raf && cancelAnimationFrame(raf);
-  }, [code, engineRef]);
-
-  return <canvas ref={canvasRef} width={20} height={13} className="flex-none rounded-[1px] block" />;
-}
+import React from 'react';
+import MiniFlag from './MiniFlag.jsx';
 
 export default function QualifiedPanel({ title, rows, engineRef }) {
   const TOTAL_ROWS = 3;

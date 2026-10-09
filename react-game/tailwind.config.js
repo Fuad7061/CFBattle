@@ -4,16 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        'bg-deep': '#0a0f1c',
-        'bg-mid': '#17233b',
-        'accent-gold': '#e8b23d',
-        'accent-crimson': '#c13f3f',
+        'bg-deep': '#0d1114',
+        'bg-mid': '#151b1e',
+        'accent-gold': '#e9bc73',
+        'accent-crimson': '#ef8c67',
         'accent-pink': '#ff3d68',
-        ring: '#3e5c76',
-        'text-soft': '#f0ebd8',
+        ring: '#303a3e',
+        'text-soft': '#edf0e9',
       },
       fontFamily: {
-        serif: ['Georgia', 'Iowan Old Style', 'serif'],
+        head: ['Barlow Condensed', 'sans-serif'],
+        body: ['DM Sans', 'sans-serif'],
       },
     },
   },

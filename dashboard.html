@@ -286,9 +286,9 @@
         /* --- SETTINGS MODAL (mirrors the in-game game & watermark panel) --- */
         .modal-overlay {
             position: fixed; inset: 0; z-index: 1000;
-            background: rgba(4,2,2,0.78); backdrop-filter: blur(6px);
-            display: none; align-items: flex-start; justify-content: center;
-            padding: 40px 16px; overflow-y: auto;
+            background: transparent; backdrop-filter: none;
+            display: none; align-items: stretch; justify-content: flex-start;
+            padding: 0; pointer-events: none;
         }
         .modal-overlay.open { display: flex; }
         #settings-modal .modal-card {
@@ -296,14 +296,19 @@
             --s-red: #dc2626;
             --s-muted: #a1a1aa;
             --s-text: #f4f4f5;
-            width: 100%; max-width: 420px; margin: auto;
+            width: 100%; max-width: 380px; margin: 0;
             background: rgba(8,3,3,0.98);
-            border: 1px solid rgba(200,20,20,0.35);
-            border-radius: 12px;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.75);
+            border: 1px solid rgba(200,20,20,0.35); border-left: none;
+            border-radius: 0 12px 12px 0;
+            box-shadow: 16px 0 50px rgba(0,0,0,0.65);
             display: flex; flex-direction: column;
-            max-height: calc(100vh - 80px); overflow: hidden;
-            animation: fadeIn 0.25s ease-out;
+            height: 100vh; max-height: 100vh; overflow: hidden;
+            pointer-events: auto;
+            animation: slideInLeft 0.28s ease-out;
+        }
+        @keyframes slideInLeft {
+            from { transform: translateX(-100%); opacity: 0.4; }
+            to { transform: translateX(0); opacity: 1; }
         }
         #settings-modal .sp-header {
             display: flex; align-items: center; justify-content: space-between;
@@ -621,8 +626,8 @@
     <div id="settings-modal" class="modal-overlay" onclick="if (event.target === this) closeSettingsModal()">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Game and Watermark Settings">
             <div class="sp-header">
-                <h3>⚙ Game &amp; Watermark Settings</h3>
-                <button id="settings-close" onclick="saveAndApplySettings()" title="Apply & save as default">✕ Apply &amp; Save</button>
+                <h3 id="settings-title">⚙ Game &amp; Watermark Settings</h3>
+                <button id="settings-close" onclick="closeSettingsModal()" title="Close panel (your saved settings keep running)">✕ Close</button>
             </div>
 
             <div class="sp-body">
@@ -682,7 +687,7 @@
                 <div class="sp-section-label">Physics &amp; Speed</div>
                 <div class="sg">
                     <label>Arena Rotation Speed</label>
-                    <input type="number" id="live-rot-speed" min="0" max="0.05" step="0.001" value="0.0035">
+                    <input type="number" id="live-rot-speed" min="0" max="0.05" step="0.001" value="0.0028">
                 </div>
                 <div class="sg">
                     <label>Gravity Magnitude <small>(0 = Float, 1.0 = Downward pull)</small></label>
@@ -760,13 +765,33 @@
 
         // Open the single source-of-truth settings panel. Refreshes the inputs
         // from the persisted defaults first so what you see is what's stored.
+        // Opening settings must not change the currently selected preview.
         function openSettingsModal() {
             fetch('/api/status', { headers: API_HEADERS() })
                 .then(r => (r.ok ? r.json() : null))
-                .then(data => { if (data) populateSettings(data.settings); })
+                .then(data => { if (data) populateSettings(data.settings, { updatePreview: false }); })
                 .catch(() => {});
+            syncSettingsModalEngine();
             const modal = document.getElementById('settings-modal');
             if (modal) modal.classList.add('open');
+            bindLivePreview();
+        }
+
+        function selectedEngine() {
+            const el = document.getElementById('live-engine-select');
+            return el && el.value === 'vertical' ? 'vertical' : 'landscape';
+        }
+
+        function syncSettingsModalEngine() {
+            const modal = document.getElementById('settings-modal');
+            const title = document.getElementById('settings-title');
+            const engine = selectedEngine();
+            if (modal) modal.dataset.engine = engine;
+            if (title) {
+                title.textContent = engine === 'vertical'
+                    ? '⚙ Vertical Game & Watermark Settings'
+                    : '⚙ Landscape Game & Watermark Settings';
+            }
         }
 
         function closeSettingsModal() {
@@ -870,7 +895,7 @@
             document.getElementById('btn-stop').disabled = false;
         }
 
-        function populateSettings(s) {
+        function populateSettings(s, { updatePreview = true } = {}) {
             if(!s) return;
             document.getElementById('set-stream-url').value = s.streamUrl || '';
             document.getElementById('set-stream-key').value = s.streamKey || '';
@@ -886,9 +911,11 @@
             }
             if (s.activeEngine !== undefined) {
                 const el = document.getElementById('live-engine-select');
-                if (el) {
+                if (el && updatePreview) {
                     el.value = s.activeEngine;
                     updatePreviewSrc();
+                } else {
+                    syncSettingsModalEngine();
                 }
             }
             if (s.gameSettings) {
@@ -909,11 +936,11 @@
             }
         }
 
-        async function saveAndApplySettings() {
-            const gamePayload = {
+        function buildGamePayload() {
+            return {
                 watermark: document.getElementById('live-watermark').value,
                 speed: parseFloat(document.getElementById('live-speed').value),
-                rotSpeed: parseFloat(document.getElementById('live-rot-speed').value) || 0.0035,
+                rotSpeed: parseFloat(document.getElementById('live-rot-speed').value) || 0.0028,
                 gravity: parseFloat(document.getElementById('live-gravity').value),
                 bias: document.getElementById('live-bias').checked,
                 totalCountries: parseInt(document.getElementById('live-total-countries').value),
@@ -926,6 +953,50 @@
                 wmCount: parseInt(document.getElementById('live-wm-count').value) || 3,
                 wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15
             };
+        }
+
+        // Push settings into the on-screen preview iframe WITHOUT saving to the
+        // server, so the director can see gameplay/branding changes in real time
+        // while the settings drawer stays docked on the left.
+        function applyGameToPreview(gamePayload) {
+            const frame = document.getElementById('preview-frame');
+            if (!frame || !frame.contentWindow) return;
+            frame.contentWindow.__liveSettings = gamePayload;
+            if (frame.contentWindow.gameInstance) {
+                const gi = frame.contentWindow.gameInstance;
+                gi.cfg = { ...(gi.cfg || {}), ...gamePayload };
+                gi.settings = { ...(gi.settings || {}), ...gamePayload };
+                if (gamePayload.watermark !== undefined) {
+                    if (gi.ui?.setBranding) gi.ui.setBranding(gamePayload.watermark);
+                    if (gi.ui?.setChannel) gi.ui.setChannel(gamePayload.watermark);
+                }
+                if (gi.renderer) {
+                    if (gamePayload.watermark !== undefined) gi.renderer.watermarkText = gamePayload.watermark;
+                    if (gamePayload.wmOpacity !== undefined) gi.renderer.watermarkOpacity = gamePayload.wmOpacity;
+                    if (gamePayload.wmSize !== undefined) gi.renderer.watermarkSize = gamePayload.wmSize;
+                    if (gamePayload.wmCount !== undefined) gi.renderer.watermarkCount = gamePayload.wmCount;
+                    if (gamePayload.wmAngle !== undefined) gi.renderer.watermarkAngle = gamePayload.wmAngle;
+                }
+            }
+            if (frame.contentWindow.postMessage) {
+                frame.contentWindow.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
+            }
+        }
+
+        // Live preview: reflect control changes to the preview instantly, no save.
+        function bindLivePreview() {
+            const panel = document.getElementById('settings-modal');
+            if (!panel) return;
+            panel.querySelectorAll('input, select').forEach(el => {
+                if (el.dataset.liveBound) return;
+                el.dataset.liveBound = '1';
+                el.addEventListener('input', () => applyGameToPreview(buildGamePayload()));
+                el.addEventListener('change', () => applyGameToPreview(buildGamePayload()));
+            });
+        }
+
+        async function saveAndApplySettings() {
+            const gamePayload = buildGamePayload();
             
             const rtmpPayload = {
                 streamUrl: document.getElementById('set-stream-url').value,
@@ -970,33 +1041,9 @@
                     }
                 } catch(e) { showAlert('Network error', true); }
             } else {
-                // Apply locally to preview frame
-                const frame = document.getElementById('preview-frame');
-                if (frame && frame.contentWindow) {
-                    frame.contentWindow.__liveSettings = gamePayload;
-                    if (frame.contentWindow.gameInstance) {
-                        const gi = frame.contentWindow.gameInstance;
-                        gi.settings = { ...(gi.settings || {}), ...gamePayload };
-                        if (gamePayload.watermark !== undefined && gi.ui?.setChannel) gi.ui.setChannel(gamePayload.watermark);
-                        if (gamePayload.speed !== undefined && gi.physics?.setStepsPerFrame) gi.physics.setStepsPerFrame(gamePayload.speed);
-                        if (gamePayload.gravity !== undefined && gi.physics?.setGravity) gi.physics.setGravity(gamePayload.gravity);
-                        if (gamePayload.bias !== undefined) gi.audienceBias = gamePayload.bias;
-                        if (gi.renderer) {
-                            if (gamePayload.watermark !== undefined) gi.renderer.watermarkText = gamePayload.watermark;
-                            if (gamePayload.wmOpacity !== undefined) gi.renderer.watermarkOpacity = gamePayload.wmOpacity;
-                            if (gamePayload.wmSize !== undefined) gi.renderer.watermarkSize = gamePayload.wmSize;
-                            if (gamePayload.wmCount !== undefined) gi.renderer.watermarkCount = gamePayload.wmCount;
-                            if (gamePayload.wmAngle !== undefined) gi.renderer.watermarkAngle = gamePayload.wmAngle;
-                        }
-                    }
-                    if (frame.contentWindow.postMessage) {
-                        frame.contentWindow.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
-                    }
-                }
-                showAlert('Settings saved! Ready for next launch.');
+                applyGameToPreview(gamePayload);
+                showAlert('Settings saved! Preview updating on the right.');
             }
-
-            closeSettingsModal();
         }
 
         async function sendTestChat() {
@@ -1180,6 +1227,7 @@
                 if (wrapper) {
                     wrapper.style.aspectRatio = isVertical ? '9/16' : '16/9';
                 }
+                syncSettingsModalEngine();
             }
         }
 
@@ -1204,15 +1252,16 @@
                     if (win.gameInstance) {
                         const inst = win.gameInstance;
                         if (cmd === 'start') {
-                            inst.running = true;
-                            if (inst.flags && inst.flags.length === 0) inst.start();
+                            if (inst.paused) inst.resume();
+                            else inst.start();
                         } else if (cmd === 'pause') {
-                            inst.running = !inst.running;
+                            if (inst.paused) inst.resume();
+                            else inst.pause();
                         } else if (cmd === 'reset') {
-                            inst.newRound();
+                            if (typeof inst.newRound === 'function') inst.newRound();
+                            else if (typeof inst.reset === 'function') inst.reset();
                         } else if (cmd === 'mute') {
-                            inst.primeAudioOnGesture?.();
-                            inst.setSoundEnabled?.(!inst.soundEnabled);
+                            if (inst.audio && typeof inst.audio.toggleMute === 'function') inst.audio.toggleMute();
                         }
                     }
                 } catch(e) {}

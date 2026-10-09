@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import MiniFlag from './MiniFlag.jsx';
 
 export default function Arena({ canvasRef, winnerState, stageAnnouncement, engineRef, children }) {
   const wrapRef = useRef(null);
@@ -52,8 +53,8 @@ export default function Arena({ canvasRef, winnerState, stageAnnouncement, engin
   }, [winnerState.show, winnerState.code, engineRef]);
 
   return (
-    <div ref={wrapRef} className="relative flex-1 min-h-0">
-      <canvas ref={canvasRef} className="absolute top-0 left-0 block" />
+    <div ref={wrapRef} className="relative w-full h-full">
+      <canvas ref={canvasRef} className="absolute top-0 left-0 block w-full h-full" />
 
       <div
         className={`winner-banner absolute top-1/2 left-1/2 bg-bg-deep/90 border-2 border-accent-gold rounded-lg px-6 py-3 text-center z-20 ${
@@ -72,12 +73,28 @@ export default function Arena({ canvasRef, winnerState, stageAnnouncement, engin
       </div>
 
       <div
-        className={`stage-announcement absolute top-1/2 left-1/2 bg-bg-deep/95 border-2 border-accent-pink rounded-[10px] px-11 py-6 text-center z-30 ${
+        className={`stage-announcement absolute top-1/2 left-1/2 bg-bg-deep/95 border-2 border-accent-gold rounded-[10px] px-8 py-6 text-center z-30 ${
           stageAnnouncement.show ? 'show' : ''
         }`}
       >
-        <h1 className="m-0 text-accent-pink text-[28px] font-bold tracking-wide uppercase">{stageAnnouncement.title}</h1>
-        <p className="m-0 mt-2 text-text-soft text-[13px] tracking-[1.5px] uppercase opacity-80">{stageAnnouncement.subtitle}</p>
+        <h1 className="m-0 text-accent-gold text-[26px] font-bold tracking-wide uppercase">{stageAnnouncement.title}</h1>
+        <p className="m-0 mt-1.5 text-text-soft text-[12px] tracking-[1.5px] uppercase opacity-80">{stageAnnouncement.subtitle}</p>
+        {stageAnnouncement.lineup && stageAnnouncement.lineup.length > 0 && (
+          <div className="mt-4 flex flex-col items-stretch gap-1.5">
+            {stageAnnouncement.lineup.map((entry, i) => (
+              <div
+                key={entry.code}
+                className="flex items-center gap-2 bg-white/[0.05] border border-white/10 rounded px-2.5 py-1"
+              >
+                <span className="flex-none w-5 text-accent-gold font-black text-[13px]">#{i + 1}</span>
+                <MiniFlag code={entry.code} engineRef={engineRef} width={26} height={17} />
+                <span className="flex-1 text-left text-text-soft text-[13px] overflow-hidden text-ellipsis whitespace-nowrap">
+                  {entry.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {children}

@@ -12,7 +12,7 @@ import Matter from "matter-js";
 export class PhysicsEngine {
   constructor(cx, cy, R) {
     this.cx = cx;   // arena center X (270)
-    this.cy = cy;   // arena center Y (445)
+    this.cy = cy;   // arena center Y (490)
     this.R  = R;    // visible ring radius (205)
 
     // Arena geometry
@@ -357,8 +357,17 @@ export class PhysicsEngine {
              }
           }
 
-          if (dist > this.R_wall - 10) {
-            // Flag has passed outside through the hole
+          // Eliminate only once the flag's OUTER EDGE actually crosses the
+          // drawn wire (radius R) — a corner grazing the wire counts.
+          const halfW = (b.fw ?? 20) * 0.5;
+          const halfH = (b.fh ?? 18) * 0.5;
+          const cA = Math.cos(b.angle || 0);
+          const sA = Math.sin(b.angle || 0);
+          const ux = Math.cos(angle);
+          const uy = Math.sin(angle);
+          const edgeReach = Math.abs(halfW * (cA * ux + sA * uy))
+                          + Math.abs(halfH * (-sA * ux + cA * uy));
+          if (dist + edgeReach >= this.R - 0.5) {
             b.eliminated = true;
             eliminated.push(b);
             Matter.World.remove(this.world, b);

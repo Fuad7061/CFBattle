@@ -78,8 +78,8 @@ export default function VerticalApp() {
 
             <div id="panels-row">
               <div id="qualified-panel">
-                <div id="qualified-title">QUALIFIED FOR FINAL</div>
-                <div id="qualified-list"></div>
+                <div id="qualified-title">🏆 CAMPAIGN WINNERS</div>
+                <div id="qualified-list"><div class="q-empty">Awaiting first champion…</div></div>
               </div>
               <div id="supporters-panel">
                 <div id="supporters-title">💎 TOP SUPPORTERS ·</div>
@@ -87,6 +87,11 @@ export default function VerticalApp() {
                   <div className="sup-empty">No supporters yet</div>
                 </div>
               </div>
+            </div>
+
+            <div id="team-panel" className="hidden">
+              <div id="team-title">🛡 TEAM UP MODE</div>
+              <div id="team-list"></div>
             </div>
 
             <div id="sub-row">
@@ -97,20 +102,13 @@ export default function VerticalApp() {
               </span>
             </div>
 
-            <div id="chat-cta" className="hidden">💬 COMMENT YOUR COUNTRY TO BOOST YOUR FLAG! ⚡</div>
+            <div id="bottom-right-stack">
+              <div id="revive-trackers"></div>
+              <div id="chat-cta" className="hidden">Comment Your Country Flag Name To Save</div>
+            </div>
             <div id="elimination-feed"></div>
 
-            <div id="live-viewers" className="hidden">
-              <span className="live-dot"></span>
-              <span id="viewer-count">0</span> watching now
-            </div>
-
             <div id="engagement-cta" className="hidden"></div>
-
-            <div id="top5-tracker" className="hidden">
-              <div id="top5-header">⚡ TOP 5 FINALISTS — WHO WILL WIN? ⚡</div>
-              <div id="top5-cards"></div>
-            </div>
 
             <div id="winner-screen" className="hidden">
               <div id="winner-title">ROUND WINNER</div>
@@ -119,6 +117,7 @@ export default function VerticalApp() {
                 <img id="winner-flag-img" src="" alt="" crossOrigin="anonymous" />
               </div>
               <div id="winner-name"></div>
+              <div id="winner-team"></div>
               <div id="podium-row">
                 <div className="podium-item" id="podium-2nd">
                   <img id="second-flag-img" src="" alt="2nd" crossOrigin="anonymous" />
@@ -146,6 +145,11 @@ export default function VerticalApp() {
             <div id="counter-section">
               <div id="progress-bg"><div id="progress-fill"></div></div>
               <div id="counter-text">0 / 0 FLAGS</div>
+            </div>
+
+            <div id="top5-tracker" className="hidden">
+              <div id="top5-header">⚡ TOP 5 FINALISTS — WHO WILL WIN? ⚡</div>
+              <div id="top5-cards"></div>
             </div>
 
             <div id="roster-section">

@@ -13,8 +13,6 @@ export class UIManager {
     this._qualifiedCount = 0;
 
     // Engagement state
-    this._viewerCount    = 0;
-    this._viewerInterval = null;
     this._engageInterval = null;
     this._engageIndex    = 0;
     this._nextTournamentTimer = null;
@@ -32,6 +30,23 @@ export class UIManager {
   setPhase(text) {
     this.$('phase-label').textContent     = text;
     this.$('qualifying-text').textContent = text;
+  }
+
+  /* Round header: main label (e.g. "CAMPAIGN 1 · GRAND FINAL") + phase line. */
+  setRoundHeader(roundText, phaseText) {
+    const rl = this.$('round-label');
+    if (rl) rl.textContent = roundText;
+    const pl = this.$('phase-label');
+    if (pl) pl.textContent = phaseText;
+    const qt = this.$('qualifying-text');
+    if (qt) qt.textContent = phaseText;
+  }
+
+  /* Back-compat alias. */
+  setTournamentHeader(campaign, round, totalRounds, target) {
+    const label = totalRounds ? `CAMPAIGN ${campaign} \u00b7 ROUND ${round}/${totalRounds}` : `CAMPAIGN ${campaign}`;
+    const phase = target <= 1 ? 'GRAND FINAL' : `QUALIFY TOP ${target}`;
+    this.setRoundHeader(label, phase);
   }
 
   /* ------------------------------------------------------------------ */
@@ -105,42 +120,18 @@ export class UIManager {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  LIVE VIEWER COUNTER                                               */
-  /* ------------------------------------------------------------------ */
-
-  setViewerCount(count) {
-    const c = typeof count === 'number' && count >= 0 ? count : this._viewerCount;
-    this._viewerCount = c;
-    const el = this.$('live-viewers');
-    if (el) el.classList.remove('hidden');
-    const vc = this.$('viewer-count');
-    if (vc) vc.textContent = this._viewerCount.toLocaleString();
-  }
-
-  startViewerCount() {
-    this.setViewerCount(this._viewerCount || 0);
-    if (this._viewerInterval) clearInterval(this._viewerInterval);
-    this._viewerInterval = null;
-  }
-
-  stopViewerCount() {
-    if (this._viewerInterval) { clearInterval(this._viewerInterval); this._viewerInterval = null; }
-    const el = this.$('live-viewers');
-    if (el) el.classList.add('hidden');
-  }
-
   /* ------------------------------------------------------------------ */
   /*  ENGAGEMENT CTA BANNER (rotating messages)                         */
   /* ------------------------------------------------------------------ */
 
   startEngagementCTA() {
     const messages = [
-      '\ud83d\udc4d SMASH LIKE IF YOUR COUNTRY IS ALIVE!',
-      '\ud83d\udd14 SUBSCRIBE TO SEE MORE BATTLES!',
-      '\ud83d\udcac COMMENT YOUR FLAG TO BOOST IT!',
-      '\ud83c\udf81 SEND A GIFT \u2192 TOP SUPPORTERS BOARD!',
-      '\ud83d\udd25 SHARE THIS LIVE WITH YOUR FRIENDS!',
-      '\u26a1 DROP A \ud83c\uddee\ud83c\uddf3\ud83c\uddfa\ud83c\uddf8\ud83c\udde7\ud83c\uddf7 IN CHAT NOW!',
+      '\ud83d\udc4d LIKE IF YOUR COUNTRY IS STILL ALIVE!',
+      '\ud83d\udd14 SUBSCRIBE \u2014 A NEW BATTLE STARTS SOON!',
+      '\ud83d\udcac TYPE YOUR COUNTRY NAME TO SAVE IT!',
+      '\ud83c\udf81 SUPER CHAT = INSTANT REVIVE!',
+      '\ud83d\udd25 SHARE THIS LIVE WITH A FRIEND!',
+      '\ud83c\udfc6 TOP 5 REACH THE FINAL \u2014 PUSH YOUR FLAG!',
     ];
     const el = this.$('engagement-cta');
     if (!el) return;
@@ -189,6 +180,10 @@ export class UIManager {
     const header = this.$('top5-header');
     if (!el || !cards) return;
 
+    // Top 5 tracker takes the Active Countries roster slot (never both at once)
+    const roster = this.$('roster-section');
+    if (roster) roster.classList.add('hidden');
+
     if (header) {
         if (countries.length > 5) {
             header.innerHTML = `\u26a1 TOP ${countries.length} FINALISTS \u2014 WHO WILL WIN? \u26a1`;
@@ -226,30 +221,40 @@ export class UIManager {
   hideTop5Finalists() {
     const el = this.$('top5-tracker');
     if (el) el.classList.add('hidden');
+    // Restore the Active Countries roster in the slot the tracker occupied
+    const roster = this.$('roster-section');
+    if (roster) roster.classList.remove('hidden');
   }
 
   /* ------------------------------------------------------------------ */
-  /*  QUALIFIED FOR FINAL PANEL                                         */
+  /*  CAMPAIGN WINNERS PANEL                                            */
   /* ------------------------------------------------------------------ */
 
-  addQualified(country, smallFlagUrl) {
+  addWinner(country, smallFlagUrl, campaignNum) {
     this._qualifiedCount++;
-    const pos = this._qualifiedCount;
+    const n = campaignNum != null ? campaignNum : this._qualifiedCount;
+    const list = this.$('qualified-list');
+    if (!list) return;
+    const empty = list.querySelector('.q-empty');
+    if (empty) empty.remove();
+    // Mark only the newest winner as the "latest" highlight.
+    list.querySelectorAll('.q-row.latest').forEach(r => r.classList.remove('latest'));
     const row = document.createElement('div');
-    row.className = 'q-row';
+    row.className = 'q-row latest';
     row.innerHTML = `
-      <span class="q-pos">#${pos}</span>
+      <span class="q-pos">C${n}</span>
       <img class="q-fl" src="${smallFlagUrl}" alt="" crossorigin="anonymous">
       <span class="q-name">${country.name}</span>
-      <span class="q-badge">\u2713 QUALIFIED</span>
+      <span class="q-badge">\ud83c\udfc6 WINNER</span>
     `;
-    this.$('qualified-list').appendChild(row);
-    this.$('qualified-list').scrollTop = 9999;
+    list.appendChild(row);
+    list.scrollTop = 9999;
   }
 
   clearQualified() {
-    this.$('qualified-list').innerHTML = '';
     this._qualifiedCount = 0;
+    const list = this.$('qualified-list');
+    if (list) list.innerHTML = '<div class="q-empty">Awaiting first champion\u2026</div>';
   }
 
   /* ------------------------------------------------------------------ */
@@ -260,6 +265,34 @@ export class UIManager {
     this.$('counter-text').textContent = `${alive} / ${total} FLAGS`;
     const pct = total > 0 ? ((total - alive) / total) * 100 : 0;
     this.$('progress-fill').style.width = `${pct}%`;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  TEAM UP MODE LEADERBOARD                                          */
+  /* ------------------------------------------------------------------ */
+
+  updateTeams(teams) {
+    const panel = this.$('team-panel');
+    const list = this.$('team-list');
+    if (!panel || !list) return;
+    if (!teams || !teams.length) {
+      panel.classList.add('hidden');
+      list.innerHTML = '';
+      return;
+    }
+    panel.classList.remove('hidden');
+    const ranked = [...teams].sort((a, b) => b.alive - a.alive || a.name.localeCompare(b.name));
+    list.innerHTML = ranked.map((t, i) => {
+      const pct = t.total > 0 ? Math.round((t.alive / t.total) * 100) : 0;
+      const dead = t.alive === 0;
+      return `<div class="team-row${dead ? ' out' : ''}" style="--team:${t.color}">
+        <span class="team-rank">${i + 1}</span>
+        <span class="team-dot"></span>
+        <span class="team-name">${t.emoji ? t.emoji + ' ' : ''}${t.name}</span>
+        <span class="team-bar"><i style="width:${pct}%"></i></span>
+        <span class="team-count">${t.alive}<small>/${t.total}</small></span>
+      </div>`;
+    }).join('');
   }
 
   /* ------------------------------------------------------------------ */
@@ -413,48 +446,35 @@ export class UIManager {
   }
 
   showReviveProgress(country, flagUrl, current, target) {
-    let container = this.$('revive-trackers');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'revive-trackers';
-      container.style.position = 'absolute';
-      container.style.top = '120px';
-      container.style.right = '10px';
-      container.style.display = 'flex';
-      container.style.flexDirection = 'column';
-      container.style.gap = '8px';
-      container.style.zIndex = '100';
-      const hud = this.$('hud');
-      if (hud) hud.appendChild(container);
-    }
-    
+    const container = this.$('revive-trackers');
+    if (!container) return;
+
+    const trim = () => {
+      // Keep only the 3 most-recently-active (different) countries so the
+      // preview stays clean. Each country has a unique element, so this shows
+      // the latest 3 distinct flag revive counters only.
+      while (container.children.length > 3) container.removeChild(container.firstChild);
+    };
+
     let el = this.$(`revive-${country.code}`);
     if (!el) {
       el = document.createElement('div');
       el.id = `revive-${country.code}`;
       el.className = 'revive-progress-item';
-      el.style.background = 'rgba(10, 25, 40, 0.85)';
-      el.style.border = '1px solid rgba(245, 158, 11, 0.6)';
-      el.style.padding = '4px 8px';
-      el.style.borderRadius = '8px';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.gap = '8px';
-      el.style.color = '#f59e0b';
-      el.style.fontWeight = 'bold';
-      el.style.fontSize = '12px';
-      el.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.3)';
       el.innerHTML = `
-        <img src="${flagUrl}" style="width: 24px; height: 16px; border-radius: 2px;" alt="">
+        <img src="${flagUrl}" alt="">
         <span class="revive-text">${current}/${target} REVIVE</span>
       `;
       container.appendChild(el);
     } else {
       el.querySelector('.revive-text').textContent = `${current}/${target} REVIVE`;
+      container.appendChild(el); // bump to newest position
       // pop animation
-      el.style.transform = 'scale(1.1)';
-      setTimeout(() => el.style.transform = 'scale(1)', 200);
+      el.classList.remove('pop');
+      void el.offsetWidth;
+      el.classList.add('pop');
     }
+    trim();
   }
 
   hideReviveProgress(code) {
@@ -654,6 +674,24 @@ export class UIManager {
     this._suspenseTimer = setTimeout(() => {
       el.className = 'hidden';
     }, 3200);
+  }
+
+  /* Grand Final lineup: title + one finalist per line so long country names
+     stay fully readable inside the 540-wide preview. */
+  showFinalLineup(countries) {
+    const el = this.$('suspense-notice');
+    if (!el || !countries || !countries.length) return;
+    const rows = countries.map(c =>
+      `<div class="fl-name"><img src="${getFlagUrl(c.code, 80)}" alt="" crossorigin="anonymous"><span>${c.name}</span></div>`
+    ).join('');
+    el.innerHTML = `<div class="fl-title">\ud83c\udfc6 GRAND FINAL</div>${rows}`;
+    el.className = 'final-lineup';
+    el.style.display = 'block';
+    clearTimeout(this._suspenseTimer);
+    this._suspenseTimer = setTimeout(() => {
+      el.className = 'hidden';
+      el.innerHTML = '';
+    }, 5200);
   }
 
   /* ------------------------------------------------------------------ */

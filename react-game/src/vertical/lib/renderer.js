@@ -8,8 +8,8 @@ export class Renderer {
     this.ctx          = canvas.getContext('2d');
     this.W            = canvas.width;   // 540
     this.H            = canvas.height;  // 960
-    this.FW           = 20;             // flag width
-    this.FH           = 13;             // flag height (3:2 ratio)
+    this.FW           = 28;             // flag width (larger, royal-style scale)
+    this.FH           = 18;             // flag height (3:2 ratio)
     this.particles    = [];
     this.fallingFlags = [];             // eliminated flags tumbling away
     this._frame       = 0;
@@ -49,8 +49,8 @@ export class Renderer {
   /* ------------------------------------------------------------------ */
 
   _drawBg(ctx, suspense) {
-    // Deep dark background
-    ctx.fillStyle = '#05050c';
+    // Deep slate background
+    ctx.fillStyle = '#0d1114';
     ctx.fillRect(0, 0, this.W, this.H);
 
     // Repeated angled background watermark
@@ -95,16 +95,16 @@ export class Renderer {
     // Radial arena glow (shifts to dramatic amber/crimson spotlight during Top 3)
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 380);
     if (suspense > 0.5) {
-      // Dramatic high-contrast suspense spotlight
+      // Dramatic high-contrast suspense spotlight (warm amber)
       const p = 0.5 + 0.5 * Math.sin(this._frame * 0.1);
-      g.addColorStop(0,    `rgba(100, 10, 10, ${0.55 + 0.15 * p})`);
-      g.addColorStop(0.40, `rgba(45, 5, 5, ${0.35 + 0.1 * p})`);
-      g.addColorStop(0.75, 'rgba(10, 0, 2, 0.7)');
-      g.addColorStop(1,    'rgba(0, 0, 0, 0.95)');
+      g.addColorStop(0,    `rgba(76, 55, 32, ${0.5 + 0.15 * p})`);
+      g.addColorStop(0.40, `rgba(48, 40, 32, ${0.4 + 0.1 * p})`);
+      g.addColorStop(0.75, 'rgba(20, 22, 21, 0.7)');
+      g.addColorStop(1,    'rgba(9, 11, 12, 0.95)');
     } else {
-      g.addColorStop(0,    'rgba(65, 8, 8, 0.40)');
-      g.addColorStop(0.55, 'rgba(25, 4, 4, 0.20)');
-      g.addColorStop(1,    'rgba(0, 0, 0, 0)');
+      g.addColorStop(0,    'rgba(38, 49, 43, 0.5)');
+      g.addColorStop(0.55, 'rgba(24, 31, 30, 0.28)');
+      g.addColorStop(1,    'rgba(13, 17, 20, 0)');
     }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.W, this.H);
@@ -114,77 +114,52 @@ export class Renderer {
   /*  ARENA RING                                                         */
   /* ------------------------------------------------------------------ */
 
-  _drawArena(ctx, physics, suspense) {
+  _drawArena(ctx, physics) {
     const { cx, cy, R, segments, NUM_SEGS, arenaAngle, step } = physics;
     ctx.save();
     ctx.lineCap = 'butt';
 
-    // 1. Dark metallic outer track
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.strokeStyle = suspense > 0.5 ? 'rgba(35, 10, 10, 0.9)' : 'rgba(22, 14, 14, 0.75)';
-    ctx.lineWidth   = 22;
-    ctx.stroke();
+    // Collect contiguous closed spans and gate (open) spans
+    const closed = [], gaps = [];
+    let idx = 0;
+    while (idx < NUM_SEGS) {
+      const isOpen = segments[idx].isOpen;
+      let j = idx;
+      while (j < NUM_SEGS && segments[j].isOpen === isOpen) j++;
+      (isOpen ? gaps : closed).push([idx * step + arenaAngle, j * step + arenaAngle]);
+      idx = j;
+    }
 
-    // 2. Soft inner bowl shadow
-    ctx.beginPath();
-    ctx.arc(cx, cy, R - 6, 0, Math.PI * 2);
-    ctx.fillStyle = suspense > 0.5 ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 5, 0.25)';
-    ctx.fill();
-
-    // Simple, clean, professional neon ring
-    const strokeColor = suspense > 0.5 ? 'rgba(255, 80, 80, 0.95)' : 'rgba(230, 245, 255, 0.95)';
-    const glowColor   = suspense > 0.5 ? 'rgba(255, 0, 0, 0.5)' : 'rgba(100, 150, 255, 0.4)';
-
-    // Helper to draw clean continuous arcs for solid sections
-    const drawSpans = (lineWidth, strokeStyle, shadowBlur = 0, shadowColor = 'transparent') => {
-      let startIdx = -1;
-      for (let i = 0; i < NUM_SEGS; i++) {
-         if (!segments[i].isOpen && segments[(i - 1 + NUM_SEGS) % NUM_SEGS].isOpen) {
-             startIdx = i; break;
-         }
-      }
-      
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = strokeStyle;
-      ctx.shadowBlur = shadowBlur;
-      ctx.shadowColor = shadowColor;
-      
-      if (startIdx === -1) {
-         if (!segments[0].isOpen) {
-            ctx.beginPath();
-            ctx.arc(cx, cy, R, 0, Math.PI * 2);
-            ctx.stroke();
-         }
-      } else {
-         let i = startIdx;
-         let count = 0;
-         while (count < NUM_SEGS) {
-            if (!segments[i % NUM_SEGS].isOpen) {
-               let spanStart = i;
-               let spanCount = 0;
-               while (!segments[i % NUM_SEGS].isOpen && count < NUM_SEGS) {
-                  spanCount++; i++; count++;
-               }
-               const a0 = spanStart * step + arenaAngle;
-               const a1 = a0 + spanCount * step;
-               ctx.beginPath();
-               ctx.arc(cx, cy, R, a0, a1);
-               ctx.stroke();
-            } else {
-               i++; count++;
-            }
-         }
-      }
-    };
-
-    // Draw wide glow
-    drawSpans(suspense > 0.5 ? 20 : 16, glowColor, 0, 'transparent');
-
-    // Draw main rail
-    drawSpans(8, strokeColor, suspense > 0.5 ? 22 : 14, glowColor);
-
+    // Wall — single clean stroke with soft glow (royal style)
+    ctx.strokeStyle = '#90a58a';
+    ctx.lineWidth   = 5;
+    ctx.shadowColor = '#95b97844';
+    ctx.shadowBlur  = 12;
+    for (const [a0, a1] of closed) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, a0, a1);
+      ctx.stroke();
+    }
     ctx.shadowBlur = 0;
+
+    // Gate breaches — dashed marker outside the wall + endpoint nodes
+    for (const [a0, a1] of gaps) {
+      ctx.strokeStyle = '#f5b766';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([3, 7]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R + 9, a0, a1);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#ffc377';
+      for (const a of [a0, a1]) {
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * R, cy + Math.sin(a) * R, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     ctx.restore();
   }
 
@@ -205,27 +180,33 @@ export class Renderer {
       ctx.translate(p.x, p.y);
       ctx.rotate(angle);
 
-      // Clean standard drop shadow for all flags (removed confusing heavy glow/sparks)
-      ctx.shadowBlur    = 4;
-      ctx.shadowColor   = 'rgba(0, 0, 0, 0.75)';
-      ctx.shadowOffsetX = 1.5;
-      ctx.shadowOffsetY = 1.5;
+      // Soft grounded shadow beneath the flag (depth, royal-style)
+      ctx.save();
+      ctx.shadowBlur    = 6;
+      ctx.shadowColor   = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle     = 'rgba(0, 0, 0, 0.92)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
+      else ctx.rect(-fw / 2, -fh / 2, fw, fh);
+      ctx.fill();
+      ctx.restore();
 
       const img = images[f.country.code];
       if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
         else ctx.rect(-fw / 2, -fh / 2, fw, fh);
-        ctx.save();
         ctx.clip();
-        ctx.drawImage(img, -fw / 2, -fh / 2, fw, fh);
+        this._drawWavingFlag(ctx, img, fw, fh, f);
         ctx.restore();
       } else {
         ctx.fillStyle = this._codeColor(f.country.code);
         ctx.fillRect(-fw / 2, -fh / 2, fw, fh);
-        ctx.shadowBlur   = 0;
         ctx.fillStyle    = '#fff';
-        ctx.font         = 'bold 8px sans-serif';
+        ctx.font         = 'bold 9px sans-serif';
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(f.country.code.slice(0, 2).toUpperCase(), 0, 0);
@@ -271,6 +252,31 @@ export class Renderer {
       if (isTop5) {
         this._drawFlagNameplate(ctx, p.x, p.y, f.country, isTop3);
       }
+    }
+  }
+
+  // Textured flag drawn as soft vertical strips with a gentle flutter,
+  // mimicking the royal project's cloth-mesh flag look (1px overlap hides seams).
+  _drawWavingFlag(ctx, img, fw, fh, f) {
+    const iw = img.naturalWidth  || img.width;
+    const ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+    const S = fw >= 24 ? 6 : 3;
+    const t = this._frame;
+    const seed = (f.country.code.charCodeAt(0) * 0.37) % (Math.PI * 2);
+    const amp = Math.min(1.6, fw * 0.06);
+    for (let i = 0; i < S; i++) {
+      const u0 = i / S, u1 = (i + 1) / S;
+      const wave = Math.sin(t * 0.11 + seed + u0 * 5.0);
+      const dy = wave * amp * u0;
+      const dx = Math.sin(t * 0.09 + seed) * 0.5 * u0;
+      ctx.drawImage(
+        img,
+        u0 * iw, 0, (u1 - u0) * iw, ih,
+        -fw / 2 + u0 * fw + dx,
+        -fh / 2 + dy,
+        (u1 - u0) * fw + 1, fh,
+      );
     }
   }
 
@@ -361,10 +367,10 @@ export class Renderer {
     ctx.translate(x, y - 24);
 
     const name = country.name.toUpperCase();
-    ctx.font = 'bold 9px "Rajdhani", sans-serif';
+    ctx.font = '700 12px "Barlow Condensed", sans-serif';
     const textWidth = ctx.measureText(name).width;
     const badgeW    = textWidth + 14;
-    const badgeH    = 15;
+    const badgeH    = 16;
 
     // Drop shadow
     ctx.shadowBlur    = 6;
@@ -373,8 +379,8 @@ export class Renderer {
     ctx.shadowOffsetY = 2;
 
     // Glassmorphic pill badge
-    ctx.fillStyle = isTop3 ? 'rgba(15, 5, 5, 0.92)' : 'rgba(8, 4, 12, 0.88)';
-    ctx.strokeStyle = isTop3 ? '#ffcc00' : 'rgba(255, 160, 40, 0.85)';
+    ctx.fillStyle = isTop3 ? 'rgba(21, 27, 30, 0.94)' : 'rgba(15, 20, 23, 0.9)';
+    ctx.strokeStyle = isTop3 ? '#e9bc73' : 'rgba(233, 188, 115, 0.8)';
     ctx.lineWidth   = isTop3 ? 1.4 : 1.0;
 
     ctx.beginPath();
@@ -388,7 +394,7 @@ export class Renderer {
     ctx.moveTo(-3, badgeH / 2);
     ctx.lineTo(0, badgeH / 2 + 4);
     ctx.lineTo(3, badgeH / 2);
-    ctx.fillStyle = isTop3 ? '#ffcc00' : 'rgba(255, 160, 40, 0.85)';
+    ctx.fillStyle = isTop3 ? '#e9bc73' : 'rgba(233, 188, 115, 0.8)';
     ctx.fill();
 
     // Name text
@@ -444,9 +450,9 @@ export class Renderer {
       ctx.translate(f.x, f.y);
       ctx.rotate(f.angle);
 
-      // Glowing aura for falling eliminated flags
+      // Glowing aura for falling eliminated flags (scorched by the wire)
       ctx.shadowBlur  = 8;
-      ctx.shadowColor = 'rgba(255, 60, 20, 0.6)';
+      ctx.shadowColor = 'rgba(255, 168, 88, 0.65)';
 
       if (f.img && f.img.complete && f.img.naturalWidth > 0) {
         ctx.drawImage(f.img, -fw / 2, -fh / 2, fw, fh);
@@ -455,7 +461,7 @@ export class Renderer {
         ctx.fillRect(-fw / 2, -fh / 2, fw, fh);
       }
 
-      ctx.strokeStyle = 'rgba(255, 80, 40, 0.7)';
+      ctx.strokeStyle = 'rgba(255, 190, 110, 0.75)';
       ctx.lineWidth   = 0.8;
       ctx.strokeRect(-fw / 2, -fh / 2, fw, fh);
       ctx.restore();
@@ -481,6 +487,25 @@ export class Renderer {
         color: color || `hsl(${Math.random() < 0.6 ? 25 : 45}, 100%, 55%)`,
       });
     }
+
+    // Electric spark streaks — reads as the flag shorting out on the wire wall.
+    const sparkCol = color || 'rgba(255, 232, 180, 1)';
+    const SPARKS = 9;
+    for (let i = 0; i < SPARKS; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 3 + Math.random() * 6;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 1,
+        decay: 0.05 + Math.random() * 0.05,
+        r: 1,
+        len: 6 + Math.random() * 10,
+        spark: true,
+        color: sparkCol,
+      });
+    }
   }
 
   _drawParticles(ctx) {
@@ -496,9 +521,23 @@ export class Renderer {
       ctx.save();
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle   = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
-      ctx.fill();
+
+      if (p.spark) {
+        const d = Math.hypot(p.vx, p.vy) || 1;
+        const ux = p.vx / d, uy = p.vy / d;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth   = 1.8 * p.life;
+        ctx.shadowBlur  = 8;
+        ctx.shadowColor = p.color;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - ux * p.len * p.life, p.y - uy * p.len * p.life);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -509,10 +548,10 @@ export class Renderer {
 
   _drawBorderGlow(ctx, suspense) {
     ctx.save();
-    ctx.strokeStyle = suspense > 0.5 ? 'rgba(255, 40, 40, 0.85)' : 'rgba(175, 12, 12, 0.72)';
+    ctx.strokeStyle = suspense > 0.5 ? 'rgba(239, 140, 103, 0.9)' : 'rgba(233, 188, 115, 0.55)';
     ctx.lineWidth   = 5;
     ctx.shadowBlur  = suspense > 0.5 ? 24 : 16;
-    ctx.shadowColor = suspense > 0.5 ? 'rgba(255, 0, 0, 0.75)' : 'rgba(220, 0, 0, 0.5)';
+    ctx.shadowColor = suspense > 0.5 ? 'rgba(239, 140, 103, 0.8)' : 'rgba(233, 188, 115, 0.45)';
     ctx.strokeRect(2.5, 2.5, this.W - 5, this.H - 5);
     ctx.restore();
   }

@@ -244,30 +244,40 @@ async function ytFetch(path, params) {
 }
 
 async function resolveLiveChatId({ apiKey, liveVideoId, channelId }) {
-  let videoId = liveVideoId;
+  // Try a specific video first (from settings), but if it has ended or its
+  // chat is gone, fall back to the channel's CURRENT live broadcast — this is
+  // what keeps the bot connected across 24/7 stream rotations.
+  const tryVideo = async (vid) => {
+    if (!vid) return null;
+    try {
+      const videos = await ytFetch('videos', { key: apiKey, id: vid, part: 'liveStreamingDetails' });
+      const details = videos.items?.[0]?.liveStreamingDetails;
+      if (details && details.activeLiveChatId) {
+        return { videoId: vid, liveChatId: details.activeLiveChatId, concurrentViewers: details.concurrentViewers };
+      }
+    } catch (err) { /* fall through to channel search */ }
+    return null;
+  };
 
-  if (!videoId && channelId) {
-    const search = await ytFetch('search', {
-      key: apiKey,
-      channelId,
-      eventType: 'live',
-      type: 'video',
-      part: 'id',
-      maxResults: 1,
-    });
-    videoId = search.items?.[0]?.id?.videoId || null;
+  const direct = await tryVideo(liveVideoId);
+  if (direct) return direct;
+
+  if (channelId) {
+    try {
+      const search = await ytFetch('search', {
+        key: apiKey,
+        channelId,
+        eventType: 'live',
+        type: 'video',
+        part: 'id',
+        maxResults: 1,
+      });
+      const found = await tryVideo(search.items?.[0]?.id?.videoId);
+      if (found) return found;
+    } catch (err) { /* no live right now */ }
   }
 
-  if (!videoId) return { videoId: null, liveChatId: null };
-
-  const videos = await ytFetch('videos', {
-    key: apiKey,
-    id: videoId,
-    part: 'liveStreamingDetails',
-  });
-  const liveChatId = videos.items?.[0]?.liveStreamingDetails?.activeLiveChatId || null;
-  const concurrentViewers = videos.items?.[0]?.liveStreamingDetails?.concurrentViewers;
-  return { videoId, liveChatId, concurrentViewers };
+  return { videoId: null, liveChatId: null };
 }
 
 function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = console }) {

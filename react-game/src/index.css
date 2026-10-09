@@ -11,9 +11,9 @@ html, body, #root {
 
 html, body {
   overflow: hidden;
-  font-family: Georgia, 'Iowan Old Style', serif;
-  color: #f0ebd8;
-  background: #0a0f1c;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  color: #edf0e9;
+  background: #0d1114;
   font-size: 24px;
 }
 
@@ -32,13 +32,9 @@ html, body {
     inset: 0;
     z-index: -2;
     background:
-      linear-gradient(90deg, rgba(255,120,60,0.16) 0%, transparent 20%, transparent 80%, rgba(80,160,255,0.16) 100%),
-      radial-gradient(ellipse 60% 42% at 6% 0%, rgba(255,200,140,0.24) 0%, transparent 62%),
-      radial-gradient(ellipse 60% 42% at 94% 0%, rgba(130,190,255,0.24) 0%, transparent 62%),
-      radial-gradient(ellipse 50% 36% at 50% 0%, rgba(255,255,255,0.18) 0%, transparent 60%),
-      radial-gradient(ellipse 55% 40% at 0% 100%, rgba(130,190,255,0.16) 0%, transparent 62%),
-      radial-gradient(ellipse 55% 40% at 100% 100%, rgba(255,150,110,0.16) 0%, transparent 62%),
-      linear-gradient(180deg, #0c1424 0%, #0a0f1c 45%, #060911 100%);
+      radial-gradient(ellipse 90% 55% at 70% 0%, rgba(40, 48, 42, 0.4), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(38, 49, 43, 0.35), transparent 65%),
+      #0d1114;
   }
 
   .stadium-backdrop::after {
@@ -46,22 +42,8 @@ html, body {
     position: fixed;
     inset: 0;
     z-index: -1;
+    background: radial-gradient(ellipse 125% 105% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
     pointer-events: none;
-    background:
-      repeating-linear-gradient(180deg, rgba(255,255,255,0.07) 0 3px, rgba(0,0,0,0.12) 3px 15px),
-      radial-gradient(circle at 12% 8%, rgba(255,255,255,0.5) 0 1px, transparent 1px),
-      radial-gradient(circle at 27% 4%, rgba(255,220,160,0.4) 0 1px, transparent 1px),
-      radial-gradient(circle at 41% 9%, rgba(255,255,255,0.4) 0 1px, transparent 1px),
-      radial-gradient(circle at 63% 5%, rgba(160,210,255,0.4) 0 1px, transparent 1px),
-      radial-gradient(circle at 78% 9%, rgba(255,255,255,0.45) 0 1px, transparent 1px),
-      radial-gradient(circle at 90% 4%, rgba(255,220,160,0.4) 0 1px, transparent 1px),
-      radial-gradient(circle at 18% 93%, rgba(255,255,255,0.35) 0 1px, transparent 1px),
-      radial-gradient(circle at 55% 96%, rgba(160,210,255,0.35) 0 1px, transparent 1px),
-      radial-gradient(circle at 84% 92%, rgba(255,220,160,0.35) 0 1px, transparent 1px),
-      radial-gradient(ellipse 125% 105% at 50% 50%, transparent 48%, rgba(0,0,0,0.62) 100%);
-    background-size: 100% 100%, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px, 100% 100%;
-    -webkit-mask-image: linear-gradient(180deg, black 0%, black 15%, transparent 28%, transparent 72%, black 85%, black 100%);
-    mask-image: linear-gradient(180deg, black 0%, black 15%, transparent 28%, transparent 72%, black 85%, black 100%);
   }
 
   .live-dot {
@@ -120,8 +102,8 @@ html, body {
   justify-content: center;
   gap: 6px;
   padding: 8px 10px;
-  background: rgba(8,4,4,0.95);
-  border-top: 1px solid rgba(180,12,12,0.4);
+  background: rgba(13,17,20,0.95);
+  border-top: 1px solid var(--border);
   width: 100%;
   max-width: 540px;
 }
@@ -141,8 +123,8 @@ body.recording-active #controls-panel {
   font-size: 10px;
   letter-spacing: 1px;
   padding: 7px 12px;
-  background: rgba(30,10,10,0.9);
-  border: 1px solid rgba(200,20,20,0.5);
+  background: rgba(21,27,30,0.9);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   cursor: pointer;
@@ -151,8 +133,8 @@ body.recording-active #controls-panel {
 }
 
 .ctrl-btn:hover:not(:disabled) {
-  background: rgba(180,15,15,0.75);
-  box-shadow: 0 0 10px rgba(200,20,20,0.4);
+  background: rgba(239,140,103,0.22);
+  box-shadow: 0 0 10px var(--red-glow);
 }
 
 .ctrl-btn:active:not(:disabled) { transform: scale(0.96); }
@@ -163,20 +145,20 @@ body.recording-active #controls-panel {
 }
 
 .ctrl-btn.primary {
-  background: rgba(160,15,15,0.85);
+  background: rgba(239,140,103,0.85);
   border-color: var(--red);
-  color: #fff;
-  box-shadow: 0 0 12px rgba(200,10,10,0.35);
+  color: #1a0f09;
+  box-shadow: 0 0 12px var(--red-glow);
 }
 
 .ctrl-btn.primary:hover {
-  background: rgba(200,15,15,0.95);
-  box-shadow: 0 0 20px rgba(220,10,10,0.55);
+  background: rgba(239,140,103,0.98);
+  box-shadow: 0 0 20px var(--red-glow);
 }
 
 .ctrl-btn.record {
-  background: rgba(180,10,10,0.8);
-  border-color: #e00;
+  background: rgba(200,70,60,0.85);
+  border-color: #e05548;
   animation: recPulse 2.2s ease infinite;
 }
 
@@ -250,7 +232,7 @@ body.recording-active #controls-panel {
   right: -380px;
   width: 360px;
   height: 100vh;
-  background: rgba(8,3,3,0.97);
+  background: rgba(13,17,20,0.97);
   border-left: 1px solid var(--border);
   box-shadow: -6px 0 30px rgba(0,0,0,0.7);
   z-index: 200;
@@ -267,7 +249,7 @@ body.recording-active #controls-panel {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  background: rgba(4,1,1,0.95);
+  background: rgba(11,15,18,0.95);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -284,15 +266,15 @@ body.recording-active #controls-panel {
   font-size: 10px;
   letter-spacing: 1px;
   padding: 7px 14px;
-  background: rgba(140,15,15,0.8);
+  background: rgba(239,140,103,0.85);
   border: 1px solid var(--red);
   border-radius: var(--radius);
-  color: #fff;
+  color: #1a0f09;
   cursor: pointer;
   transition: background 0.2s;
 }
 
-#settings-close:hover { background: rgba(200,15,15,0.95); }
+#settings-close:hover { background: rgba(239,140,103,0.98); }
 
 .sp-body {
   flex: 1;
@@ -341,8 +323,8 @@ body.recording-active #controls-panel {
 .sg input[type="number"],
 .sg select {
   width: 100%;
-  background: rgba(20,8,8,0.9);
-  border: 1px solid rgba(200,20,20,0.4);
+  background: rgba(13,17,20,0.9);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   padding: 7px 10px;
@@ -355,7 +337,7 @@ body.recording-active #controls-panel {
 .sg input:focus,
 .sg select:focus {
   border-color: var(--red);
-  box-shadow: 0 0 8px rgba(200,20,20,0.25);
+  box-shadow: 0 0 8px var(--red-glow);
 }
 
 .sg input[type="range"] {
