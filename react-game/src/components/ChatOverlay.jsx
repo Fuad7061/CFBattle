@@ -39,6 +39,10 @@ export default function ChatOverlay({ messages, commentVotes = {}, targetVotes =
         )}
         {messages.map((m, index) => {
           const isSuper = Boolean(m.superChat);
+          const author = (m.author || '').trim();
+          const text = (m.text || '').trim();
+          // Ignore empty/system ticks — never render a bare ": " row.
+          if (!author && !text) return null;
           const hiddenOnMobile = index < messages.length - 1 ? 'hidden md:block ' : '';
           return (
             <div
@@ -59,10 +63,12 @@ export default function ChatOverlay({ messages, commentVotes = {}, targetVotes =
                 </div>
               )}
               <div className="flex items-baseline flex-wrap gap-1">
-                <span className={isSuper ? 'text-pink-300 font-bold' : 'text-amber-300 font-bold'}>
-                  {m.author}:
-                </span>
-                <span className="text-gray-200/90 break-words">{m.text}</span>
+                {author && (
+                  <span className={isSuper ? 'text-pink-300 font-bold' : 'text-amber-300 font-bold'}>
+                    {author}:
+                  </span>
+                )}
+                {text && <span className="text-gray-200/90 break-words">{text}</span>}
               </div>
               {m.vote && (() => {
                 const upperCode = (m.vote.code || '').toUpperCase();
@@ -88,9 +94,9 @@ export default function ChatOverlay({ messages, commentVotes = {}, targetVotes =
                 return (
                   <div className="mt-1">
                     <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[8px] font-extrabold tracking-wider px-1.5 py-0.5 rounded shadow-[0_2px_6px_rgba(16,185,129,0.3)] border border-emerald-400/30">
-                      <span>🛡️ STEER:</span>
+                      <span>↩️ SAVE:</span>
                       <span>{m.vote.countryName}</span>
-                      <span className="text-emerald-100/90 font-normal">(Steered toward center)</span>
+                      <span className="text-emerald-100/90 font-normal">(Reversed &amp; slowed)</span>
                       {m.vote.weight > 1 && <span className="text-yellow-300">×{m.vote.weight}</span>}
                     </span>
                   </div>

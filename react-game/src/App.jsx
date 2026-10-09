@@ -73,7 +73,14 @@ export default function App() {
       if (msg.type === 'POWER' && engineRef.current?.applyPower) {
         engineRef.current.applyPower({ ...msg.power, ...msg, author: msg.author });
       }
-      setChatMessages((prev) => [...prev.slice(-49), msg]);
+      // Only real YouTube chat belongs in the chat feed — never the synthetic
+      // POWER / VIEWER_COUNT control frames (they have no author/text and
+      // would render as empty ": " rows).
+      const isChatMessage = msg.type !== 'POWER' && msg.type !== 'VIEWER_COUNT' &&
+        (msg.author != null || msg.text != null);
+      if (isChatMessage) {
+        setChatMessages((prev) => [...prev.slice(-49), msg]);
+      }
       if (msg.vote) {
         controls.instantPush(msg.vote.code, msg.vote.weight || 1, msg.author, Boolean(msg.vote.superChat));
       }
