@@ -41,7 +41,7 @@ export function useYoutubeChat({ onMessage, onVoteTally, onTopSupporters } = {})
         return;
       }
       
-      if (msg.type === 'SETTINGS_UPDATE' || msg.type === 'SETTINGS') {
+      if (msg.type === 'SETTINGS_UPDATE' || msg.type === 'SETTINGS' || msg.type === 'VIEWER_COUNT') {
           if (onMessageRef.current) onMessageRef.current(msg);
           return;
       }
