@@ -70,9 +70,8 @@ export default function App() {
       if (msg.type === 'VIEWER_COUNT') {
         // forward if engine/UI cares
       }
-      if (msg.type === 'POWER') {
-        // Feed to landscape engine if it has a handler; engine has applyVoteBoost already,
-        // but this is a placeholder for parity (revive/shield/freeze/quake/nuke can be wired later).
+      if (msg.type === 'POWER' && engineRef.current?.applyPower) {
+        engineRef.current.applyPower({ ...msg.power, ...msg, author: msg.author });
       }
       setChatMessages((prev) => [...prev.slice(-49), msg]);
       if (msg.vote) {

@@ -229,6 +229,82 @@ export class FlagBattleEngine extends EventEmitter {
     this._voteBoosts.set(upper, { factor: boostFactor, until });
   }
 
+  // Hybrid Super Chat powers (parity with vertical engine). For Phase 2 we
+  // implement 'revive' fully and add no-ops/scaffolds for others so both
+  // engines accept the same POWER stream.
+  applyPower(power = {}) {
+    const p = (power.power || '').toLowerCase();
+    if (!p) return;
+    const code = power.code;
+    if (p === 'revive' && code) {
+      const targetCode = this._resolveCountryCode(code);
+      if (!targetCode) return;
+      const isElim = this.eliminatedList.some(e => (e.code || '').toUpperCase() === targetCode);
+      if (!isElim) {
+        const flag = this.flags.find(f => (f.code || '').toUpperCase() === targetCode);
+        if (flag && !flag.alive) {
+          flag.alive = true;
+          flag.x = this.CENTER.x + (Math.random() * 30 - 15);
+          flag.y = this.CENTER.y + (Math.random() * 30 - 15);
+          const rndA = Math.random() * Math.PI * 2;
+          flag.vx = Math.cos(rndA) * 1.2;
+          flag.vy = Math.sin(rndA) * 1.2;
+          flag.flashUntil = Date.now() + 4500;
+          flag.immunityUntil = Date.now() + 4500;
+          this._emitHud();
+        }
+        return;
+      }
+      // revive from eliminatedList
+      const elimEntry = this.eliminatedList.find(e => (e.code || '').toUpperCase() === targetCode);
+      let flag = this.flags.find(f => (f.code || '').toUpperCase() === targetCode);
+      if (!flag) {
+        flag = {
+          code: targetCode,
+          country: { code: targetCode, name: this.countryNames[targetCode] || elimEntry?.name || targetCode },
+          x: this.CENTER.x,
+          y: this.CENTER.y,
+          r: this.FLAG_R,
+          vx: 0,
+          vy: 0,
+          alive: false,
+        };
+        this.flags.push(flag);
+      }
+      flag.alive = true;
+      flag.x = this.CENTER.x + (Math.random() * 30 - 15);
+      flag.y = this.CENTER.y + (Math.random() * 30 - 15);
+      const rndA = Math.random() * Math.PI * 2;
+      flag.vx = Math.cos(rndA) * 1.2;
+      flag.vy = Math.sin(rndA) * 1.2;
+      flag.flashUntil = Date.now() + 4500;
+      flag.immunityUntil = Date.now() + 4500;
+      this.eliminatedList = this.eliminatedList.filter(e => (e.code || '').toUpperCase() !== targetCode);
+      this.emit('eliminated', this.eliminatedList.slice());
+      this._emitHud();
+      return;
+    }
+    // Other powers: scaffold (shield/freeze/quake/slow/nuke/boost) — can extend per user needs
+  }
+
+  _resolveCountryCode(input) {
+    if (!input) return null;
+    const searchToken = String(input).trim().toUpperCase();
+    const ALIASES = {
+      'USA': 'US','AMERICA':'US','UNITED STATES':'US','UNITED STATES OF AMERICA':'US',
+      'UK':'GB','BRITAIN':'GB','ENGLAND':'GB','UAE':'AE','EMIRATES':'AE',
+      'KOREA':'KR','SOUTH KOREA':'KR','RUSSIA':'RU'
+    };
+    let targetCode = ALIASES[searchToken] || searchToken;
+    const found = this.countries.find(c =>
+      c.code.toUpperCase() === targetCode ||
+      c.name.toUpperCase() === searchToken ||
+      c.name.toUpperCase() === targetCode
+    );
+    if (found) targetCode = found.code.toUpperCase();
+    return targetCode;
+  }
+
   instantPush(countryCode, weight = 1, author = '') {
     if (!countryCode) return;
     const searchToken = countryCode.trim().toUpperCase();
