@@ -16,13 +16,27 @@ const MAX_MESSAGES = 200;
 // engine itself never depends on this connection existing.
 export function useYoutubeChat({ onMessage, onVoteTally, onTopSupporters } = {}) {
   const tallyRef = useRef({});
-  const supportersRef = useRef({});
+  const supportersRef = useRef((() => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const cached = localStorage.getItem('fb_top_supporters_map');
+        if (cached) return JSON.parse(cached) || {};
+      }
+    } catch (e) {}
+    return {};
+  })());
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
   const onVoteTallyRef = useRef(onVoteTally);
   onVoteTallyRef.current = onVoteTally;
   const onTopSupportersRef = useRef(onTopSupporters);
   onTopSupportersRef.current = onTopSupporters;
+
+  useEffect(() => {
+    if (Object.keys(supportersRef.current).length > 0) {
+      onTopSupportersRef.current?.(supportersRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     let es;
@@ -62,6 +76,11 @@ export function useYoutubeChat({ onMessage, onVoteTally, onTopSupporters } = {})
             const supporters = { ...supportersRef.current };
             supporters[msg.author] = (supporters[msg.author] || 0) + weight;
             supportersRef.current = supporters;
+            try {
+              if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('fb_top_supporters_map', JSON.stringify(supporters));
+              }
+            } catch (e) {}
             onTopSupportersRef.current?.(supporters);
         }
       }

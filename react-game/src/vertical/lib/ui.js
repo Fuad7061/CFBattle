@@ -17,8 +17,17 @@ export class UIManager {
     this._engageIndex    = 0;
     this._nextTournamentTimer = null;
 
-    // Fake supporters pool
+    // Top supporters pool (persisted across rounds/gameplay)
     this._supporters = [];
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const cached = localStorage.getItem('fb_top_supporters_vertical');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) this._supporters = parsed;
+        }
+      }
+    } catch (e) {}
   }
 
   /* ------------------------------------------------------------------ */
@@ -75,7 +84,7 @@ export class UIManager {
   /* ------------------------------------------------------------------ */
 
   startSupporters() {
-    this._supporters = [];
+    // Keep top supporters across rounds/gameplay - do not clear
     this._updateSupportersUI();
   }
 
@@ -95,6 +104,11 @@ export class UIManager {
     }
     this._supporters.sort((a, b) => b.gifts - a.gifts);
     this._supporters = this._supporters.slice(0, 20);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('fb_top_supporters_vertical', JSON.stringify(this._supporters));
+      }
+    } catch (e) {}
     this._updateSupportersUI();
   }
 
@@ -115,7 +129,8 @@ export class UIManager {
   }
 
   resetSupporters() {
-    this._supporters = [];
+    // User requested that Top Supporters should not be erased for each new round or gameplay.
+    // Preserving supporters list across resets.
     this._updateSupportersUI();
   }
 
