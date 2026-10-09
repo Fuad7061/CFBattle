@@ -128,6 +128,13 @@ export function parseCommand(text) {
       if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
     }
   }
+
+  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote too, but
+  // only when it is the ENTIRE comment (so "this is..." doesn't vote Iceland).
+  if (words.length === 1) {
+    const code = NAME_TO_CODE.get(words[0]);
+    if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
+  }
   return null;
 }
 

@@ -182,6 +182,14 @@ function parseCommand(text) {
       if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
     }
   }
+
+  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote too. We
+  // only accept it when it is the ENTIRE comment, so codes don't accidentally
+  // match words buried inside sentences ("this is..." must not vote Iceland).
+  if (words.length === 1) {
+    const code = NAME_TO_CODE.get(words[0]);
+    if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
+  }
   return null;
 }
 
