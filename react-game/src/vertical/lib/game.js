@@ -314,8 +314,11 @@ export class FlagBattle {
       this.reviveVotes[code] = (this.reviveVotes[code] || 0) + (vote.weight || 1);
       
       const targetVotes = this.cfg?.reviveVotes || (typeof window !== 'undefined' && window.__liveSettings?.reviveVotes ? window.__liveSettings.reviveVotes : 4);
-      
-      if (this.reviveVotes[code] >= targetVotes) {
+      // Any Super Chat that names an eliminated country revives it instantly;
+      // regular comments need to reach the vote threshold (default 4).
+      const isSuper = Boolean(vote.superChat);
+
+      if (isSuper || this.reviveVotes[code] >= targetVotes) {
         this.reviveVotes[code] = 0;
         
         flag.eliminated = false;

@@ -365,7 +365,7 @@ export class FlagBattleEngine extends EventEmitter {
     return targetCode;
   }
 
-  instantPush(countryCode, weight = 1, author = '') {
+  instantPush(countryCode, weight = 1, author = '', superChat = false) {
     if (!countryCode) return;
     const searchToken = countryCode.trim().toUpperCase();
     
@@ -407,7 +407,7 @@ export class FlagBattleEngine extends EventEmitter {
       const currentVotes = this.commentVotes[targetCode];
       this.emit('commentVotes', { ...this.commentVotes });
       
-      if (currentVotes >= targetVotes) {
+      if (superChat || currentVotes >= targetVotes) {
         // Flag earned enough comments to be revived!
         delete this.commentVotes[targetCode];
         this.emit('commentVotes', { ...this.commentVotes });

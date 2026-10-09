@@ -75,7 +75,7 @@ export default function App() {
       }
       setChatMessages((prev) => [...prev.slice(-49), msg]);
       if (msg.vote) {
-        controls.instantPush(msg.vote.code, msg.vote.weight || 1, msg.author);
+        controls.instantPush(msg.vote.code, msg.vote.weight || 1, msg.author, Boolean(msg.vote.superChat));
       }
     },
     onVoteTally: handleVoteTally,
