@@ -5,6 +5,7 @@ const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const { EventEmitter } = require('events');
 const { startYoutubeChatPolling } = require('./youtubeChat.js');
+const { StreamScheduler } = require('./streamScheduler.js');
 
 const app = express();
 app.use(express.json());
@@ -122,7 +123,7 @@ app.get('/api/status', checkAuth, (req, res) => {
             progress = null; // Reset
         }
     }
-    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings });
+    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState() });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
@@ -168,13 +169,17 @@ app.post('/api/logs/clear', checkAuth, (req, res) => {
     }
 });
 
-app.post('/api/start-stream', checkAuth, async (req, res) => {
+/**
+ * Boot the game in Chrome and push it to the RTMP endpoint.
+ * Extracted from the /api/start-stream route so the scheduler can start a run
+ * on a timer through exactly the same path a manual click uses.
+ */
+async function beginStream() {
     if (isStreaming || isRecording) {
-        return res.status(400).json({ error: 'Engine is already running (Stop it first)' });
+        return { ok: false, error: 'Engine is already running (Stop it first)' };
     }
-    
     if (!currentSettings.streamUrl || !currentSettings.streamKey) {
-        return res.status(400).json({ error: 'Stream URL and Secret Key are required. Please set them in the Settings tab.' });
+        return { ok: false, error: 'Stream URL and Secret Key are required. Please set them in the Stream Config tab.' };
     }
 
     try {
@@ -353,40 +358,61 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 browser.close();
                 browser = null;
             }
+            // Tell the scheduler the run ended on its own so it does not later
+            // try to "stop" something that is already gone.
+            if (scheduler) {
+                scheduler.handleStreamStopped('Stream ended unexpectedly (FFmpeg exited).');
+            }
         });
 
-        res.json({ success: true, message: 'Stream started successfully' });
+        return { ok: true, message: 'Stream started successfully' };
 
     } catch (error) {
         logMsg(`Failed to start stream: ${error.message}`, true);
         isStreaming = false;
-        if (browser) browser.close();
-        res.status(500).json({ error: error.message });
+        if (browser) { browser.close(); browser = null; }
+        return { ok: false, error: error.message };
     }
+}
+
+app.post('/api/start-stream', checkAuth, async (req, res) => {
+    const result = await beginStream();
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ success: true, message: result.message });
 });
 
-app.post('/api/stop-stream', checkAuth, async (req, res) => {
+/**
+ * Tear the engine down. Shared by the stop route and the scheduler's auto-stop
+ * so a scheduled end is indistinguishable from a manual one.
+ */
+async function endStream(reason = 'user request') {
     if (!isStreaming && !isRecording) {
-        return res.status(400).json({ error: 'Engine is not running' });
+        return { ok: false, error: 'Engine is not running' };
     }
-    
-    logMsg("Stopping engine by user request...");
+
+    logMsg(`Stopping engine (${reason})...`);
     isStreaming = false;
     isRecording = false;
     recordingProgress = null;
-    
+
     if (streamProcess) {
-        streamProcess.kill('SIGINT');
+        try { streamProcess.kill('SIGINT'); } catch (e) { /* already gone */ }
         streamProcess = null;
     }
-    
+
     if (browser) {
-        await browser.close();
+        try { await browser.close(); } catch (e) { /* already closed */ }
         browser = null;
     }
     currentPage = null;
-    
-    res.json({ success: true, message: 'Stream stopped' });
+
+    return { ok: true, message: 'Stream stopped' };
+}
+
+app.post('/api/stop-stream', checkAuth, async (req, res) => {
+    const result = await endStream('user request');
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ success: true, message: result.message });
 });
 
 // Recording Feature
@@ -848,9 +874,53 @@ function restartYoutubeChat(settings) {
 }
 
 // --------------------------------
+// Stream scheduler
+// --------------------------------
+
+const SCHEDULE_FILE = path.join(DATA_DIR, 'schedule.json');
+
+const scheduler = new StreamScheduler({
+    filePath: SCHEDULE_FILE,
+    tickMs: 15000,
+    isStreaming: () => isStreaming || isRecording,
+    onStart: (reason) => beginStream(),
+    onStop: (reason) => endStream(reason),
+    onLog: (msg, isError) => logMsg(msg, isError)
+});
+scheduler.load();
+
+app.get('/api/schedule', checkAuth, (req, res) => {
+    res.json(scheduler.getState());
+});
+
+// Create or replace the schedule. Does not start anything by itself.
+app.post('/api/schedule', checkAuth, (req, res) => {
+    const result = scheduler.set(req.body || {});
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ success: true, state: scheduler.getState() });
+});
+
+// "Go live now, auto-stop after N minutes" - starts immediately and arms the
+// stop timer, so the operator never has to come back and press stop.
+app.post('/api/schedule/start-now', checkAuth, async (req, res) => {
+    const result = await scheduler.startNow(req.body?.durationMinutes);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ success: true, state: scheduler.getState() });
+});
+
+// Turn the schedule off. Deliberately leaves a running stream alone.
+app.post('/api/schedule/clear', checkAuth, (req, res) => {
+    scheduler.clear();
+    res.json({ success: true, state: scheduler.getState() });
+});
+
+// --------------------------------
 
 app.listen(PORT, () => {
     logMsg(`Server booted. Listening on port ${PORT}`);
     const settings = fs.existsSync(SETTINGS_FILE) ? JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) : {};
     restartYoutubeChat(settings);
+    // Start the scheduler tick loop (recovers the persisted schedule on boot).
+    scheduler.start();
+    logMsg(`Scheduler: ${scheduler.describe()}`);
 });

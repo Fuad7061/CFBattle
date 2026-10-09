@@ -87,6 +87,25 @@
         .status-badge.is-live { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
         .is-live .status-dot { box-shadow: 0 0 10px currentColor; animation: pulse 2s infinite; }
+
+        /* --- SCHEDULE TAB --- */
+        .day-chip {
+            padding: 6px 12px; font-size: 12px; font-weight: 600;
+            border-radius: 999px; cursor: pointer;
+            background: rgba(0,0,0,0.3); color: var(--text-muted);
+            border: 1px solid var(--border); transition: all 0.15s;
+        }
+        .day-chip:hover { border-color: var(--primary); color: var(--text); }
+        .day-chip.active {
+            background: rgba(56, 189, 248, 0.18); color: #7dd3fc;
+            border-color: rgba(56, 189, 248, 0.6);
+        }
+        select {
+            width: 100%; padding: 8px 12px; font-size: 13px;
+            background: rgba(0,0,0,0.3); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px;
+        }
+        select option { background: #0f1418; color: #fff; }
         @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -415,6 +434,7 @@
                 <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview & Controls</button>
                 <button class="tab-btn" onclick="openSettingsModal()">⚙️ Match Settings</button>
                 <button class="tab-btn" onclick="switchTab('tab-stream')">📡 Stream Config</button>
+                <button class="tab-btn" onclick="switchTab('tab-schedule')">⏰ Stream Schedule</button>
                 <button class="tab-btn" onclick="switchTab('tab-records')">🎥 Saved Recordings</button>
                 <button class="tab-btn" onclick="switchTab('tab-logs')">📋 System Logs</button>
 
@@ -576,6 +596,115 @@
                                 <input type="number" id="set-crop-y" value="0">
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- TAB: STREAM SCHEDULE -->
+                <div id="tab-schedule" class="tab-pane">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Live Status</h2>
+                        </div>
+                        <div id="sched-status" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px; border-radius:8px; background:rgba(0,0,0,0.25); border:1px solid var(--border);">
+                            <span id="sched-status-badge" class="status-badge" style="margin:0;">
+                                <div class="status-dot"></div>
+                                <span id="sched-status-text">OFFLINE</span>
+                            </span>
+                            <span id="sched-status-detail" style="font-size:13px; color:var(--text-muted);">No schedule set.</span>
+                        </div>
+                        <div id="sched-last-result" style="margin-top:10px; font-size:12px; color:var(--text-muted); display:none;"></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Go Live Now</h2>
+                        </div>
+                        <p class="panel-desc">Start streaming immediately and stop automatically after the duration you pick. Great for a fixed block with no babysitting.</p>
+                        <div class="form-group" style="max-width: 420px;">
+                            <label>Run for (minutes)</label>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                                <button class="btn" onclick="setNowDuration(30)">30m</button>
+                                <button class="btn" onclick="setNowDuration(60)">1h</button>
+                                <button class="btn" onclick="setNowDuration(120)">2h</button>
+                                <button class="btn" onclick="setNowDuration(180)">3h</button>
+                                <button class="btn" onclick="setNowDuration(300)">5h</button>
+                                <button class="btn" onclick="setNowDuration(480)">8h</button>
+                            </div>
+                            <input type="number" id="now-duration" value="60" min="1" max="10080" step="1">
+                        </div>
+                        <button class="btn btn-danger" onclick="goLiveNow()" style="height:40px; padding:0 18px; font-weight:600;">🔴 Go Live Now &amp; Auto-Stop</button>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:8px;" id="now-hint">Starts the engine right away, then stops it when the timer expires.</div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Schedule a Broadcast</h2>
+                        </div>
+                        <p class="panel-desc">Pick when the stream should start and how long it should run. Times are interpreted in this server's local timezone (<span id="sched-tz">—</span>).</p>
+
+                        <div class="form-group" style="max-width: 420px;">
+                            <label>Start date &amp; time</label>
+                            <input type="datetime-local" id="sched-start">
+                        </div>
+
+                        <div class="form-group" style="max-width: 420px;">
+                            <label>Run for (minutes)</label>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                                <button class="btn" onclick="setSchedDuration(60)">1h</button>
+                                <button class="btn" onclick="setSchedDuration(120)">2h</button>
+                                <button class="btn" onclick="setSchedDuration(180)">3h</button>
+                                <button class="btn" onclick="setSchedDuration(240)">4h</button>
+                                <button class="btn" onclick="setSchedDuration(360)">6h</button>
+                            </div>
+                            <input type="number" id="sched-duration" value="120" min="1" max="10080" step="1">
+                        </div>
+
+                        <div class="form-group" style="max-width: 420px;">
+                            <label>Repeat</label>
+                            <select id="sched-repeat" onchange="updateRepeatDaysVisibility()">
+                                <option value="none">One-off (run once)</option>
+                                <option value="daily">Every day</option>
+                                <option value="weekly">Weekly (pick days)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="sched-days-wrap" style="max-width: 520px; display:none;">
+                            <label>Repeat on these days</label>
+                            <div id="sched-days" style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="day-chip" data-day="1" onclick="toggleDay(1, this)">Mon</button>
+                                <button type="button" class="day-chip" data-day="2" onclick="toggleDay(2, this)">Tue</button>
+                                <button type="button" class="day-chip" data-day="3" onclick="toggleDay(3, this)">Wed</button>
+                                <button type="button" class="day-chip" data-day="4" onclick="toggleDay(4, this)">Thu</button>
+                                <button type="button" class="day-chip" data-day="5" onclick="toggleDay(5, this)">Fri</button>
+                                <button type="button" class="day-chip" data-day="6" onclick="toggleDay(6, this)">Sat</button>
+                                <button type="button" class="day-chip" data-day="0" onclick="toggleDay(0, this)">Sun</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="max-width: 420px;">
+                            <label>Late-start grace (minutes)</label>
+                            <input type="number" id="sched-grace" value="5" min="0" max="120" step="1">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">If the server was asleep or restarting at the start time, it will still go live within this window. Slots missed by more than this are skipped rather than back-filled.</div>
+                        </div>
+
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                            <button class="btn btn-success" onclick="saveSchedule()" style="height:40px; padding:0 18px; font-weight:600;">💾 Save Schedule</button>
+                            <button class="btn btn-danger" onclick="clearSchedule()" style="height:40px; padding:0 18px; font-weight:600;">✕ Cancel Schedule</button>
+                        </div>
+                        <div id="sched-summary" style="margin-top:12px; font-size:12px; color:var(--text-muted);"></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>How the auto-start works</h2>
+                        </div>
+                        <ul style="font-size:12.5px; color:var(--text-muted); line-height:1.7; padding-left:18px; margin:0;">
+                            <li>The schedule controls <strong>when this server pushes to your RTMP key</strong>. You still create the broadcast in YouTube Studio and paste its Stream URL + Key in the Stream Config tab.</li>
+                            <li>Stopping the push ends the broadcast on YouTube (auto-stop). To broadcast again later you need a <strong>fresh stream key</strong> from a new broadcast.</li>
+                            <li>A run that is already streaming when the schedule starts is adopted, so its end time still applies.</li>
+                            <li>Clearing a schedule never stops a stream that is currently live — stop it explicitly if you want it gone.</li>
+                            <li>If the server restarts mid-broadcast, that run is marked interrupted and the schedule rolls forward to the next slot.</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -844,11 +973,13 @@
             const isLive = data.isStreaming || data.isRecording;
             document.getElementById('btn-start').style.display = isLive ? 'none' : 'flex';
             document.getElementById('btn-stop').style.display = isLive ? 'flex' : 'none';
-            
+
             const badge = document.getElementById('status-badge');
             const txt = document.getElementById('status-text');
             const btnRecord = document.getElementById('btn-record');
-            
+            const sched = data.schedule || null;
+            const schedActive = sched && sched.status === 'scheduled';
+
             if (data.isStreaming) {
                 badge.classList.add('is-live');
                 txt.textContent = 'STREAMING LIVE';
@@ -860,6 +991,13 @@
                 txt.textContent = `RECORDING OFFLINE (${data.progress || 0}%)`;
                 btnRecord.disabled = true;
                 btnRecord.innerHTML = `⏳ Recording in progress... ${data.progress || 0}%`;
+            } else if (schedActive) {
+                // Nothing running yet, but the scheduler owns the next slot.
+                badge.classList.remove('is-live');
+                badge.style.color = '#38bdf8'; badge.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+                txt.textContent = `SCHEDULED · ${fmtCountdown(sched.nextRunInMs)}`;
+                btnRecord.disabled = false;
+                btnRecord.innerHTML = '⏺ Record Gameplay Offline';
             } else {
                 badge.classList.remove('is-live');
                 badge.style.color = ''; badge.style.borderColor = '';
@@ -867,6 +1005,227 @@
                 btnRecord.disabled = false;
                 btnRecord.innerHTML = '⏺ Record Gameplay Offline';
             }
+
+            if (sched) applyScheduleState(sched);
+        }
+
+        // ---------------------------------------------- Stream schedule UI
+
+        let lastScheduleState = null;
+
+        function fmtCountdown(ms) {
+            if (ms == null) return '—';
+            const neg = ms < 0;
+            let s = Math.floor(Math.abs(ms) / 1000);
+            const d = Math.floor(s / 86400); s -= d * 86400;
+            const h = Math.floor(s / 3600); s -= h * 3600;
+            const m = Math.floor(s / 60); s -= m * 60;
+            let out;
+            if (d > 0) out = `${d}d ${h}h`;
+            else if (h > 0) out = `${h}h ${m}m`;
+            else out = `${m}m ${String(s).padStart(2, '0')}s`;
+            return neg ? `${out} ago` : out;
+        }
+
+        // Render the live-status card + reflect the saved config back into the
+        // form so a reload shows exactly what the server has stored.
+        function applyScheduleState(sched) {
+            lastScheduleState = sched;
+            const badge = document.getElementById('sched-status-badge');
+            const text = document.getElementById('sched-status-text');
+            const detail = document.getElementById('sched-status-detail');
+            const lastResult = document.getElementById('sched-last-result');
+            if (!badge || !text || !detail) return;
+
+            const c = sched.config || {};
+
+            const tzEl = document.getElementById('sched-tz');
+            if (tzEl && sched.serverTime) {
+                tzEl.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'server local';
+            }
+
+            badge.classList.remove('is-live');
+            badge.style.color = ''; badge.style.borderColor = '';
+
+            if (sched.status === 'live') {
+                badge.classList.add('is-live');
+                text.textContent = 'LIVE (AUTO-STOP)';
+                detail.textContent = `Streaming now · stops in ${fmtCountdown(sched.remainingMs)}`;
+            } else if (sched.status === 'running') {
+                badge.classList.add('is-live');
+                text.textContent = 'LIVE (MANUAL)';
+                detail.textContent = 'Streaming, started by hand. Clearing a schedule will not stop it.';
+            } else if (sched.status === 'scheduled') {
+                badge.style.color = '#38bdf8'; badge.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+                text.textContent = 'SCHEDULED';
+                detail.textContent = `Next go-live in ${fmtCountdown(sched.nextRunInMs)} · ${describeSchedule(sched.config)}`;
+            } else {
+                text.textContent = 'OFFLINE';
+                detail.textContent = sched.config && sched.config.enabled
+                    ? 'Schedule is set but has no upcoming slot.'
+                    : 'No schedule set.';
+            }
+
+            if (sched.lastResult) {
+                lastResult.style.display = 'block';
+                lastResult.textContent = 'Last result: ' + sched.lastResult;
+            } else {
+                lastResult.style.display = 'none';
+            }
+
+            const sum = document.getElementById('sched-summary');
+            if (sum) {
+                sum.textContent = (c.enabled && c.mode !== 'now')
+                    ? 'Saved: ' + describeSchedule(c)
+                    : '';
+            }
+
+            // Only overwrite the form fields while the operator is not typing in
+            // them - otherwise a background status poll would wipe a half-filled
+            // start time.
+            const editing = document.activeElement && document.activeElement.closest('#tab-schedule');
+            if (!editing) {
+                const dur = document.getElementById('sched-duration');
+                if (dur && c.durationMinutes) dur.value = c.durationMinutes;
+                const rep = document.getElementById('sched-repeat');
+                if (rep && c.repeat) rep.value = c.repeat;
+                const grace = document.getElementById('sched-grace');
+                if (grace && c.graceMinutes != null) grace.value = c.graceMinutes;
+                const start = document.getElementById('sched-start');
+                if (start && c.startAt && c.mode !== 'now') {
+                    start.value = toLocalInputValue(new Date(c.startAt));
+                }
+                const days = Array.isArray(c.repeatDays) ? c.repeatDays : [];
+                document.querySelectorAll('#sched-days .day-chip').forEach(chip => {
+                    chip.classList.toggle('active', days.includes(Number(chip.dataset.day)));
+                });
+                updateRepeatDaysVisibility();
+            }
+        }
+
+        function describeSchedule(c) {
+            if (!c || !c.enabled) return 'no schedule';
+            const dur = fmtDurationWords(c.durationMinutes);
+            if (c.mode === 'now') return `live now, auto-stop after ${dur}`;
+            const when = c.startAt ? new Date(c.startAt).toLocaleString() : '?';
+            if (c.repeat === 'daily') return `every day at ${when}, for ${dur}`;
+            if (c.repeat === 'weekly') {
+                const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const picked = (c.repeatDays || []).map(d => names[d]).join(', ');
+                return `weekly on ${picked || 'no days'} at ${when}, for ${dur}`;
+            }
+            return `once at ${when}, for ${dur}`;
+        }
+
+        function fmtDurationWords(mins) {
+            const m = Number(mins) || 0;
+            if (m < 60) return `${m} min`;
+            const h = Math.floor(m / 60), r = m % 60;
+            return r ? `${h}h ${r}m` : `${h}h`;
+        }
+
+        // datetime-local needs "YYYY-MM-DDTHH:mm" in *local* time.
+        function toLocalInputValue(d) {
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+
+        function updateRepeatDaysVisibility() {
+            const rep = document.getElementById('sched-repeat');
+            const wrap = document.getElementById('sched-days-wrap');
+            if (rep && wrap) wrap.style.display = rep.value === 'weekly' ? 'block' : 'none';
+        }
+
+        function toggleDay(day, el) { el.classList.toggle('active'); }
+
+        function selectedDays() {
+            return [...document.querySelectorAll('#sched-days .day-chip.active')].map(c => Number(c.dataset.day));
+        }
+
+        function setNowDuration(mins) {
+            const el = document.getElementById('now-duration');
+            if (el) el.value = mins;
+        }
+
+        function setSchedDuration(mins) {
+            const el = document.getElementById('sched-duration');
+            if (el) el.value = mins;
+        }
+
+        async function goLiveNow() {
+            const dur = Number(document.getElementById('now-duration').value);
+            if (!dur || dur <= 0) return showAlert('Enter a duration in minutes', true);
+            try {
+                const res = await fetch('/api/schedule/start-now', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ durationMinutes: dur })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert(`Going live now — auto-stop in ${fmtDurationWords(dur)}`);
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Could not start', true);
+                }
+            } catch (e) { showAlert('Network Error', true); }
+        }
+
+        async function saveSchedule() {
+            const startInput = document.getElementById('sched-start').value;
+            const duration = Number(document.getElementById('sched-duration').value);
+            const repeat = document.getElementById('sched-repeat').value;
+            const grace = Number(document.getElementById('sched-grace').value);
+
+            if (!startInput) return showAlert('Pick a start date and time', true);
+            if (!duration || duration <= 0) return showAlert('Enter how long it should run', true);
+            const repeatDays = selectedDays();
+            if (repeat === 'weekly' && repeatDays.length === 0) {
+                return showAlert('Pick at least one day for a weekly repeat', true);
+            }
+
+            const body = {
+                mode: 'schedule',
+                // No timezone suffix: this is parsed in the browser's local zone,
+                // which is what the operator sees in the picker.
+                startAt: new Date(startInput).toISOString(),
+                durationMinutes: duration,
+                repeat,
+                repeatDays,
+                graceMinutes: Number.isFinite(grace) ? grace : 5
+            };
+
+            try {
+                const res = await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert('Schedule saved: ' + describeSchedule(data.state.config));
+                } else {
+                    showAlert(data.error || 'Could not save schedule', true);
+                }
+            } catch (e) { showAlert('Network Error', true); }
+        }
+
+        async function clearSchedule() {
+            try {
+                const res = await fetch('/api/schedule/clear', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert('Schedule cleared. A live stream is not stopped.');
+                }
+                else showAlert(data.error || 'Could not clear', true);
+            } catch (e) { showAlert('Network Error', true); }
         }
 
         async function startStream() {
@@ -1327,6 +1686,34 @@
                 updateStatusAndLogs();
             }
         }, 3000);
+
+        // Smooth the schedule countdowns between status polls (the 3s poll is
+        // enough for accuracy, but a 1s tick makes the timers feel live).
+        setInterval(() => {
+            if (!lastScheduleState) return;
+            const s = lastScheduleState;
+            const base = { ...s, serverTime: new Date().toISOString() };
+            if (s.endsAt && s.remainingMs != null) {
+                base.remainingMs = Math.max(0, new Date(s.endsAt).getTime() - Date.now());
+            }
+            if (s.nextRunAt && s.nextRunInMs != null) {
+                base.nextRunInMs = new Date(s.nextRunAt).getTime() - Date.now();
+            }
+            // Repaint the status card + topbar badge text without touching the form.
+            const badge = document.getElementById('sched-status-badge');
+            if (badge && document.getElementById('tab-schedule').classList.contains('active')) {
+                const text = document.getElementById('sched-status-text');
+                const detail = document.getElementById('sched-status-detail');
+                if (s.status === 'live') detail.textContent = `Streaming now · stops in ${fmtCountdown(base.remainingMs)}`;
+                if (s.status === 'scheduled') detail.textContent = `Next go-live in ${fmtCountdown(base.nextRunInMs)} · ${describeSchedule(s.config)}`;
+                const topTxt = document.getElementById('status-text');
+                // Only keep ticking the topbar while the schedule really is
+                // pending - otherwise clearing it would leave "SCHEDULED · —".
+                if (topTxt && s.status === 'scheduled') {
+                    topTxt.textContent = `SCHEDULED · ${fmtCountdown(base.nextRunInMs)}`;
+                }
+            }
+        }, 1000);
 
         // Allow 'Enter' to login
         document.getElementById('login-key').addEventListener('keypress', function(e) {
