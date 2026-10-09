@@ -342,24 +342,39 @@ export class FlagBattle {
       return;
     }
 
-    // Show toast UI
-    if (this.ui.showChatBoostToast) {
-       this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
+    // A plain country-name comment (or "!vote X") is a SAVE move: reverse the
+    // flag's momentum so viewers can yank it back from the elimination hole,
+    // and slow it briefly so the turnaround reads clearly on stream.
+    const body = flag.body;
+    const weight = vote.weight || 1;
+    const vx = -body.velocity.x;
+    const vy = -body.velocity.y;
+
+    if (Math.abs(vx) + Math.abs(vy) < 0.6) {
+      // Nearly still: aim a firm nudge back toward the arena centre so the
+      // save still visibly moves the flag.
+      const dx = this.CX - body.position.x;
+      const dy = this.CY - body.position.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      Matter.Body.setVelocity(body, { x: (dx / d) * 3.2, y: (dy / d) * 3.2 });
+    } else {
+      // Reverse direction (to the opposite side) with an extra kick for big Supers.
+      const kick = 1.15 + Math.min(weight, 40) * 0.01;
+      Matter.Body.setVelocity(body, { x: vx * kick, y: vy * kick });
     }
 
-    // Apply physics boost (push away from the hole/edge towards center)
-    const body = flag.body;
-    const dx = this.CX - body.position.x;
-    const dy = this.CY - body.position.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const forceMag = 0.015 * (vote.weight || 1); 
-    Matter.Body.applyForce(body, body.position, {
-      x: (dx / dist) * forceMag,
-      y: (dy / dist) * forceMag
-    });
+    // Brief slow-motion so the turnaround is easy to see.
+    body.slowUntil = Date.now() + Math.min(3000, 1500 + weight * 25);
 
-    flag.reviveEffectEnd = Date.now() + 3000;
-    body.immunityUntil = Date.now() + 3000;
+    if (this.renderer && this.renderer.addBurst) {
+      this.renderer.addBurst(body.position.x, body.position.y, '#66ff99');
+    }
+
+    if (this.ui.showSaveToast) {
+      this.ui.showSaveToast(flag.country, getFlagUrl(code, 80), author);
+    } else if (this.ui.showChatBoostToast) {
+      this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
+    }
   }
 
   /* ================================================================== */

@@ -451,13 +451,29 @@ export class FlagBattleEngine extends EventEmitter {
       return;
     }
 
-    // Flag is alive: gently steer toward center to protect it from the gate
-    const dx = this.CENTER.x - flag.x;
-    const dy = this.CENTER.y - flag.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    flag.vx = (dx / dist) * 0.85;
-    flag.vy = (dy / dist) * 0.85;
-    
+    // A plain country-name comment (or "!vote X") is a SAVE move: reverse the
+    // flag's momentum so viewers can pull it back from the elimination gate,
+    // and slow it briefly so the turnaround reads clearly on stream.
+    const vx = -flag.vx;
+    const vy = -flag.vy;
+
+    if (Math.abs(vx) + Math.abs(vy) < 0.6) {
+      // Nearly still: nudge firmly back toward the arena centre.
+      const dx = this.CENTER.x - flag.x;
+      const dy = this.CENTER.y - flag.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      flag.vx = (dx / dist) * 1.4;
+      flag.vy = (dy / dist) * 1.4;
+    } else {
+      // Reverse direction (to the opposite side), extra kick for big Supers.
+      const kick = 1.15 + Math.min(weight, 40) * 0.01;
+      flag.vx = vx * kick;
+      flag.vy = vy * kick;
+    }
+
+    // Brief slow-motion so the turnaround is easy to see.
+    flag.slowUntil = Date.now() + Math.min(3000, 1500 + weight * 25);
+
     // Highlight the flag visually for a brief moment
     flag.flashUntil = Date.now() + Math.max(1500, 500 * Math.min(weight, 5));
     

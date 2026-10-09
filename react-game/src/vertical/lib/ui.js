@@ -351,6 +351,28 @@ export class UIManager {
     }, 2500);
   }
 
+  // 💚 A plain country-name comment turns the flag around — the "save" move.
+  showSaveToast(country, flagUrl, author) {
+    const feed = this.$('elimination-feed');
+    if (!feed) return;
+    const name = country && country.name ? country.name : '';
+    const toast = document.createElement('div');
+    toast.className = 'elim-toast';
+    toast.style.background = 'rgba(8, 35, 18, 0.92)';
+    toast.style.borderColor = 'rgba(90, 240, 140, 0.9)';
+    toast.innerHTML = `<img src="${flagUrl}" alt=""> <span style="color:#7dffa8">\u21a9\ufe0f SAVED${author ? ' · ' + author : ''}:</span> ${name}`;
+    feed.insertBefore(toast, feed.firstChild);
+    while (feed.children.length > 3) feed.removeChild(feed.lastChild);
+    setTimeout(() => {
+      if (toast.parentNode === feed) {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => toast.remove(), 500);
+      }
+    }, 2500);
+  }
+
+
   showPowerToast(label, country, flagUrl, author) {
     const feed = this.$('elimination-feed');
     if (!feed) return;
