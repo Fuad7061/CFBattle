@@ -15,6 +15,25 @@ for (const country of COUNTRIES) {
   NAME_TO_CODE.set(code.toLowerCase(), code);
   if (name) NAME_TO_CODE.set(name.toLowerCase(), code);
 }
+// Common shorthand aliases
+const ALIASES = {
+  'usa': 'us',
+  'america': 'us',
+  'united states of america': 'us',
+  'uk': 'gb',
+  'britain': 'gb',
+  'england': 'gb',
+  'uae': 'ae',
+  'emirates': 'ae',
+  'korea': 'kr',
+  'south korea': 'kr',
+  'russia': 'ru'
+};
+for (const [alias, code] of Object.entries(ALIASES)) {
+  if (!NAME_TO_CODE.has(alias)) {
+    NAME_TO_CODE.set(alias, code);
+  }
+}
 
 function resolveVoteTarget(rawToken) {
   const key = rawToken.trim().toLowerCase();
@@ -195,4 +214,4 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
   };
 }
 
-module.exports = { startYoutubeChatPolling };
+module.exports = { startYoutubeChatPolling, parseVote };

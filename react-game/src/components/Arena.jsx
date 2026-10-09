@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-export default function Arena({ canvasRef, winnerState, stageAnnouncement, engineRef }) {
+export default function Arena({ canvasRef, winnerState, stageAnnouncement, engineRef, children }) {
   const wrapRef = useRef(null);
   const winnerCanvasRef = useRef(null);
 
@@ -79,6 +79,8 @@ export default function Arena({ canvasRef, winnerState, stageAnnouncement, engin
         <h1 className="m-0 text-accent-pink text-[28px] font-bold tracking-wide uppercase">{stageAnnouncement.title}</h1>
         <p className="m-0 mt-2 text-text-soft text-[13px] tracking-[1.5px] uppercase opacity-80">{stageAnnouncement.subtitle}</p>
       </div>
+
+      {children}
     </div>
   );
 }

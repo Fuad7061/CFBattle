@@ -24,12 +24,18 @@ export function useEngine() {
   const [qualifiedPanel, setQualifiedPanel] = useState({ title: '', rows: [] });
   const [timer, setTimer] = useState({ mm: '00', ss: '00' });
   const [soundEnabled, setSoundEnabledState] = useState(true);
+  const [commentVotes, setCommentVotes] = useState({});
+  const [targetReviveVotes, setTargetReviveVotes] = useState(4);
 
   useEffect(() => {
     if (!canvasRef.current) return undefined;
     const engine = new FlagBattleEngine(canvasRef.current, COUNTRIES);
     engineRef.current = engine;
     window.gameInstance = engine; // Expose globally for remote control
+
+    if (engine.settings?.reviveVotes) {
+      setTargetReviveVotes(Number(engine.settings.reviveVotes));
+    }
 
     const unsubs = [
       engine.on('hud', setHudState),
@@ -39,6 +45,10 @@ export function useEngine() {
       engine.on('qualifiedListChanged', setQualifiedPanel),
       engine.on('timer', setTimer),
       engine.on('soundChanged', ({ enabled }) => setSoundEnabledState(enabled)),
+      engine.on('commentVotes', setCommentVotes),
+      engine.on('settingsChanged', (s) => {
+        if (s?.reviveVotes) setTargetReviveVotes(Number(s.reviveVotes));
+      }),
     ];
 
     engine.start();
@@ -61,6 +71,9 @@ export function useEngine() {
   const applyVoteBoost = useCallback((code, factor, durationMs) => {
     engineRef.current?.applyVoteBoost(code, factor, durationMs);
   }, []);
+  const instantPush = useCallback((code, weight, author) => {
+    engineRef.current?.instantPush(code, weight, author);
+  }, []);
 
   return {
     canvasRef,
@@ -71,6 +84,8 @@ export function useEngine() {
     eliminatedList,
     qualifiedDisplayList: qualifiedPanel,
     timer,
-    controls: { newRound, shrinkArena, toggleSound, soundEnabled, applyVoteBoost },
+    commentVotes,
+    targetReviveVotes,
+    controls: { newRound, shrinkArena, toggleSound, soundEnabled, applyVoteBoost, instantPush },
   };
 }

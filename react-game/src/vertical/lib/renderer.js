@@ -231,10 +231,27 @@ export class Renderer {
         ctx.fillText(f.country.code.slice(0, 2).toUpperCase(), 0, 0);
       }
 
-      // Subtle border
+      // Subtle border or Glow
       ctx.shadowBlur  = 0;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.40)';
-      ctx.lineWidth   = 0.8;
+      
+      let isReviving = f.reviveEffectEnd && f.reviveEffectEnd > Date.now();
+      let isBoosted = f.chatBoostEnd && f.chatBoostEnd > Date.now();
+      
+      if (isReviving) {
+          ctx.strokeStyle = '#ffff00';
+          ctx.lineWidth = 3;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#ffff00';
+      } else if (isBoosted) {
+          ctx.strokeStyle = '#33ccff';
+          ctx.lineWidth = 2.5;
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = '#33ccff';
+      } else {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.40)';
+          ctx.lineWidth   = 0.8;
+      }
+      
       if (ctx.roundRect) {
         ctx.beginPath();
         ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);

@@ -222,7 +222,7 @@ export class PhysicsEngine {
       if (b.eliminated) continue;
       
       const speedSq = b.velocity.x * b.velocity.x + b.velocity.y * b.velocity.y;
-      if (speedSq < 16.0) {
+      if (speedSq < 6.25) { // speed < 2.5
          // Boost it slightly in its current direction to maintain kinetic energy
          const speed = Math.sqrt(speedSq);
          const angle = speed > 0.1 ? Math.atan2(b.velocity.y, b.velocity.x) : Math.random() * Math.PI * 2;
@@ -240,7 +240,7 @@ export class PhysicsEngine {
 
   _enforceContainment() {
     const eliminated  = [];
-    const maxSpeed    = 15;
+    const maxSpeed    = 9;
     const aliveTotal  = this.flagBodies.filter(b => !b.eliminated).length;
 
     for (const b of this.flagBodies) {
@@ -263,6 +263,24 @@ export class PhysicsEngine {
       // 2. Check boundary approach
       const safeRadius = this.R_inner - 13;
       if (dist > safeRadius) {
+        // Active Revival Shield: safely bounce inward towards arena center!
+        if (b.immunityUntil && b.immunityUntil > Date.now()) {
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+          Matter.Body.setPosition(b, {
+            x: this.cx + nx * safeRadius,
+            y: this.cy + ny * safeRadius,
+          });
+          const vDotN = b.velocity.x * nx + b.velocity.y * ny;
+          if (vDotN > 0) {
+            Matter.Body.setVelocity(b, {
+              x: (b.velocity.x - 2.0 * vDotN * nx) * 0.85,
+              y: (b.velocity.y - 2.0 * vDotN * ny) * 0.85,
+            });
+          }
+          continue; // Protected by revival shield — immune from elimination!
+        }
+
         const angle   = Math.atan2(dy, dx);
         const hasHole = this.isHoleAtAngle(angle);
 

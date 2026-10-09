@@ -4,13 +4,57 @@ import { FlagBattle } from './lib/game.js';
 
 export default function VerticalApp() {
   const initialized = useRef(false);
+  const params = new URLSearchParams(window.location.search);
+  const isStream = params.get('headless') === 'true' || params.get('stream') === 'true' || params.get('clean') === 'true';
 
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
       // Initialize the legacy game engine inside this component
-      window.__flagBattleInstance = new FlagBattle();
+      window.gameInstance = new FlagBattle();
     }
+
+    const handleMessage = (e) => {
+      if (e.data?.type === 'SYNC_SETTINGS') {
+        const settings = e.data.settings;
+        window.__liveSettings = settings;
+        
+        if (window.gameInstance) {
+          const gi = window.gameInstance;
+          gi.cfg = { ...(gi.cfg || {}), ...settings };
+          if (settings.watermark !== undefined && gi.ui?.setBranding) {
+             gi.ui.setBranding(settings.watermark);
+             if (gi.renderer) gi.renderer.watermarkText = settings.watermark;
+          }
+          if (gi.renderer) {
+             if (settings.watermarkOpacity !== undefined) gi.renderer.watermarkOpacity = settings.watermarkOpacity;
+             if (settings.watermarkSize !== undefined) gi.renderer.watermarkSize = settings.watermarkSize;
+             if (settings.watermarkCount !== undefined) gi.renderer.watermarkCount = settings.watermarkCount;
+             if (settings.watermarkAngle !== undefined) gi.renderer.watermarkAngle = settings.watermarkAngle;
+          }
+          if (settings.speed !== undefined && gi.physics?.setRotSpeed) {
+             gi.physics.setRotSpeed(0.0028 * settings.speed); // Base speed
+          }
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+  useEffect(() => {
+    const adjustScale = () => {
+      const wrapper = document.getElementById('game-wrapper');
+      if (!wrapper) return;
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+      const scale = Math.min(winW / 540, winH / 960);
+      wrapper.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      wrapper.style.transformOrigin = 'center center';
+    };
+    
+    adjustScale();
+    window.addEventListener('resize', adjustScale);
+    return () => window.removeEventListener('resize', adjustScale);
   }, []);
 
   return (
@@ -113,31 +157,35 @@ export default function VerticalApp() {
           </div>
         </div>
 
-        <div id="controls-panel">
-          <div className="ctrl-group">
-            <button id="btn-start" className="ctrl-btn primary" title="Start round (Space)">▶ START</button>
-            <button id="btn-pause" className="ctrl-btn" title="Pause (P)" disabled>⏸ PAUSE</button>
-            <button id="btn-reset" className="ctrl-btn" title="Full reset (R)">↺ RESET</button>
-          </div>
+        {!isStream && (
+          <>
+            <div id="controls-panel">
+              <div className="ctrl-group">
+                <button id="btn-start" className="ctrl-btn primary" title="Start round (Space)">▶ START</button>
+                <button id="btn-pause" className="ctrl-btn" title="Pause (P)" disabled>⏸ PAUSE</button>
+                <button id="btn-reset" className="ctrl-btn" title="Full reset (R)">↺ RESET</button>
+              </div>
 
-          <div className="ctrl-group">
-            <label className="ctrl-label">Speed</label>
-            <input type="range" id="speed-slider" min="1" max="5" defaultValue="1" />
-            <span id="speed-value">1×</span>
-          </div>
+              <div className="ctrl-group">
+                <label className="ctrl-label">Speed</label>
+                <input type="range" id="speed-slider" min="1" max="5" defaultValue="1" />
+                <span id="speed-value">1×</span>
+              </div>
 
-          <div className="ctrl-group">
-            <button id="btn-mute" className="ctrl-btn icon" title="Toggle mute (M)">🔊</button>
-            <button id="btn-fs" className="ctrl-btn icon" title="Fullscreen (F)">⛶</button>
-            <button id="btn-record" className="ctrl-btn record" title="Record canvas">⏺ REC</button>
-            <button id="btn-stop" className="ctrl-btn" disabled>⏹ STOP</button>
-            <button id="btn-download" className="ctrl-btn" disabled>⬇ SAVE</button>
-            <div id="rec-badge"><span className="rec-dot"></span> REC</div>
-            <button id="btn-settings" className="ctrl-btn icon" title="Settings">⚙</button>
-          </div>
-        </div>
+              <div className="ctrl-group">
+                <button id="btn-mute" className="ctrl-btn icon" title="Toggle mute (M)">🔊</button>
+                <button id="btn-fs" className="ctrl-btn icon" title="Fullscreen (F)">⛶</button>
+                <button id="btn-record" className="ctrl-btn record" title="Record canvas">⏺ REC</button>
+                <button id="btn-stop" className="ctrl-btn" disabled>⏹ STOP</button>
+                <button id="btn-download" className="ctrl-btn" disabled>⬇ SAVE</button>
+                <div id="rec-badge"><span className="rec-dot"></span> REC</div>
+                <button id="btn-settings" className="ctrl-btn icon" title="Settings">⚙</button>
+              </div>
+            </div>
 
-        <div id="key-hint">Space · P pause · R reset · M mute · F fullscreen</div>
+            <div id="key-hint">Space · P pause · R reset · M mute · F fullscreen</div>
+          </>
+        )}
       </div>
 
       <div id="settings-panel" aria-label="Settings">

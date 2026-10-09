@@ -14,8 +14,15 @@ const MAX_MESSAGES = 200;
 // on a dropped connection); if the server is simply not running yet, this
 // hook fails silently and the overlay just stays empty — the physics
 // engine itself never depends on this connection existing.
-export function useYoutubeChat({ onMessage, onVoteTally } = {}) {
+export function useYoutubeChat({ onMessage, onVoteTally, onTopSupporters } = {}) {
   const tallyRef = useRef({});
+  const supportersRef = useRef({});
+  const onMessageRef = useRef(onMessage);
+  onMessageRef.current = onMessage;
+  const onVoteTallyRef = useRef(onVoteTally);
+  onVoteTallyRef.current = onVoteTally;
+  const onTopSupportersRef = useRef(onTopSupporters);
+  onTopSupportersRef.current = onTopSupporters;
 
   useEffect(() => {
     let es;
@@ -33,16 +40,30 @@ export function useYoutubeChat({ onMessage, onVoteTally } = {}) {
       } catch (e) {
         return;
       }
-      onMessage?.(msg);
+      
+      if (msg.type === 'SETTINGS_UPDATE' || msg.type === 'SETTINGS') {
+          if (onMessageRef.current) onMessageRef.current(msg);
+          return;
+      }
+      
+      onMessageRef.current?.(msg);
 
       if (msg.vote?.code) {
         const tally = { ...tallyRef.current };
         // Super Chat votes carry a `weight` (proportional to the amount
         // paid, computed server-side — see server/youtubeChat.js); a free
         // chat vote defaults to 1.
-        tally[msg.vote.code] = (tally[msg.vote.code] || 0) + (msg.vote.weight || 1);
+        const weight = msg.vote.weight || 1;
+        tally[msg.vote.code] = (tally[msg.vote.code] || 0) + weight;
         tallyRef.current = tally;
-        onVoteTally?.(tally);
+        onVoteTallyRef.current?.(tally);
+        
+        if (msg.author) {
+            const supporters = { ...supportersRef.current };
+            supporters[msg.author] = (supporters[msg.author] || 0) + weight;
+            supportersRef.current = supporters;
+            onTopSupportersRef.current?.(supporters);
+        }
       }
     };
 

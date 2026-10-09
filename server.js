@@ -131,12 +131,13 @@ app.post('/api/settings', checkAuth, (req, res) => {
         fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2));
         logMsg("Settings updated and saved to disk.");
         
-        // Check if YouTube settings changed
         if (oldSettings.youtubeApiKey !== currentSettings.youtubeApiKey ||
             oldSettings.youtubeLiveId !== currentSettings.youtubeLiveId ||
             oldSettings.youtubeChannelId !== currentSettings.youtubeChannelId) {
             restartYoutubeChat(currentSettings);
         }
+        
+        bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: currentSettings.gameSettings || currentSettings });
         
         res.json({ success: true });
     } catch (err) {
@@ -217,7 +218,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true' : '?view=landscape&stream=true';
+        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true&headless=true' : '?view=landscape&stream=true&headless=true';
         let gameUrl = `http://localhost:${process.env.PORT || 3000}/${queryParam}`;
         logMsg(`Puppeteer navigating to ${gameUrl}`);
         await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
@@ -249,6 +250,7 @@ app.post('/api/start-stream', checkAuth, async (req, res) => {
                 
                 // If game instance exists, apply directly
                 if (window.gameInstance) {
+                    window.gameInstance.settings = { ...(window.gameInstance.settings || {}), ...s };
                     if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
                     if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
                     if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
@@ -632,13 +634,27 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 
                 // If game instance exists, apply new liveSettings directly to it
                 if (window.gameInstance) {
-                    if (s.watermark !== undefined) window.gameInstance.ui?.setChannel?.(s.watermark);
-                    if (s.speed !== undefined) window.gameInstance.physics?.setStepsPerFrame?.(s.speed);
-                    if (s.gravity !== undefined) window.gameInstance.physics?.setGravity?.(s.gravity);
-                    if (s.bias !== undefined) window.gameInstance.audienceBias = s.bias;
+                    const gi = window.gameInstance;
+                    gi.settings = { ...(gi.settings || {}), ...s };
+                    if (s.watermark !== undefined && gi.ui?.setChannel) gi.ui.setChannel(s.watermark);
+                    if (s.speed !== undefined && gi.physics?.setStepsPerFrame) gi.physics.setStepsPerFrame(s.speed);
+                    if (s.gravity !== undefined && gi.physics?.setGravity) gi.physics.setGravity(s.gravity);
+                    if (s.bias !== undefined) gi.audienceBias = s.bias;
+                    
+                    if (gi.renderer) {
+                        if (s.watermark !== undefined) gi.renderer.watermarkText = s.watermark;
+                        if (s.wmOpacity !== undefined) gi.renderer.watermarkOpacity = s.wmOpacity;
+                        if (s.wmSize !== undefined) gi.renderer.watermarkSize = s.wmSize;
+                        if (s.wmCount !== undefined) gi.renderer.watermarkCount = s.wmCount;
+                        if (s.wmAngle !== undefined) gi.renderer.watermarkAngle = s.wmAngle;
+                    }
                 }
+                
+                // Dispatch message for React landscape view
+                window.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: s }, '*');
             }, payload);
-            logMsg("Game live settings updated remotely.");
+            bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: payload });
+            logMsg("Game live settings updated remotely and broadcast.");
         }
         res.json({ success: true });
     } catch (err) {
@@ -724,6 +740,36 @@ app.get('/api/votes', (req, res) => res.json(voteTally));
 app.post('/api/votes/reset', (req, res) => {
   voteTally = {};
   res.json({ ok: true });
+});
+
+app.post('/api/test-chat', express.json(), (req, res) => {
+  const { author, text, superChat } = req.body;
+  if (!text) return res.status(400).json({ error: 'Missing text' });
+  
+  const { parseVote } = require('./youtubeChat.js');
+  const rawVote = parseVote(text);
+  
+  const vote = rawVote
+    ? {
+        ...rawVote,
+        weight: superChat ? 5 : 1,
+        superChat: Boolean(superChat),
+      }
+    : null;
+
+  const msg = {
+    id: `test-${Date.now()}`,
+    author: author || 'Test User',
+    text,
+    timestamp: new Date().toISOString(),
+    vote,
+    superChat: superChat ? { amountDisplayString: '$5.00' } : null,
+  };
+  
+  bus.emit('chat', msg);
+  if (vote) bus.emit('vote', vote);
+  
+  res.json({ ok: true, msg });
 });
 
 let chatPoller = null;

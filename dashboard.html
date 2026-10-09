@@ -96,16 +96,14 @@
         .dashboard-content {
             display: flex;
             flex: 1;
-            padding: 30px;
-            gap: 30px;
-            max-width: 1600px;
-            margin: 0 auto;
+            padding: 20px 25px;
+            gap: 25px;
             width: 100%;
         }
 
         /* --- SIDEBAR TABS --- */
         .sidebar {
-            width: 250px;
+            width: 210px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -161,6 +159,9 @@
         .main-area {
             flex: 1;
             min-width: 0;
+            height: calc(100vh - 100px);
+            overflow-y: auto;
+            padding-right: 10px;
         }
         .tab-pane {
             display: none;
@@ -227,13 +228,20 @@
 
         /* --- PREVIEW --- */
         .preview-container {
-            display: grid; grid-template-columns: 320px 1fr; gap: 20px;
+            display: grid; grid-template-columns: 280px 1fr; gap: 20px; height: 100%;
+        }
+        .preview-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: calc(100vh - 200px);
+            width: 100%;
         }
         .preview-wrapper {
-            position: relative; width: 100%; aspect-ratio: 9/16;
+            position: relative; width: auto; height: 100%; aspect-ratio: 9/16; max-width: 100%;
             background: #000; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            max-height: 80vh; /* Prevent overflowing off the screen vertically */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3); margin: 0 auto;
         }
         .preview-wrapper iframe { width: 100%; height: 100%; border: none; }
         
@@ -296,13 +304,23 @@
 
     <!-- DASHBOARD -->
     <div id="dashboard-view">
-        <div class="topbar">
-            <div class="brand">
+        <div class="topbar" style="gap: 15px; flex-wrap: wrap;">
+            <div class="brand" style="margin-right: 15px;">
                 <span class="brand-icon">🏴</span> Flag Battle Director
             </div>
             
+            <div style="display:flex; align-items:center; gap: 10px; flex-grow: 1; flex-wrap: wrap;">
+                <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white;" onchange="updatePreviewSrc()">
+                    <option value="landscape">Landscape (React V2)</option>
+                    <option value="vertical">Vertical (Original)</option>
+                </select>
+                <button class="btn btn-success" id="btn-start" onclick="startStream()" style="height: 38px; padding: 0 15px; font-weight: 500;">▶ Start Stream</button>
+                <button class="btn btn-danger" id="btn-stop" style="display:none; height: 38px; padding: 0 15px; font-weight: 500;" onclick="stopStream()">⏹ Stop Engine</button>
+                <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="height: 38px; padding: 0 15px; font-weight: 500; background:var(--accent); border-color:var(--accent);">⏺ Record Offline</button>
+            </div>
+            
             <div class="header-actions">
-                <button class="btn" onclick="saveAndApplySettings()">💾 Save Global Settings</button>
+                <button class="btn" onclick="saveAndApplySettings()">💾 Save Settings</button>
                 <div class="status-badge" id="status-badge">
                     <div class="status-dot"></div>
                     <span id="status-text">OFFLINE</span>
@@ -332,6 +350,18 @@
                         📱 Launch Vertical (TikTok/Shorts)
                     </a>
                 </div>
+
+                <div class="demo-chat-box" style="margin-top: 30px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:12px; text-transform:uppercase;">Test Demo Comment</h3>
+                    <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                        <input type="text" id="demo-author" placeholder="Author Name" value="Director" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
+                        <input type="text" id="demo-text" placeholder="Comment (e.g. 'Brazil')" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
+                        <label class="checkbox-label" style="padding: 5px 0; font-size: 12px;">
+                            <input type="checkbox" id="demo-superchat" /> Simulate SuperChat
+                        </label>
+                        <button class="btn btn-primary" onclick="sendTestChat()" style="font-size: 13px; padding: 6px;">Send Comment</button>
+                    </div>
+                </div>
             </div>
 
             <!-- MAIN CONTENT -->
@@ -339,48 +369,41 @@
                 
                 <!-- TAB: OVERVIEW -->
                 <div id="tab-overview" class="tab-pane active">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Live Director Studio</h2>
-                            <div style="display:flex; align-items:center; gap: 10px;">
-                                <label style="font-size:13px; color:var(--text-muted); margin:0;">Active Design:</label>
-                                <select id="live-engine-select" style="width: auto; padding: 6px 12px; font-size: 13px;" onchange="updatePreviewSrc()">
-                                    <option value="landscape">Landscape (React V2)</option>
-                                    <option value="vertical">Vertical (Original)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="preview-container">
-                            <div class="controls-col">
-                                <h3 style="margin-top:0; font-size:15px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase;">Engine State</h3>
-                                <button class="btn btn-success" id="btn-start" onclick="startStream()" style="width:100%; margin-bottom: 10px; height: 50px;">
-                                    ▶ Start 24/7 Stream (Headless)
-                                </button>
-                                <button class="btn btn-danger" id="btn-stop" style="display:none; width:100%; margin-bottom: 10px; height: 50px;" onclick="stopStream()">
-                                    ⏹ Stop Engine (Stream/Record)
-                                </button>
-                                <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="width:100%; height: 50px; background:var(--accent); border-color:var(--accent);">
-                                    ⏺ Record Gameplay Offline
-                                </button>
-                                
-                                <h3 style="margin-top:30px; font-size:15px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase;">Live Remote Controls</h3>
-                                <p style="font-size:12px; color:var(--text-muted); margin-top:-10px; margin-bottom:15px;">Send commands instantly to the running game instance.</p>
-                                
-                                <div style="display: flex; flex-direction: column; gap: 10px;">
-                                    <div class="grid-2">
-                                        <button class="btn" onclick="controlGame('new-round')" style="color:var(--accent);">▶ New Round</button>
-                                        <button class="btn" onclick="controlGame('shrink-arena')" style="color:var(--danger);">◎ Shrink Arena</button>
+                    <div class="panel" style="padding: 0; display: flex; flex-direction: column; height: calc(100vh - 140px);">
+                        <div class="preview-container" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 10px 0;">
+                            <div class="preview-col" style="height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="preview-wrapper" style="height: 100%; max-height: calc(100vh - 220px); width: auto; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
+                                    <iframe id="preview-frame" src="/?view=landscape&clean=true" style="width: 100%; height: 100%; border: none; display: block;"></iframe>
+                                </div>
+                                <!-- Separate Director Controls Bar (Outside of stream preview) -->
+                                <div id="director-controls-bar" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; padding: 8px 18px; background: rgba(12, 12, 18, 0.95); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <button class="btn btn-danger" id="dir-btn-start" onclick="sendDirectorCmd('start')" title="Start or Resume Round" style="font-weight: bold; padding: 6px 14px; font-size: 12px; background: #dc2626; border-color: #ef4444;">
+                                            ▶ START / RESUME
+                                        </button>
+                                        <button class="btn" id="dir-btn-pause" onclick="sendDirectorCmd('pause')" title="Pause Game" style="padding: 6px 12px; font-size: 12px;">
+                                            ⏸ PAUSE
+                                        </button>
+                                        <button class="btn" id="dir-btn-reset" onclick="sendDirectorCmd('reset')" title="Reset Tournament" style="padding: 6px 12px; font-size: 12px;">
+                                            ↺ RESET
+                                        </button>
                                     </div>
-                                    <button class="btn" onclick="controlGame('toggle-sound')">🔊 Toggle Sound</button>
-                                </div>
-                            </div>
-                            
-                            <div class="preview-col">
-                                <div class="preview-wrapper">
-                                    <iframe id="preview-frame" src="/?stream=true"></iframe>
-                                </div>
-                                <div style="text-align: center; margin-top: 10px; font-size: 12px; color: var(--text-muted);">
-                                    Local Preview Mirror (Audio Muted)
+
+                                    <div style="height: 18px; width: 1px; background: var(--border);"></div>
+
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <label style="font-size: 12px; color: var(--text-muted); font-weight: 500;">Speed:</label>
+                                        <input type="range" id="dir-speed-range" min="1" max="5" step="0.5" value="1" oninput="sendDirectorSpeed(this.value)" style="width: 80px; accent-color: var(--accent); cursor: pointer;">
+                                        <span id="dir-speed-label" style="font-size: 12px; color: var(--accent); font-weight: bold; min-width: 24px;">1×</span>
+                                    </div>
+
+                                    <div style="height: 18px; width: 1px; background: var(--border);"></div>
+
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <button class="btn" onclick="sendDirectorCmd('mute')" title="Toggle Sound" style="padding: 6px 10px; font-size: 12px;">🔊 MUTE</button>
+                                        <button class="btn" onclick="sendDirectorCmd('fullscreen')" title="Fullscreen Preview" style="padding: 6px 10px; font-size: 12px;">⛶ FULLSCREEN</button>
+                                        <button class="btn" onclick="switchTab('tab-settings')" style="padding: 6px 12px; font-size: 12px; background: rgba(255,255,255,0.06);">⚙ MATCH SETTINGS</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -422,6 +445,20 @@
 
                     <div class="panel">
                         <div class="panel-header">
+                            <h2>Gameplay Interaction Rules</h2>
+                        </div>
+                        <p class="panel-desc">Customize how viewer interactions affect the active game.</p>
+                        
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>Votes Needed to Revive</label>
+                                <input type="number" id="live-revive-votes" min="1" max="50" value="4">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
                             <h2>Physics, Experience & Branding</h2>
                         </div>
                         <div class="grid-3">
@@ -436,6 +473,24 @@
                             <div class="form-group">
                                 <label>Watermark / Channel Name</label>
                                 <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
+                            </div>
+                        </div>
+                        <div class="grid-2" style="margin-top: 10px;">
+                            <div class="form-group">
+                                <label>Watermark Opacity</label>
+                                <input type="number" id="live-wm-opacity" min="0" max="1" step="0.01" value="0.15">
+                            </div>
+                            <div class="form-group">
+                                <label>Watermark Size</label>
+                                <input type="number" id="live-wm-size" min="10" max="150" step="1" value="36">
+                            </div>
+                            <div class="form-group">
+                                <label>Watermark Count</label>
+                                <input type="number" id="live-wm-count" min="1" max="10" step="1" value="3">
+                            </div>
+                            <div class="form-group">
+                                <label>Watermark Angle</label>
+                                <input type="number" id="live-wm-angle" min="-90" max="90" step="1" value="-15">
                             </div>
                         </div>
                         <label class="checkbox-label" style="margin-top: 10px;">
@@ -581,9 +636,15 @@
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.currentTarget.classList.add('active');
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                if (el.getAttribute('onclick') && el.getAttribute('onclick').includes(tabId)) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+            const target = document.getElementById(tabId);
+            if (target) target.classList.add('active');
         }
 
         function logout() {
@@ -708,6 +769,11 @@
                 if (s.gameSettings.totalRounds !== undefined) document.getElementById('live-total-rounds').value = s.gameSettings.totalRounds;
                 if (s.gameSettings.timeLimit !== undefined) document.getElementById('live-time-limit').value = s.gameSettings.timeLimit;
                 if (s.gameSettings.teams !== undefined) document.getElementById('live-teams').value = s.gameSettings.teams;
+                if (s.gameSettings.reviveVotes !== undefined) document.getElementById('live-revive-votes').value = s.gameSettings.reviveVotes;
+                if (s.gameSettings.wmOpacity !== undefined) document.getElementById('live-wm-opacity').value = s.gameSettings.wmOpacity;
+                if (s.gameSettings.wmSize !== undefined) document.getElementById('live-wm-size').value = s.gameSettings.wmSize;
+                if (s.gameSettings.wmCount !== undefined) document.getElementById('live-wm-count').value = s.gameSettings.wmCount;
+                if (s.gameSettings.wmAngle !== undefined) document.getElementById('live-wm-angle').value = s.gameSettings.wmAngle;
             }
         }
 
@@ -720,7 +786,12 @@
                 totalCountries: parseInt(document.getElementById('live-total-countries').value),
                 totalRounds: parseInt(document.getElementById('live-total-rounds').value),
                 timeLimit: parseInt(document.getElementById('live-time-limit').value),
-                teams: document.getElementById('live-teams').value
+                teams: document.getElementById('live-teams').value,
+                reviveVotes: parseInt(document.getElementById('live-revive-votes').value) || 4,
+                wmOpacity: parseFloat(document.getElementById('live-wm-opacity').value) || 0.15,
+                wmSize: parseInt(document.getElementById('live-wm-size').value) || 36,
+                wmCount: parseInt(document.getElementById('live-wm-count').value) || 3,
+                wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15
             };
             
             const rtmpPayload = {
@@ -772,13 +843,51 @@
                     frame.contentWindow.__liveSettings = gamePayload;
                     if (frame.contentWindow.gameInstance) {
                         const gi = frame.contentWindow.gameInstance;
-                        if (gamePayload.watermark !== undefined) gi.ui?.setChannel?.(gamePayload.watermark);
-                        if (gamePayload.speed !== undefined) gi.physics?.setStepsPerFrame?.(gamePayload.speed);
-                        if (gamePayload.gravity !== undefined) gi.physics?.setGravity?.(gamePayload.gravity);
+                        gi.settings = { ...(gi.settings || {}), ...gamePayload };
+                        if (gamePayload.watermark !== undefined && gi.ui?.setChannel) gi.ui.setChannel(gamePayload.watermark);
+                        if (gamePayload.speed !== undefined && gi.physics?.setStepsPerFrame) gi.physics.setStepsPerFrame(gamePayload.speed);
+                        if (gamePayload.gravity !== undefined && gi.physics?.setGravity) gi.physics.setGravity(gamePayload.gravity);
                         if (gamePayload.bias !== undefined) gi.audienceBias = gamePayload.bias;
+                        if (gi.renderer) {
+                            if (gamePayload.watermark !== undefined) gi.renderer.watermarkText = gamePayload.watermark;
+                            if (gamePayload.wmOpacity !== undefined) gi.renderer.watermarkOpacity = gamePayload.wmOpacity;
+                            if (gamePayload.wmSize !== undefined) gi.renderer.watermarkSize = gamePayload.wmSize;
+                            if (gamePayload.wmCount !== undefined) gi.renderer.watermarkCount = gamePayload.wmCount;
+                            if (gamePayload.wmAngle !== undefined) gi.renderer.watermarkAngle = gamePayload.wmAngle;
+                        }
+                    }
+                    if (frame.contentWindow.postMessage) {
+                        frame.contentWindow.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
                     }
                 }
                 showAlert('Settings saved! Ready for next launch.');
+            }
+        }
+
+        async function sendTestChat() {
+            const author = document.getElementById('demo-author').value.trim();
+            const text = document.getElementById('demo-text').value.trim();
+            const superChat = document.getElementById('demo-superchat').checked;
+            
+            if (!text) {
+                showAlert('Please enter a comment text.', true);
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/test-chat', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ author, text, superChat })
+                });
+                if (res.ok) {
+                    document.getElementById('demo-text').value = '';
+                    showAlert('Demo comment sent successfully!');
+                } else {
+                    showAlert('Error sending comment', true);
+                }
+            } catch(e) {
+                showAlert('Network error', true);
             }
         }
 
@@ -925,13 +1034,94 @@
         function updatePreviewSrc() {
             const frame = document.getElementById('preview-frame');
             const select = document.getElementById('live-engine-select');
+            const wrapper = document.querySelector('.preview-wrapper');
             if (frame && select) {
                 const isVertical = select.value === 'vertical';
-                const path = isVertical ? '/?view=vertical&stream=true' : '/?view=landscape&stream=true';
+                const path = isVertical ? '/?view=vertical&clean=true' : '/?view=landscape&clean=true';
                 if (!frame.src.endsWith(path)) {
                     frame.src = path;
                 }
-                frame.parentElement.style.aspectRatio = isVertical ? '9/16' : '16/9';
+                if (wrapper) {
+                    wrapper.style.aspectRatio = isVertical ? '9/16' : '16/9';
+                }
+            }
+        }
+
+        function sendDirectorCmd(cmd) {
+            const frame = document.getElementById('preview-frame');
+            if (frame && frame.contentWindow) {
+                try {
+                    const win = frame.contentWindow;
+                    if (win.__flagBattleInstance) {
+                        const inst = win.__flagBattleInstance;
+                        if (cmd === 'start') {
+                            if (inst.paused) inst.resume();
+                            else inst.start();
+                        } else if (cmd === 'pause') {
+                            inst.pause();
+                        } else if (cmd === 'reset') {
+                            inst.reset();
+                        } else if (cmd === 'mute') {
+                            if (inst.audio) inst.audio.muted = !inst.audio.muted;
+                        }
+                    }
+                    if (win.gameInstance) {
+                        const inst = win.gameInstance;
+                        if (cmd === 'start') {
+                            inst.running = true;
+                            if (inst.flags && inst.flags.length === 0) inst.start();
+                        } else if (cmd === 'pause') {
+                            inst.running = !inst.running;
+                        } else if (cmd === 'reset') {
+                            inst.newRound();
+                        } else if (cmd === 'mute') {
+                            inst.primeAudioOnGesture?.();
+                            inst.setSoundEnabled?.(!inst.soundEnabled);
+                        }
+                    }
+                } catch(e) {}
+            }
+            if (cmd === 'fullscreen') {
+                const frame = document.getElementById('preview-frame');
+                if (frame) {
+                    if (!document.fullscreenElement) frame.requestFullscreen?.().catch(()=>{});
+                    else document.exitFullscreen?.().catch(()=>{});
+                }
+            }
+            if (isStreaming || isRecording) {
+                const apiAction = cmd === 'start' ? 'new-round' : (cmd === 'reset' ? 'new-round' : (cmd === 'mute' ? 'toggle-sound' : ''));
+                if (apiAction) {
+                    fetch('/api/control', {
+                        method: 'POST',
+                        headers: API_HEADERS(),
+                        body: JSON.stringify({ action: apiAction })
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        function sendDirectorSpeed(val) {
+            const lbl = document.getElementById('dir-speed-label');
+            if (lbl) lbl.textContent = val + '×';
+            const frame = document.getElementById('preview-frame');
+            if (frame && frame.contentWindow) {
+                try {
+                    const win = frame.contentWindow;
+                    if (win.__flagBattleInstance) {
+                        win.__flagBattleInstance.physics.setStepsPerFrame(Number(val));
+                    }
+                    if (win.gameInstance) {
+                        win.gameInstance.settings = win.gameInstance.settings || {};
+                        win.gameInstance.settings.speedMult = Number(val);
+                    }
+                } catch(e) {}
+            }
+            if (isStreaming || isRecording) {
+                fetch('/api/control', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ action: 'settings', payload: { speed: Number(val) } })
+                }).catch(() => {});
             }
         }
 

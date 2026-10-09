@@ -70,27 +70,21 @@ export class UIManager {
   startSupporters() {
     this._supporters = [];
     this._updateSupportersUI();
-    this._supporterInterval = setInterval(() => {
-      if (this._supporters.length < 5) {
-        const available = this._supporterNames.filter(
-          n => !this._supporters.find(s => s.name === n)
-        );
-        if (available.length > 0) {
-          const name = available[Math.floor(Math.random() * available.length)];
-          const gifts = Math.floor(Math.random() * 8) + 1;
-          this._supporters.push({ name, gifts });
-        }
-      } else {
-        const idx = Math.floor(Math.random() * this._supporters.length);
-        this._supporters[idx].gifts += Math.floor(Math.random() * 3) + 1;
-      }
-      this._supporters.sort((a, b) => b.gifts - a.gifts);
-      this._updateSupportersUI();
-    }, 15000 + Math.random() * 10000);
   }
 
   stopSupporters() {
-    clearInterval(this._supporterInterval);
+    // No longer an interval
+  }
+
+  recordSupporterVote(author, weight) {
+    const existing = this._supporters.find(s => s.name === author);
+    if (existing) {
+        existing.gifts += weight;
+    } else {
+        this._supporters.push({ name: author, gifts: weight });
+    }
+    this._supporters.sort((a, b) => b.gifts - a.gifts);
+    this._updateSupportersUI();
   }
 
   _updateSupportersUI() {
@@ -100,7 +94,7 @@ export class UIManager {
       list.innerHTML = '<div class="sup-empty">No supporters yet</div>';
       return;
     }
-    list.innerHTML = this._supporters.slice(0, 5).map((s, i) => `
+    list.innerHTML = this._supporters.slice(0, 3).map((s, i) => `
       <div class="sup-row">
         <span class="sup-rank">${i + 1}</span>
         <span class="sup-name">${s.name}</span>
@@ -112,7 +106,6 @@ export class UIManager {
   resetSupporters() {
     this._supporters = [];
     this._updateSupportersUI();
-    this.stopSupporters();
   }
 
   /* ------------------------------------------------------------------ */
@@ -195,7 +188,16 @@ export class UIManager {
   showTop5Finalists(countries) {
     const el    = this.$('top5-tracker');
     const cards = this.$('top5-cards');
+    const header = this.$('top5-header');
     if (!el || !cards) return;
+
+    if (header) {
+        if (countries.length > 5) {
+            header.innerHTML = `\u26a1 TOP ${countries.length} FINALISTS \u2014 WHO WILL WIN? \u26a1`;
+        } else {
+            header.innerHTML = `\u26a1 TOP 5 FINALISTS \u2014 WHO WILL WIN? \u26a1`;
+        }
+    }
 
     cards.innerHTML = '';
     countries.forEach(c => {
@@ -334,6 +336,83 @@ export class UIManager {
         setTimeout(() => toast.remove(), 500);
       }
     }, 2500);
+  }
+
+  showReviveProgress(country, flagUrl, current, target) {
+    let container = this.$('revive-trackers');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'revive-trackers';
+      container.style.position = 'absolute';
+      container.style.top = '120px';
+      container.style.right = '10px';
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '8px';
+      container.style.zIndex = '100';
+      const hud = this.$('hud');
+      if (hud) hud.appendChild(container);
+    }
+    
+    let el = this.$(`revive-${country.code}`);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = `revive-${country.code}`;
+      el.className = 'revive-progress-item';
+      el.style.background = 'rgba(10, 25, 40, 0.85)';
+      el.style.border = '1px solid rgba(245, 158, 11, 0.6)';
+      el.style.padding = '4px 8px';
+      el.style.borderRadius = '8px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.gap = '8px';
+      el.style.color = '#f59e0b';
+      el.style.fontWeight = 'bold';
+      el.style.fontSize = '12px';
+      el.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.3)';
+      el.innerHTML = `
+        <img src="${flagUrl}" style="width: 24px; height: 16px; border-radius: 2px;" alt="">
+        <span class="revive-text">${current}/${target} REVIVE</span>
+      `;
+      container.appendChild(el);
+    } else {
+      el.querySelector('.revive-text').textContent = `${current}/${target} REVIVE`;
+      // pop animation
+      el.style.transform = 'scale(1.1)';
+      setTimeout(() => el.style.transform = 'scale(1)', 200);
+    }
+  }
+
+  hideReviveProgress(code) {
+    const el = this.$(`revive-${code}`);
+    if (el) {
+      el.style.opacity = '0';
+      el.style.transform = 'scale(0.8)';
+      setTimeout(() => el.remove(), 300);
+    }
+  }
+
+
+  showReviveToast(country, flagUrl, author) {
+    const feed = this.$('elimination-feed');
+    if (!feed) return;
+    
+    const toast = document.createElement('div');
+    toast.className = 'elim-toast';
+    toast.style.background = 'rgba(25, 40, 10, 0.95)';
+    toast.style.borderColor = 'rgba(100, 255, 150, 0.8)';
+    toast.innerHTML = `<img src="${flagUrl}" alt=""> <span style="color:#66ff99">\u26a1 REVIVED BY ${author.toUpperCase()}:</span> ${country.name}`;
+    
+    feed.insertBefore(toast, feed.firstChild);
+    while (feed.children.length > 3) feed.removeChild(feed.lastChild);
+    
+    setTimeout(() => {
+      if (toast.parentNode === feed) {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.5s ease';
+        setTimeout(() => toast.remove(), 500);
+      }
+    }, 4500);
   }
 
   /* ------------------------------------------------------------------ */

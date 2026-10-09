@@ -30,7 +30,7 @@ export default function QualifiedPanel({ title, rows, engineRef }) {
   const placeholders = Math.max(0, TOTAL_ROWS - (rows?.length || 0));
 
   return (
-    <div className="flex-none mx-4 mt-1 px-3.5 pt-1.5 pb-2 bg-bg-deep/60 border border-accent-gold/30 rounded-md">
+    <div className="flex-none px-3.5 pt-1.5 pb-2 bg-bg-deep/60 border border-accent-gold/30 rounded-md">
       <div className="text-[10px] tracking-[1.3px] uppercase text-accent-gold text-center mb-1">{title}</div>
       <div className="qp-rows">
         {Array.from({ length: placeholders }).map((_, i) => (

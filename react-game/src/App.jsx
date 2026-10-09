@@ -4,14 +4,17 @@ import { useYoutubeChat } from './hooks/useYoutubeChat.js';
 import { COUNTRIES } from './data/countries.js';
 import Header from './components/Header.jsx';
 import QualifiedPanel from './components/QualifiedPanel.jsx';
+import TopSupportersPanel from './components/TopSupportersPanel.jsx';
 import RoundInfo from './components/RoundInfo.jsx';
 import Arena from './components/Arena.jsx';
 import ProgressBar from './components/ProgressBar.jsx';
 import EliminatedBar from './components/EliminatedBar.jsx';
-import Footer from './components/Footer.jsx';
 import ChatOverlay from './components/ChatOverlay.jsx';
+import ControlsOverlay from './components/ControlsOverlay.jsx';
 
 export default function App() {
+  const params = new URLSearchParams(window.location.search);
+  const isStream = params.get('headless') === 'true' || params.get('clean') === 'true';
   const {
     canvasRef,
     engineRef,
@@ -21,6 +24,8 @@ export default function App() {
     eliminatedList,
     qualifiedDisplayList,
     timer,
+    commentVotes,
+    targetReviveVotes,
     controls,
   } = useEngine();
 
@@ -49,9 +54,32 @@ export default function App() {
     [controls]
   );
 
+  const [topSupporters, setTopSupporters] = useState([]);
+
   useYoutubeChat({
-    onMessage: (msg) => setChatMessages((prev) => [...prev.slice(-49), msg]),
+    onMessage: (msg) => {
+      if (msg.type === 'SETTINGS_UPDATE' || msg.type === 'SYNC_STATE') {
+          if (engineRef.current && msg.settings) {
+              engineRef.current.settings = { ...engineRef.current.settings, ...msg.settings };
+              if (msg.settings.rotSpeed !== undefined) {
+                  engineRef.current.GATE_SPIN = Number(msg.settings.rotSpeed);
+              }
+          }
+          if (msg.type === 'SETTINGS_UPDATE') return;
+      }
+      setChatMessages((prev) => [...prev.slice(-49), msg]);
+      if (msg.vote) {
+        controls.instantPush(msg.vote.code, msg.vote.weight || 1, msg.author);
+      }
+    },
     onVoteTally: handleVoteTally,
+    onTopSupporters: (supporters) => {
+        const sorted = Object.entries(supporters)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([name, weight]) => ({ name, weight }));
+        setTopSupporters(sorted);
+    }
   });
 
   return (
@@ -64,7 +92,14 @@ export default function App() {
         soundEnabled={controls.soundEnabled}
       />
 
-      <QualifiedPanel title={qualifiedDisplayList.title} rows={qualifiedDisplayList.rows} engineRef={engineRef} />
+      <div className="flex px-4 justify-between" style={{ gap: '10px' }}>
+        <div className="flex-1 mx-0 mt-1">
+            <QualifiedPanel title={qualifiedDisplayList.title} rows={qualifiedDisplayList.rows} engineRef={engineRef} />
+        </div>
+        <div className="flex-1 mx-0 mt-1">
+            <TopSupportersPanel supporters={topSupporters} />
+        </div>
+      </div>
 
       <RoundInfo
         roundNumber={hudState.roundNumber}
@@ -74,15 +109,28 @@ export default function App() {
         timer={timer}
       />
 
-      <Arena canvasRef={canvasRef} winnerState={winnerState} stageAnnouncement={stageAnnouncement} engineRef={engineRef} />
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+        <div className="w-full md:w-auto md:absolute md:top-[280px] md:bottom-[100px] md:left-4 z-40 order-2 md:order-none px-2 py-1 md:p-0 flex-none flex items-stretch">
+          <ChatOverlay 
+            messages={chatMessages} 
+            commentVotes={commentVotes} 
+            targetVotes={targetReviveVotes}
+            eliminatedList={eliminatedList}
+          />
+        </div>
+        <Arena canvasRef={canvasRef} winnerState={winnerState} stageAnnouncement={stageAnnouncement} engineRef={engineRef} />
+      </div>
 
       <ProgressBar alive={hudState.alive} total={hudState.total} progressPct={hudState.progressPct} />
 
-      <EliminatedBar eliminatedList={eliminatedList} engineRef={engineRef} />
-
-      <Footer />
-
-      <ChatOverlay messages={chatMessages} />
+      <EliminatedBar 
+        eliminatedList={eliminatedList} 
+        engineRef={engineRef} 
+        commentVotes={commentVotes}
+        targetVotes={targetReviveVotes}
+      />
+      
+      <ControlsOverlay engineRef={engineRef} isStream={isStream} />
     </div>
   );
 }

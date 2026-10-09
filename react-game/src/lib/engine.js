@@ -105,9 +105,9 @@ export class FlagBattleEngine extends EventEmitter {
     this.ARENA_RADIUS = 460;
     this.FLAG_R = 19;
 
-    this.GATES = [{ angle: Math.PI / 2, half: 0.26 }];
-    this.GATE_SPIN = 0.0035;
-    this.BLOCKER = { angle: rand(0, Math.PI * 2), half: 0.34, speed: 0.006 };
+    this.GATES = [{ angle: Math.PI / 2, half: 0.22 }];
+    this.GATE_SPIN = 0.002;
+    this.BLOCKER = { angle: rand(0, Math.PI * 2), half: 0.36, speed: 0.0032 };
 
     this.flags = [];
     this.running = true;
@@ -133,6 +133,22 @@ export class FlagBattleEngine extends EventEmitter {
     this.ambienceStarted = false;
     this.lastThumpTime = 0;
 
+    // ---- Settings ----
+    this.settings = {
+      reviveVotes: 4,
+      gravity: 0.0,
+      rotSpeed: 0.002,
+      speedMult: 1.0,
+      bias: true,
+      watermark: '@FlagsBattleSimulator'
+    };
+    if (typeof window !== 'undefined' && window.__liveSettings) {
+      this.settings = { ...this.settings, ...window.__liveSettings };
+    }
+
+    // ---- Comment Votes per Country (track & show revive progress) ----
+    this.commentVotes = {};
+
     // ---- Vote-boost (temporary speed/resilience multiplier for a code) ----
     this._voteBoosts = new Map(); // code -> { factor, until }
 
@@ -146,6 +162,8 @@ export class FlagBattleEngine extends EventEmitter {
   // ================= Public API =================
 
   start() {
+    this.commentVotes = {};
+    this.emit('commentVotes', { ...this.commentVotes });
     this.stagePool = this.countryCodes.slice();
     this._spawnFlags();
     this._timerInterval = setInterval(() => this._tickTimer(), 1000);
@@ -187,6 +205,8 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   newRound() {
+    this.commentVotes = {};
+    this.emit('commentVotes', { ...this.commentVotes });
     this.stageIndex = 0;
     this.stagePool = this.countryCodes.slice();
     this.qualifiedThisStage = [];
@@ -203,19 +223,156 @@ export class FlagBattleEngine extends EventEmitter {
   // periodically with whichever alive country currently has the most votes.
   // Kept intentionally simple — exact balance is left for later tuning.
   applyVoteBoost(countryCode, boostFactor = 1.4, durationMs = 5000) {
+    if (!countryCode) return;
+    const upper = countryCode.trim().toUpperCase();
     const until = Date.now() + durationMs;
-    this._voteBoosts.set(countryCode, { factor: boostFactor, until });
+    this._voteBoosts.set(upper, { factor: boostFactor, until });
   }
 
-  // ================= Sound (ported from the prototype) =================
+  instantPush(countryCode, weight = 1, author = '') {
+    if (!countryCode) return;
+    const searchToken = countryCode.trim().toUpperCase();
+    
+    // Resolve code from code or name or common aliases
+    const ALIASES = {
+      'USA': 'US',
+      'AMERICA': 'US',
+      'UNITED STATES': 'US',
+      'UNITED STATES OF AMERICA': 'US',
+      'UK': 'GB',
+      'BRITAIN': 'GB',
+      'ENGLAND': 'GB',
+      'UAE': 'AE',
+      'EMIRATES': 'AE',
+      'KOREA': 'KR',
+      'SOUTH KOREA': 'KR',
+      'RUSSIA': 'RU'
+    };
+
+    let targetCode = ALIASES[searchToken] || searchToken;
+    const foundCountry = this.countries.find(c => 
+      c.code.toUpperCase() === targetCode || 
+      c.name.toUpperCase() === searchToken ||
+      c.name.toUpperCase() === targetCode
+    );
+    if (foundCountry) {
+      targetCode = foundCountry.code.toUpperCase();
+    }
+    
+    let flag = this.flags.find((f) => (f.code || '').toUpperCase() === targetCode);
+    const isEliminated = !flag || !flag.alive || this.eliminatedList.some(e => (e.code || '').toUpperCase() === targetCode);
+    
+    if (isEliminated) {
+      this.commentVotes[targetCode] = (this.commentVotes[targetCode] || 0) + (weight || 1);
+      const targetVotes = (this.settings && this.settings.reviveVotes !== undefined) 
+        ? Math.max(1, Number(this.settings.reviveVotes))
+        : (typeof window !== 'undefined' && window.__liveSettings?.reviveVotes ? Math.max(1, Number(window.__liveSettings.reviveVotes)) : 4);
+      
+      const currentVotes = this.commentVotes[targetCode];
+      this.emit('commentVotes', { ...this.commentVotes });
+      
+      if (currentVotes >= targetVotes) {
+        // Flag earned enough comments to be revived!
+        delete this.commentVotes[targetCode];
+        this.emit('commentVotes', { ...this.commentVotes });
+
+        if (!flag) {
+          const elimEntry = this.eliminatedList.find(e => (e.code || '').toUpperCase() === targetCode);
+          flag = {
+            code: targetCode,
+            country: { code: targetCode, name: this.countryNames[targetCode] || elimEntry?.name || targetCode },
+            x: this.CENTER.x,
+            y: this.CENTER.y,
+            r: this.FLAG_R,
+            vx: 0,
+            vy: 0,
+            alive: false,
+          };
+          this.flags.push(flag);
+        }
+
+        flag.alive = true;
+        // Spawn back safely near the center of the arena
+        flag.x = this.CENTER.x + (Math.random() * 30 - 15);
+        flag.y = this.CENTER.y + (Math.random() * 30 - 15);
+        const rndA = Math.random() * Math.PI * 2;
+        flag.vx = Math.cos(rndA) * 1.2;
+        flag.vy = Math.sin(rndA) * 1.2;
+        flag.flashUntil = Date.now() + 4500;
+        flag.immunityUntil = Date.now() + 4500;
+        
+        // Remove from eliminated list
+        this.eliminatedList = this.eliminatedList.filter(e => (e.code || '').toUpperCase() !== targetCode);
+        this.emit('eliminated', this.eliminatedList.slice());
+        this._emitHud();
+        
+        if (this.soundEnabled) {
+          this._playTone(1046, 0.6, 'sawtooth', 0, 0.2);
+          const countryName = this.countryNames[targetCode] || targetCode;
+          this._speakNatural(`Incredible! ${author || 'The chat'} has revived ${countryName}!`);
+        }
+      }
+      return;
+    }
+
+    // Flag is alive: gently steer toward center to protect it from the gate
+    const dx = this.CENTER.x - flag.x;
+    const dy = this.CENTER.y - flag.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    flag.vx = (dx / dist) * 0.85;
+    flag.vy = (dy / dist) * 0.85;
+    
+    // Highlight the flag visually for a brief moment
+    flag.flashUntil = Date.now() + Math.max(1500, 500 * Math.min(weight, 5));
+    
+    if (weight > 1 && this.soundEnabled) {
+      this._playTone(880, 0.3, 'square', 0, 0.2 * Math.min(weight, 2));
+      if (author) {
+        const countryName = this.countryNames[flag.code] || flag.code;
+        this._speakNatural(`${author} steered ${countryName} to safety!`);
+      }
+    }
+  }
+
+  // ================= Sound & TTS =================
+
+  _speakNatural(text) {
+    if (!this.soundEnabled || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel(); // prevent overlap
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang  = 'en-US';
+    u.rate  = 1.0;
+    u.pitch = 1.0;
+    window.speechSynthesis.speak(u);
+  }
+
+  _triggerVoiceCTA() {
+    if (!this.running || !this.soundEnabled) return;
+    
+    const aliveFlags = this.flags.filter(f => f.alive);
+    const randomCountry = aliveFlags.length > 0
+      ? (this.countryNames[aliveFlags[Math.floor(Math.random() * aliveFlags.length)].code] || 'your country')
+      : 'your country';
+
+    const prompts = [
+      'Drop a comment with your country name!',
+      `${randomCountry} is still alive! Comment to boost it!`,
+      `${aliveFlags.length} flags still fighting! Who will survive?`,
+      `Can ${randomCountry} make it to the finals?`,
+      'Did your country get eliminated? Comment its name 4 times to revive it!',
+      'Superchats instantly revive eliminated countries or give them a super boost!'
+    ];
+    
+    this._speakNatural(prompts[Math.floor(Math.random() * prompts.length)]);
+  }
 
   _ensureAudio() {
     if (!this.audioCtx) {
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      const AudioCtxClass = typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : null;
       if (!AudioCtxClass) return null;
       this.audioCtx = new AudioCtxClass();
     }
-    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
     return this.audioCtx;
   }
 
@@ -383,6 +540,8 @@ export class FlagBattleEngine extends EventEmitter {
   _spawnFlags() {
     this.flags = [];
     this.eliminatedList = [];
+    this.commentVotes = {};
+    this.emit('commentVotes', { ...this.commentVotes });
     this.emit('eliminated', this.eliminatedList.slice());
 
     const codes = this.stagePool.slice();
@@ -390,7 +549,7 @@ export class FlagBattleEngine extends EventEmitter {
 
     codes.forEach((code, i) => {
       const pos = positions[i] || { x: this.CENTER.x, y: this.CENTER.y };
-      const speed = rand(2.5, 8);
+      const speed = rand(1.0, 2.2);
       const dir = rand(0, Math.PI * 2);
       this.flags.push({
         code,
@@ -574,6 +733,13 @@ export class FlagBattleEngine extends EventEmitter {
     const h = f.r * 1.4;
     const x0 = f.x - w / 2;
     const y0 = f.y - h / 2;
+    
+    ctx.save();
+    if (f.flashUntil && f.flashUntil > Date.now()) {
+      ctx.shadowColor = 'rgba(255, 255, 0, 0.8)';
+      ctx.shadowBlur = 20;
+    }
+    
     const sprite = this._getSprite(f.code);
     if (sprite.ready && sprite.canvas) {
       ctx.drawImage(sprite.canvas, x0, y0, w, h);
@@ -584,9 +750,12 @@ export class FlagBattleEngine extends EventEmitter {
       ctx.ellipse(f.x, f.y, w / 2, h / 2, 0, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = 'rgba(240,235,216,0.5)';
-    ctx.lineWidth = 1;
+    
+    ctx.strokeStyle = (f.flashUntil && f.flashUntil > Date.now()) ? 'rgba(255,255,0,0.9)' : 'rgba(240,235,216,0.5)';
+    ctx.lineWidth = (f.flashUntil && f.flashUntil > Date.now()) ? 3 : 1;
     ctx.strokeRect(x0, y0, w, h);
+    
+    ctx.restore();
   }
 
   // Draws a code's flag into an arbitrary target canvas/context box —
@@ -606,6 +775,9 @@ export class FlagBattleEngine extends EventEmitter {
   _eliminate(f) {
     if (!f.alive) return;
     f.alive = false;
+    const upperCode = (f.code || '').toUpperCase();
+    delete this.commentVotes[upperCode];
+    this.emit('commentVotes', { ...this.commentVotes });
     this._playWhoosh();
     const dx = f.x - this.CENTER.x;
     const dy = f.y - this.CENTER.y;
@@ -620,7 +792,7 @@ export class FlagBattleEngine extends EventEmitter {
       targetAngle,
       targetRadius,
       t0: performance.now(),
-      duration: 650,
+      duration: 750,
     });
     this._emitHud();
   }
@@ -722,14 +894,31 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _step() {
+    if (this.settings?.rotSpeed !== undefined) {
+      this.GATE_SPIN = Number(this.settings.rotSpeed);
+    }
     this.GATES[0].angle = norm(this.GATES[0].angle + this.GATE_SPIN);
     this.BLOCKER.angle = norm(this.BLOCKER.angle + this.BLOCKER.speed);
 
+    // Call Voice CTA periodically (e.g. roughly every 30 seconds)
+    if (!this.lastCTATime) this.lastCTATime = Date.now();
+    if (Date.now() - this.lastCTATime > 30000) {
+      this.lastCTATime = Date.now();
+      if (Math.random() > 0.4) {
+        this._triggerVoiceCTA();
+      }
+    }
+
     const alive = this.flags.filter((f) => f.alive);
+    const grav = (this.settings?.gravity !== undefined) ? Number(this.settings.gravity) : 0;
+    const speedMult = (this.settings?.speedMult !== undefined) ? Number(this.settings.speedMult) : 1;
 
     alive.forEach((f) => {
-      f.x += f.vx;
-      f.y += f.vy;
+      if (grav > 0) {
+        f.vy += grav * 0.08;
+      }
+      f.x += f.vx * speedMult;
+      f.y += f.vy * speedMult;
     });
 
     for (let i = 0; i < alive.length; i++) {
@@ -778,6 +967,16 @@ export class FlagBattleEngine extends EventEmitter {
       const inGate = !blocked && this.GATES.some((g) => angleDiff(posAngle, g.angle) < g.half);
 
       if (inGate) {
+        if (f.immunityUntil && f.immunityUntil > Date.now()) {
+          // Protected by revival shield — safely bounce inward
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+          f.x = this.CENTER.x + nx * limit;
+          f.y = this.CENTER.y + ny * limit;
+          f.vx = -nx * 1.2;
+          f.vy = -ny * 1.2;
+          return;
+        }
         if (dist > this.ARENA_RADIUS + f.r * 1.4) this._eliminate(f);
         return;
       }
@@ -799,17 +998,29 @@ export class FlagBattleEngine extends EventEmitter {
     // Safety net — nudge up to a randomized target so slow flags don't all
     // clump at exactly the same speed. Vote-boosted flags get a higher
     // floor too, giving them a visible edge while the boost lasts.
-    const MIN_SPEED = 1.2;
+    const MIN_SPEED = 0.40;
     alive.forEach((f) => {
       const boost = this._activeBoostFor(f.code);
       const speed = Math.hypot(f.vx, f.vy);
       const minSpeed = MIN_SPEED * boost;
       if (speed < minSpeed) {
         const dir = speed > 0.0001 ? Math.atan2(f.vy, f.vx) : rand(0, Math.PI * 2);
-        const target = rand(minSpeed, minSpeed * 3.5);
+        const target = rand(minSpeed, minSpeed * 1.5);
         f.vx = Math.cos(dir) * target;
         f.vy = Math.sin(dir) * target;
       }
+    });
+
+    // Clamp maximum speed and apply very gentle damping so gameplay remains calm and readable
+    const MAX_SPEED = 1.6 * speedMult;
+    alive.forEach((f) => {
+      const speed = Math.hypot(f.vx, f.vy);
+      if (speed > MAX_SPEED) {
+        f.vx = (f.vx / speed) * MAX_SPEED;
+        f.vy = (f.vy / speed) * MAX_SPEED;
+      }
+      f.vx *= 0.999;
+      f.vy *= 0.999;
     });
 
     this._checkRoundEnd();
@@ -862,8 +1073,8 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _computeArenaRadius(w, h) {
-    const r = Math.min(w, h) * 0.4 - 16;
-    return Math.max(60, Math.min(380, r));
+    const r = Math.min(w, h) * 0.42 - 10;
+    return Math.max(60, Math.min(420, r));
   }
 
   _loop() {

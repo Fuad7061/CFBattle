@@ -160,22 +160,67 @@ export class FlagBattle {
 
   _handleChatVote(vote) {
     const code = vote.code;
-    const flag = this.flags.find(f => f.country.code === code && !f.eliminated);
-    if (!flag) return; // ignore if eliminated
+    const flag = this.flags.find(f => f.country.code === code);
+    if (!flag) return;
+
+    if (flag.eliminated) {
+      if (!this.reviveVotes) this.reviveVotes = {};
+      this.reviveVotes[code] = (this.reviveVotes[code] || 0) + (vote.weight || 1);
+      
+      const targetVotes = this.cfg?.reviveVotes || (typeof window !== 'undefined' && window.__liveSettings?.reviveVotes ? window.__liveSettings.reviveVotes : 4);
+      
+      if (this.reviveVotes[code] >= targetVotes) {
+        this.reviveVotes[code] = 0;
+        
+        flag.eliminated = false;
+        if (flag.body.eliminated) {
+          flag.body.eliminated = false;
+          Matter.World.add(this.physics.world, flag.body);
+          this.aliveCount++;
+          this.standings = this.standings.filter(c => c.code !== code);
+        }
+
+        if (this.ui.showReviveToast) {
+           this.ui.showReviveToast(flag.country, getFlagUrl(code, 80), vote.author || 'CHAT');
+        }
+        
+        Matter.Body.setPosition(flag.body, { x: this.CX, y: this.CY - 150 });
+        Matter.Body.setVelocity(flag.body, { x: (Math.random()-0.5)*10, y: 0 });
+        flag.body.isSensor = false;
+        
+        flag.reviveEffectEnd = Date.now() + 2000;
+        flag.body.immunityUntil = Date.now() + 3000;
+        
+        this.audio.playSfx('revive');
+        if (this.ui.resetRoster) this.ui.resetRoster();
+        if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
+        if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(code);
+      } else {
+        if (this.ui.showReviveProgress) {
+           this.ui.showReviveProgress(flag.country, getFlagUrl(code, 80), this.reviveVotes[code], targetVotes);
+        }
+      }
+      return;
+    }
 
     // Show toast UI
-    this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
+    if (this.ui.showChatBoostToast) {
+       this.ui.showChatBoostToast(flag.country, getFlagUrl(code, 80));
+    }
 
     // Apply physics boost (push away from the hole/edge towards center)
     const body = flag.body;
     const dx = this.CX - body.position.x;
     const dy = this.CY - body.position.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const forceMag = 0.015 * vote.weight; 
+    const forceMag = 0.015 * (vote.weight || 1); 
     Matter.Body.applyForce(body, body.position, {
       x: (dx / dist) * forceMag,
       y: (dy / dist) * forceMag
     });
+
+    flag.reviveEffectEnd = Date.now() + 3000;
+    body.immunityUntil = Date.now() + 3000;
   }
 
   /* ================================================================== */
@@ -207,6 +252,34 @@ export class FlagBattle {
     this.ui.hideLoading();
   }
 
+  // --- Exposed API Methods for Dashboard ---
+  start() {
+    const btn = document.getElementById('btn-start');
+    if (btn && btn.disabled) return;
+    this._cleanRound();
+    this._beginRound();
+  }
+
+  pause() {
+    if (!this.running) return;
+    this.paused = true;
+    this.audio.pauseBgMusic();
+    const btn = document.getElementById('btn-pause');
+    if (btn) btn.textContent = '▶ RESUME';
+  }
+
+  resume() {
+    if (!this.running) return;
+    this.paused = false;
+    this.audio.playBgMusic();
+    const btn = document.getElementById('btn-pause');
+    if (btn) btn.textContent = '⏸ PAUSE';
+  }
+
+  reset() {
+    this._fullReset();
+  }
+
   /* ================================================================== */
   /*  CONTROLS BINDING                                                  */
   /* ================================================================== */
@@ -215,99 +288,116 @@ export class FlagBattle {
     const $ = id => document.getElementById(id);
 
     /* -- START / RESTART -- */
-    $('btn-start').onclick = () => {
-      if ($('btn-start').disabled) return;
-      this._cleanRound();
-      this._beginRound();
-    };
+    if ($('btn-start')) {
+      $('btn-start').onclick = () => this.start();
+    }
 
     /* -- PAUSE / RESUME -- */
-    $('btn-pause').onclick = () => {
-      if (!this.running) return;
-      this.paused = !this.paused;
-      $('btn-pause').textContent = this.paused ? '▶ RESUME' : '⏸ PAUSE';
-      if (this.paused) this.audio.pauseBgMusic();
-      else             this.audio.playBgMusic();
-    };
+    if ($('btn-pause')) {
+      $('btn-pause').onclick = () => {
+        if (!this.running) return;
+        if (this.paused) this.resume();
+        else this.pause();
+      };
+    }
 
     /* -- FULL RESET -- */
-    $('btn-reset').onclick = () => this._fullReset();
+    if ($('btn-reset')) {
+      $('btn-reset').onclick = () => this.reset();
+    }
 
     /* -- MUTE -- */
-    $('btn-mute').onclick = () => {
-      const muted = this.audio.toggleMute();
-      $('btn-mute').textContent = muted ? '🔇' : '🔊';
-      $('btn-mute').title       = muted ? 'Unmute (M)' : 'Mute (M)';
-    };
+    if ($('btn-mute')) {
+      $('btn-mute').onclick = () => {
+        const muted = this.audio.toggleMute();
+        $('btn-mute').textContent = muted ? '🔇' : '🔊';
+        $('btn-mute').title       = muted ? 'Unmute (M)' : 'Mute (M)';
+      };
+    }
 
     /* -- FULLSCREEN -- */
-    $('btn-fs').onclick = () => {
-      const el = document.getElementById('game-wrapper');
-      if (!document.fullscreenElement) el.requestFullscreen?.();
-      else document.exitFullscreen?.();
-    };
+    if ($('btn-fs')) {
+      $('btn-fs').onclick = () => {
+        const el = document.getElementById('game-wrapper');
+        if (!document.fullscreenElement) el.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      };
+    }
 
     /* -- RECORD -- */
-    $('btn-record').onclick = async () => {
-      try {
-        await this.recorder.start();
-        $('btn-record').disabled     = true;
-        $('btn-stop').disabled       = false;
-        $('rec-badge').style.display = 'flex';
-      } catch (err) {
-        // user cancelled or error occurred, do nothing with UI
-      }
-    };
+    if ($('btn-record')) {
+      $('btn-record').onclick = async () => {
+        try {
+          await this.recorder.start();
+          $('btn-record').disabled     = true;
+          $('btn-stop').disabled       = false;
+          $('rec-badge').style.display = 'flex';
+        } catch (err) {}
+      };
+    }
 
-    $('btn-stop').onclick = () => {
-      this.recorder.stop();
-      $('btn-record').disabled   = false;
-      $('btn-stop').disabled     = true;
-      $('btn-download').disabled = false;
-      $('rec-badge').style.display = 'none';
-    };
+    if ($('btn-stop')) {
+      $('btn-stop').onclick = async () => {
+        await this.recorder.stop();
+        $('btn-record').disabled     = false;
+        $('btn-stop').disabled       = true;
+        $('rec-badge').style.display = 'none';
+        $('btn-download').disabled   = false;
+      };
+    }
 
-    $('btn-download').onclick = () => {
-      this.recorder.download(`flag-battle-r${this.roundNum}.mkv`);
-    };
+    if ($('btn-download')) {
+      $('btn-download').onclick = () => {
+        this.recorder.download(`flag-battle-r${this.roundNum}.mkv`);
+      };
+    }
 
     /* -- SPEED SLIDER -- */
-    const slider = $('speed-slider');
-    $('speed-value').textContent = `${slider.value}×`;
-    slider.oninput = () => {
-      const v = parseInt(slider.value);
-      this.physics.setStepsPerFrame(v);
-      $('speed-value').textContent = `${v}×`;
-    };
+    if ($('speed-slider')) {
+      const slider = $('speed-slider');
+      $('speed-value').textContent = `${slider.value}×`;
+      slider.oninput = () => {
+        const v = parseInt(slider.value);
+        this.physics.setStepsPerFrame(v);
+        $('speed-value').textContent = `${v}×`;
+      };
+    }
 
     /* -- SETTINGS PANEL -- */
-    $('btn-settings').onclick   = () => $('settings-panel').classList.toggle('open');
-    $('settings-close').onclick = () => {
+    if ($('btn-settings')) $('btn-settings').onclick   = () => $('settings-panel').classList.toggle('open');
+    if ($('settings-close')) $('settings-close').onclick = () => {
       $('settings-panel').classList.remove('open');
       this._applySettings();
     };
 
     /* -- MUSIC UPLOAD -- */
-    $('music-upload').onchange = e => {
-      const f = e.target.files[0];
-      if (f) this.audio.loadBgMusic(URL.createObjectURL(f));
-    };
+    if ($('music-upload')) {
+      $('music-upload').onchange = e => {
+        const f = e.target.files[0];
+        if (f) this.audio.loadBgMusic(URL.createObjectURL(f));
+      };
+    }
 
     /* -- LIVE VOLUME SLIDERS -- */
-    $('setting-music-vol').oninput = (e) => {
-      this.audio.setBgVolume(parseFloat(e.target.value));
-    };
-    $('setting-sfx-vol').oninput = (e) => {
-      this.audio.setSfxVolume(parseFloat(e.target.value));
-    };
+    if ($('setting-music-vol')) {
+      $('setting-music-vol').oninput = (e) => {
+        this.audio.setBgVolume(parseFloat(e.target.value));
+      };
+    }
+    if ($('setting-sfx-vol')) {
+      $('setting-sfx-vol').oninput = (e) => {
+        this.audio.setSfxVolume(parseFloat(e.target.value));
+      };
+    }
 
     /* -- LIVE WATERMARK SETTINGS -- */
-    $('setting-channel').oninput    = (e) => this.renderer.watermarkText = e.target.value;
-    $('setting-wm-opacity').oninput = (e) => this.renderer.watermarkOpacity = parseFloat(e.target.value);
-    $('setting-wm-size').oninput    = (e) => this.renderer.watermarkSize = parseInt(e.target.value);
-    $('setting-wm-count').oninput   = (e) => this.renderer.watermarkCount = parseInt(e.target.value);
-    $('setting-wm-angle').oninput   = (e) => this.renderer.watermarkAngle = parseInt(e.target.value);
+    if ($('setting-channel')) $('setting-channel').oninput    = (e) => this.renderer.watermarkText = e.target.value;
+    if ($('setting-wm-opacity')) $('setting-wm-opacity').oninput = (e) => this.renderer.watermarkOpacity = parseFloat(e.target.value);
+    if ($('setting-wm-size')) $('setting-wm-size').oninput    = (e) => this.renderer.watermarkSize = parseInt(e.target.value);
+    if ($('setting-wm-count')) $('setting-wm-count').oninput   = (e) => this.renderer.watermarkCount = parseInt(e.target.value);
+    if ($('setting-wm-angle')) $('setting-wm-angle').oninput   = (e) => this.renderer.watermarkAngle = parseInt(e.target.value);
   }
+
 
   /* -- Keyboard shortcuts -- */
   _onKey(e) {
@@ -337,14 +427,14 @@ export class FlagBattle {
   async _beginRound() {
     this._abortCountdown = false;
     const startBtn = document.getElementById('btn-start');
-    startBtn.disabled = true;
+    if (startBtn) startBtn.disabled = true;
 
     // Countdown
     if (this.cfg.countdownSecs > 0) {
       await this._runCountdown(this.cfg.countdownSecs);
     }
     
-    startBtn.disabled = false;
+    if (startBtn) startBtn.disabled = false;
     if (this._abortCountdown) return;
 
     let countries = this._shuffled(COUNTRIES);
@@ -401,8 +491,8 @@ export class FlagBattle {
     // Activate physics
     this.running = true;
     this.paused  = false;
-    document.getElementById('btn-pause').disabled    = false;
-    document.getElementById('btn-start').textContent = '↺ RESTART';
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = false;
+    if (document.getElementById('btn-start')) document.getElementById('btn-start').textContent = '↺ RESTART';
 
     this.audio.playBgMusic();
     this.ui.showChatCta(true);
@@ -435,9 +525,9 @@ export class FlagBattle {
     this.ui.hideTop5Finalists();
     this.ui.showChatCta(false);
     this.ui.stopEngagementCTA();
-    document.getElementById('btn-pause').textContent = '⏸ PAUSE';
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').textContent = '⏸ PAUSE';
     this._abortCountdown = true;
-    document.getElementById('btn-start').disabled = false;
+    if (document.getElementById('btn-start')) document.getElementById('btn-start').disabled = false;
   }
 
   _fullReset() {
@@ -454,9 +544,9 @@ export class FlagBattle {
     this.ui.stopViewerCount();
     this.ui.stopEngagementCTA();
     this.audio.pauseBgMusic();
-    document.getElementById('btn-start').textContent  = '▶ START';
-    document.getElementById('btn-pause').disabled     = true;
-    document.getElementById('btn-pause').textContent  = '⏸ PAUSE';
+    if (document.getElementById('btn-start')) document.getElementById('btn-start').textContent = '▶ START';
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = true;
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').textContent = '⏸ PAUSE';
   }
 
   async _runCountdown(secs) {
@@ -480,7 +570,7 @@ export class FlagBattle {
     this.audio.stopHeartbeat();
     this.ui.stopTimer();
     this.audio.pauseBgMusic();
-    document.getElementById('btn-pause').disabled = true;
+    if (document.getElementById('btn-pause')) document.getElementById('btn-pause').disabled = true;
 
     const winner = this.flags.find(f => !f.eliminated);
     if (!winner) return;
@@ -861,17 +951,20 @@ export class FlagBattle {
 
   _rescale() {
     const wrapper  = document.getElementById('game-wrapper');
+    if (!wrapper) return;
     const controls = document.getElementById('controls-panel');
     const hint     = document.getElementById('key-hint');
-    const ctrlH    = (controls?.offsetHeight ?? 56) + (hint?.offsetHeight ?? 22) + 16;
+    const ctrlH    = (controls?.offsetHeight ?? 0) + (hint?.offsetHeight ?? 0) + 16;
 
     const availW = window.innerWidth;
-    const availH = window.innerHeight - ctrlH;
+    const availH = window.innerHeight - (controls ? ctrlH : 0);
     const scale  = Math.min(availW / 540, availH / 960);
 
-    wrapper.style.transform       = `scale(${scale})`;
-    wrapper.style.transformOrigin = 'top center';
-    wrapper.style.marginBottom    = `${(scale - 1) * 960}px`;
+    wrapper.style.transform       = `translate(-50%, -50%) scale(${scale})`;
+    wrapper.style.transformOrigin = 'center center';
+    
+    // Calculate the top offset for absolute positioning to avoid overlap with controls if needed
+    // However, since it's centered, we just leave it.
 
     const realW = Math.min(540 * scale, availW);
     if (controls) controls.style.maxWidth = `${realW}px`;
