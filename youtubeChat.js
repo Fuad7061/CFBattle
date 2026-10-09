@@ -175,6 +175,13 @@ function parseCommand(text) {
   // an ordinary comment like "go Brazil!!" still registers as a vote. Uses the
   // name-only map to avoid false positives from everyday 2-letter words.
   const words = normalized.split(' ').filter(Boolean);
+
+  // Handle explicit "vote <country>" or "v <country>" without exclamation mark
+  if ((words[0] === 'vote' || words[0] === 'v') && words.length > 1) {
+    const target = resolveCountry(words.slice(1).join(' '));
+    if (target) return { kind: 'vote', ...target };
+  }
+
   for (let i = 0; i < words.length; i++) {
     for (let take = Math.min(4, words.length - i); take >= 1; take--) {
       const candidate = words.slice(i, i + take).join(' ');
@@ -183,12 +190,25 @@ function parseCommand(text) {
     }
   }
 
-  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote too. We
-  // only accept it when it is the ENTIRE comment, so codes don't accidentally
-  // match words buried inside sentences ("this is..." must not vote Iceland).
+  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote.
   if (words.length === 1) {
     const code = NAME_TO_CODE.get(words[0]);
     if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
+  }
+
+  // Support country code with numbers, repetition, or common cheer words
+  // (e.g. "bd 1", "bd 2", "bd bd", "bd pls", "save bd", "go bd")
+  // This allows viewers to bypass YouTube's strict duplicate-message filter.
+  const AMBIGUOUS_WORDS = new Set(['is', 'in', 'it', 'at', 'to', 'no', 'so', 'am', 'be', 'do', 'my', 'me', 'by', 'as', 'an', 'if', 'or', 'on', 'all', 'the', 'and']);
+  if (words.length <= 6) {
+    for (const w of words) {
+      if (AMBIGUOUS_WORDS.has(w)) continue;
+      const code = NAME_TO_CODE.get(w);
+      if (code && words.every(other => other === w || /^\d+$/.test(other) || ['pls', 'please', 'vote', 'v', 'c', 'go', 'save', 'win', 'revive', 'flag'].includes(other))) {
+        const count = words.filter(other => other === w).length;
+        return { kind: 'vote', code, countryName: findCountryName(code), count };
+      }
+    }
   }
   return null;
 }
@@ -390,7 +410,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
           vote = {
             code: command.code,
             countryName: command.countryName,
-            weight: superWeight,
+            weight: superWeight * (command.count || 1),
             superChat: Boolean(superChat),
             tier,
           };
@@ -401,6 +421,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
           // simply counts as a normal vote toward the regular revive threshold.
           const isNuke = command.power === 'nuke';
           const isInstantRevive = command.power === 'revive';
+          const isSave = command.power === 'shield';
           if (superChat || (!isNuke && !isInstantRevive)) {
             power = {
               power: command.power,
@@ -410,6 +431,16 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
               tier,
               superChat: Boolean(superChat),
             };
+            // When viewers type "save <country>", also credit it as a vote toward reviving/saving
+            if (isSave && command.code) {
+              vote = {
+                code: command.code,
+                countryName: command.countryName,
+                weight: superWeight,
+                superChat: Boolean(superChat),
+                tier,
+              };
+            }
           } else if (isInstantRevive && command.code) {
             vote = {
               code: command.code,
@@ -436,11 +467,14 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
         if (power) bus.emit('power', power);
       }
 
-const interval = Math.max(2000, data.pollingIntervalMillis || 5000);
-        if (!stopped) {
-          report('polling', { videoId, liveChatId });
-          setTimeout(() => pollMessages(liveChatId), interval);
-        }
+      // YouTube API default pollingIntervalMillis is typically 10000ms (10s), which makes live interaction feel sluggish.
+      // Capping to ~2500ms (customizable via YOUTUBE_POLL_INTERVAL_MS) drastically reduces latency.
+      const maxInterval = Number(process.env.YOUTUBE_POLL_INTERVAL_MS) || 2500;
+      const interval = Math.min(maxInterval, Math.max(1500, data.pollingIntervalMillis || 5000));
+      if (!stopped) {
+        report('polling', { videoId, liveChatId });
+        setTimeout(() => pollMessages(liveChatId), interval);
+      }
     } catch (err) {
       log.error('[youtubeChat] Polling error, retrying in 10s:', err.message);
       report('poll-error', { error: err.message });

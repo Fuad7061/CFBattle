@@ -1331,21 +1331,62 @@ export class FlagBattle {
   /* ================================================================== */
 
   _speakNatural(text, onEnd) {
-    if (!('speechSynthesis' in window)) { if (onEnd) onEnd(); return; }
-    window.speechSynthesis.cancel(); // prevent overlap
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang  = 'en-US';
-    u.rate  = 0.95;
-    u.pitch = 1.05;
-    
-    // Try to use the user-selected voice
-    const voices = window.speechSynthesis.getVoices();
-    if (this.audio?.voiceIndex != null && voices[this.audio.voiceIndex]) {
-      u.voice = voices[this.audio.voiceIndex];
+    if (this._currentVoiceAudio) {
+      try {
+        this._currentVoiceAudio.pause();
+        this._currentVoiceAudio.currentTime = 0;
+      } catch (e) {}
+      this._currentVoiceAudio = null;
+    }
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
     }
 
-    if (onEnd) u.onend = u.onerror = () => onEnd();
-    window.speechSynthesis.speak(u);
+    this._isVoicePlaying = true;
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      this._isVoicePlaying = false;
+      this._currentVoiceAudio = null;
+      if (onEnd) onEnd();
+    };
+
+    try {
+      const audio = new Audio('/api/tts?text=' + encodeURIComponent(text));
+      audio.volume = 1.0;
+      this._currentVoiceAudio = audio;
+      audio.onended = done;
+      audio.onerror = () => {
+        this._fallbackBrowserSpeak(text, done);
+      };
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          this._fallbackBrowserSpeak(text, done);
+        });
+      }
+    } catch (e) {
+      this._fallbackBrowserSpeak(text, done);
+    }
+  }
+
+  _fallbackBrowserSpeak(text, onEnd) {
+    if (!('speechSynthesis' in window)) { if (onEnd) onEnd(); return; }
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang  = 'en-US';
+      u.rate  = 0.95;
+      u.pitch = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      if (this.audio?.voiceIndex != null && voices[this.audio.voiceIndex]) {
+        u.voice = voices[this.audio.voiceIndex];
+      }
+      u.onend = u.onerror = () => { if (onEnd) onEnd(); };
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      if (onEnd) onEnd();
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1389,7 +1430,7 @@ export class FlagBattle {
       return;
     }
     // Never talk over a priority announcement / voice CTA that is already playing.
-    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+    if (this._isVoicePlaying || ('speechSynthesis' in window && window.speechSynthesis.speaking)) {
       this._shoutoutTimer = setTimeout(() => this._drainShoutouts(), 1200);
       return;
     }

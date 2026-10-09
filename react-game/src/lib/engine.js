@@ -313,7 +313,13 @@ export class FlagBattleEngine extends EventEmitter {
     this._ensureAudio();
     this._startCrowdAmbience();
     if (this.ambienceGain) this.ambienceGain.gain.value = enabled ? 0.05 : 0;
-    if (!enabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (!enabled) {
+      if (this._currentVoiceAudio) {
+        try { this._currentVoiceAudio.pause(); } catch(e){}
+        this._currentVoiceAudio = null;
+      }
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
     this.emit('soundChanged', { enabled });
   }
 
@@ -416,6 +422,12 @@ export class FlagBattleEngine extends EventEmitter {
         return;
       }
       case 'shield': {
+        const isElim = this.eliminatedList.some(e => (e.code || '').toUpperCase() === targetCode);
+        if (isElim) {
+          // If flag is eliminated, "save/shield" acts as a revive vote
+          this.instantPush(targetCode, weight, author, paid);
+          return;
+        }
         if (flag && flag.alive) {
           flag.immunityUntil = Date.now() + dur(6000);
           flag.flashUntil = Date.now() + dur(6000);
@@ -626,14 +638,62 @@ export class FlagBattleEngine extends EventEmitter {
   // ================= Sound & TTS =================
 
   _speakNatural(text, onEnd) {
-    if (!this.soundEnabled || !('speechSynthesis' in window)) { if (onEnd) onEnd(); return; }
-    window.speechSynthesis.cancel(); // prevent overlap
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang  = 'en-US';
-    u.rate  = 1.0;
-    u.pitch = 1.0;
-    if (onEnd) u.onend = u.onerror = () => onEnd();
-    window.speechSynthesis.speak(u);
+    if (!this.soundEnabled) { if (onEnd) onEnd(); return; }
+
+    if (this._currentVoiceAudio) {
+      try {
+        this._currentVoiceAudio.pause();
+        this._currentVoiceAudio.currentTime = 0;
+      } catch (e) {}
+      this._currentVoiceAudio = null;
+    }
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+
+    this._isVoicePlaying = true;
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      this._isVoicePlaying = false;
+      this._currentVoiceAudio = null;
+      if (onEnd) onEnd();
+    };
+
+    // Use /api/tts audio endpoint. This routes directly into PulseAudio on Linux/VPS
+    // and works reliably in headless Chromium where browser SpeechSynthesis has no voices.
+    try {
+      const audio = new Audio('/api/tts?text=' + encodeURIComponent(text));
+      audio.volume = 1.0;
+      this._currentVoiceAudio = audio;
+      audio.onended = done;
+      audio.onerror = () => {
+        this._fallbackBrowserSpeak(text, done);
+      };
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          this._fallbackBrowserSpeak(text, done);
+        });
+      }
+    } catch (e) {
+      this._fallbackBrowserSpeak(text, done);
+    }
+  }
+
+  _fallbackBrowserSpeak(text, onEnd) {
+    if (!('speechSynthesis' in window)) { if (onEnd) onEnd(); return; }
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      u.onend = u.onerror = () => { if (onEnd) onEnd(); };
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      if (onEnd) onEnd();
+    }
   }
 
   // ---- Comment shoutouts: voice thanks so chat engagement is announced ----
@@ -672,7 +732,7 @@ export class FlagBattleEngine extends EventEmitter {
       return;
     }
     // Never talk over a priority announcement / voice CTA that is already playing.
-    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+    if (this._isVoicePlaying || ('speechSynthesis' in window && window.speechSynthesis.speaking)) {
       this._shoutoutTimer = setTimeout(() => this._drainShoutouts(), 1200);
       return;
     }
@@ -920,18 +980,7 @@ export class FlagBattleEngine extends EventEmitter {
 
   _speakChampion(name) {
     if (!this.soundEnabled) return;
-    if (!('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.resume();
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance('The winner is ' + name + '! Congratulations!');
-      utter.rate = 0.95;
-      utter.pitch = 1.05;
-      utter.volume = 1;
-      window.speechSynthesis.speak(utter);
-    } catch (e) {
-      // speech synthesis unsupported or blocked — ignore
-    }
+    this._speakNatural('The winner is ' + name + '! Congratulations!');
   }
 
   // Call on the first user gesture (e.g. a control button click) to satisfy

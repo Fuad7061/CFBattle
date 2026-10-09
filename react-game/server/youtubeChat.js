@@ -122,6 +122,13 @@ export function parseCommand(text) {
   }
 
   const words = normalized.split(' ').filter(Boolean);
+
+  // Handle explicit "vote <country>" or "v <country>" without exclamation mark
+  if ((words[0] === 'vote' || words[0] === 'v') && words.length > 1) {
+    const target = resolveCountry(words.slice(1).join(' '));
+    if (target) return { kind: 'vote', ...target };
+  }
+
   for (let i = 0; i < words.length; i++) {
     for (let take = Math.min(4, words.length - i); take >= 1; take--) {
       const code = SCAN_TO_CODE.get(words.slice(i, i + take).join(' '));
@@ -129,11 +136,23 @@ export function parseCommand(text) {
     }
   }
 
-  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote too, but
-  // only when it is the ENTIRE comment (so "this is..." doesn't vote Iceland).
+  // A lone 2-letter country CODE (e.g. "us", "bd") counts as a vote.
   if (words.length === 1) {
     const code = NAME_TO_CODE.get(words[0]);
     if (code) return { kind: 'vote', code, countryName: findCountryName(code) };
+  }
+
+  // Support country code with numbers, repetition, or common cheer words (e.g. "bd 1", "bd 2", "bd pls", "save bd")
+  const AMBIGUOUS_WORDS = new Set(['is', 'in', 'it', 'at', 'to', 'no', 'so', 'am', 'be', 'do', 'my', 'me', 'by', 'as', 'an', 'if', 'or', 'on', 'all', 'the', 'and']);
+  if (words.length <= 6) {
+    for (const w of words) {
+      if (AMBIGUOUS_WORDS.has(w)) continue;
+      const code = NAME_TO_CODE.get(w);
+      if (code && words.every(other => other === w || /^\d+$/.test(other) || ['pls', 'please', 'vote', 'v', 'c', 'go', 'save', 'win', 'revive', 'flag'].includes(other))) {
+        const count = words.filter(other => other === w).length;
+        return { kind: 'vote', code, countryName: findCountryName(code), count };
+      }
+    }
   }
   return null;
 }
@@ -271,12 +290,16 @@ export function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, l
         let vote = null;
         let power = null;
         if (command && command.kind === 'vote') {
-          vote = { code: command.code, countryName: command.countryName, weight: superWeight, superChat: Boolean(superChat), tier };
+          vote = { code: command.code, countryName: command.countryName, weight: superWeight * (command.count || 1), superChat: Boolean(superChat), tier };
         } else if (command && command.kind === 'power') {
           const isNuke = command.power === 'nuke';
           const isInstantRevive = command.power === 'revive';
+          const isSave = command.power === 'shield';
           if (superChat || (!isNuke && !isInstantRevive)) {
             power = { power: command.power, code: command.code, countryName: command.countryName, weight: superWeight, tier, superChat: Boolean(superChat) };
+            if (isSave && command.code) {
+              vote = { code: command.code, countryName: command.countryName, weight: superWeight, superChat: Boolean(superChat), tier };
+            }
           } else if (isInstantRevive && command.code) {
             vote = { code: command.code, countryName: command.countryName, weight: 1, superChat: false, tier: 0 };
           }
@@ -288,7 +311,8 @@ export function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, l
         if (power) bus.emit('power', power);
       }
 
-      const interval = Math.max(2000, data.pollingIntervalMillis || 5000);
+      const maxInterval = Number(process.env.YOUTUBE_POLL_INTERVAL_MS) || 2500;
+      const interval = Math.min(maxInterval, Math.max(1500, data.pollingIntervalMillis || 5000));
       if (!stopped) setTimeout(() => pollMessages(liveChatId), interval);
     } catch (err) {
       log.error('[youtubeChat] Polling error, retrying in 10s:', err.message);

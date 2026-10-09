@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import https from 'node:https';
 import { EventEmitter } from 'node:events';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +98,40 @@ app.get('/api/votes', (req, res) => {
 app.post('/api/votes/reset', (req, res) => {
   voteTally = {};
   res.json({ ok: true });
+});
+
+const ttsCache = new Map();
+app.get('/api/tts', async (req, res) => {
+  const text = String(req.query.text || '').trim();
+  if (!text) return res.status(400).send('Missing text parameter');
+  if (text.length > 300) return res.status(400).send('Text too long');
+
+  const cacheKey = text.toLowerCase();
+  if (ttsCache.has(cacheKey)) {
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(ttsCache.get(cacheKey));
+  }
+
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(text)}`;
+    const ttsReq = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (ttsRes) => {
+      if (ttsRes.statusCode !== 200) return res.status(502).send('TTS upstream error');
+      const chunks = [];
+      ttsRes.on('data', (c) => chunks.push(c));
+      ttsRes.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (ttsCache.size > 200) ttsCache.delete(ttsCache.keys().next().value);
+        ttsCache.set(cacheKey, buf);
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(buf);
+      });
+    });
+    ttsReq.on('error', (err) => res.status(500).send('TTS error: ' + err.message));
+  } catch (err) {
+    res.status(500).send('TTS error: ' + err.message);
+  }
 });
 
 app.get('/api/health', (req, res) => {

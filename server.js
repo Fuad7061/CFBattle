@@ -3,6 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
+const https = require('https');
 const { EventEmitter } = require('events');
 const { startYoutubeChatPolling, testYoutubeChatConnection } = require('./youtubeChat.js');
 const { StreamScheduler } = require('./streamScheduler.js');
@@ -864,6 +865,74 @@ app.get('/api/votes', (req, res) => res.json(voteTally));
 app.post('/api/votes/reset', (req, res) => {
   voteTally = {};
   res.json({ ok: true });
+});
+
+// In-memory cache for synthesized voice lines so repeated announcements stream in 0ms
+const ttsCache = new Map();
+
+// High-fidelity TTS audio endpoint: plays through HTML5 Audio/Web Audio directly into PulseAudio on Linux/VPS
+app.get('/api/tts', async (req, res) => {
+  const text = String(req.query.text || '').trim();
+  if (!text) return res.status(400).send('Missing text parameter');
+  if (text.length > 300) return res.status(400).send('Text too long');
+
+  const cacheKey = text.toLowerCase();
+  if (ttsCache.has(cacheKey)) {
+    const cached = ttsCache.get(cacheKey);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(cached);
+  }
+
+  const googleKey = currentSettings.googleTtsApiKey || process.env.GOOGLE_TTS_API_KEY;
+  if (googleKey) {
+    try {
+      const gRes = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'en-US', ssmlGender: 'NEUTRAL' },
+          audioConfig: { audioEncoding: 'MP3', speakingRate: 0.95 },
+        }),
+      });
+      if (gRes.ok) {
+        const { audioContent } = await gRes.json();
+        const buf = Buffer.from(audioContent, 'base64');
+        if (ttsCache.size > 200) ttsCache.delete(ttsCache.keys().next().value);
+        ttsCache.set(cacheKey, buf);
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buf);
+      }
+    } catch (err) {
+      // Fall through to Google Translate TTS
+    }
+  }
+
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(text)}`;
+    const ttsReq = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (ttsRes) => {
+      if (ttsRes.statusCode !== 200) {
+        return res.status(502).send('TTS upstream error');
+      }
+      const chunks = [];
+      ttsRes.on('data', (c) => chunks.push(c));
+      ttsRes.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (ttsCache.size > 200) ttsCache.delete(ttsCache.keys().next().value);
+        ttsCache.set(cacheKey, buf);
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(buf);
+      });
+    });
+    ttsReq.on('error', (err) => {
+      res.status(500).send('TTS request error: ' + err.message);
+    });
+  } catch (err) {
+    res.status(500).send('TTS error: ' + err.message);
+  }
 });
 
 app.post('/api/test-chat', express.json(), (req, res) => {
