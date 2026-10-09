@@ -298,7 +298,7 @@ export function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, l
           if (superChat || (!isNuke && !isInstantRevive)) {
             power = { power: command.power, code: command.code, countryName: command.countryName, weight: superWeight, tier, superChat: Boolean(superChat) };
             if (isSave && command.code) {
-              vote = { code: command.code, countryName: command.countryName, weight: superWeight, superChat: Boolean(superChat), tier };
+              vote = { code: command.code, countryName: command.countryName, weight: superWeight * (command.count || 1), superChat: Boolean(superChat), tier };
             }
           } else if (isInstantRevive && command.code) {
             vote = { code: command.code, countryName: command.countryName, weight: 1, superChat: false, tier: 0 };

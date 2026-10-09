@@ -368,10 +368,10 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
     fetchViewers();
     viewerTimer = setInterval(fetchViewers, 15000);
 
-    await pollMessages(liveChatId);
+    await pollMessages(liveChatId, videoId);
   }
 
-  async function pollMessages(liveChatId) {
+  async function pollMessages(liveChatId, videoId) {
     if (stopped) return;
     try {
       const data = await ytFetch('liveChat/messages', {
@@ -436,7 +436,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
               vote = {
                 code: command.code,
                 countryName: command.countryName,
-                weight: superWeight,
+                weight: superWeight * (command.count || 1),
                 superChat: Boolean(superChat),
                 tier,
               };
@@ -473,7 +473,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
       const interval = Math.min(maxInterval, Math.max(1500, data.pollingIntervalMillis || 5000));
       if (!stopped) {
         report('polling', { videoId, liveChatId });
-        setTimeout(() => pollMessages(liveChatId), interval);
+        setTimeout(() => pollMessages(liveChatId, videoId), interval);
       }
     } catch (err) {
       log.error('[youtubeChat] Polling error, retrying in 10s:', err.message);
