@@ -262,12 +262,97 @@ export class Renderer {
 
       ctx.restore();
 
+      // Unrotated status overlays: SHIELD bubble, FREEZE frost ring, SLOW ring
+      this._drawFlagStatus(ctx, p.x, p.y, f);
+
       // ─────────────────────────────────────────────────────────────
       // TOP 5 FLOATING NAMEPLATE (Upright badge floating above flag)
       // ─────────────────────────────────────────────────────────────
       if (isTop5) {
         this._drawFlagNameplate(ctx, p.x, p.y, f.country, isTop3);
       }
+    }
+  }
+
+  // 🛡️ SHIELD bubble + ❄️ FREEZE frost + 🐌 SLOW aura, all in screen space so
+  // they stay upright and read clearly at a glance.
+  _drawFlagStatus(ctx, x, y, f) {
+    const now = Date.now();
+    const shielded = f.body.immunityUntil && f.body.immunityUntil > now;
+    const frozen = f.body.frozenUntil && f.body.frozenUntil > now;
+    const slowed = f.body.slowUntil && f.body.slowUntil > now;
+    const base = Math.max(this.FW, this.FH);
+
+    // Colour tint over the flag while CC'd, so it never blends into the arena.
+    if (frozen || slowed || shielded) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = shielded ? 'rgba(80, 220, 255, 0.14)'
+        : frozen ? 'rgba(140, 215, 255, 0.30)'
+                 : 'rgba(170, 120, 255, 0.26)';
+      ctx.fillRect(-this.FW / 2, -this.FH / 2, this.FW, this.FH);
+      ctx.restore();
+    }
+
+    if (shielded) {
+      ctx.save();
+      const pulse = 1 + Math.sin(now / 180) * 0.06;
+      ctx.translate(x, y);
+      ctx.rotate(now / 500);
+      ctx.strokeStyle = 'rgba(80, 220, 255, 0.95)';
+      ctx.lineWidth = 1.6;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = 'rgba(80, 220, 255, 0.95)';
+      const r = base * 0.9 * pulse;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Rotating defence spokes
+      ctx.rotate(now / 260);
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, i * (Math.PI / 2) - 0.28, i * (Math.PI / 2) + 0.28);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (frozen) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(now / 800);
+      ctx.strokeStyle = 'rgba(150, 220, 255, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(120, 200, 255, 0.9)';
+      const r = base * 0.78;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Crystal spikes
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i * (Math.PI / 4);
+        ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.lineTo(Math.cos(a) * (r - 6), Math.sin(a) * (r - 6));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (slowed) {
+      ctx.save();
+      const pulse = 1 + Math.sin(now / 200) * 0.08;
+      ctx.translate(x, y);
+      ctx.strokeStyle = 'rgba(180, 120, 255, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(180, 120, 255, 0.9)';
+      const r = base * 0.75 * pulse;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 

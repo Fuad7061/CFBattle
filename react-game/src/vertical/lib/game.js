@@ -210,7 +210,6 @@ export class FlagBattle {
       case 'shield': {
         if (alive) {
           flag.body.immunityUntil = Date.now() + dur(6000);
-          flag.reviveEffectEnd = Date.now() + dur(6000);
           if (this.ui.showPowerToast) this.ui.showPowerToast('🛡️ SHIELD', flag.country, getFlagUrl(code, 40), author);
         }
         break;
@@ -258,7 +257,7 @@ export class FlagBattle {
           const d = Math.sqrt(dx * dx + dy * dy) || 1;
           const mag = (paid ? 11 : 8) + Math.min(weight, 30) * 0.1;
           Matter.Body.setVelocity(b, { x: (dx / d) * mag, y: (dy / d) * mag });
-          flag.reviveEffectEnd = Date.now() + dur(2500);
+          flag.chatBoostEnd = Date.now() + dur(2500);
           if (this.ui.showPowerToast) this.ui.showPowerToast('🚀 BOOST', flag.country, getFlagUrl(code, 40), author);
         }
         break;
