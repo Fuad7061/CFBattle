@@ -15,7 +15,7 @@ export default function VerticalApp() {
     }
 
     const handleMessage = (e) => {
-      if (e.data?.type === 'SYNC_SETTINGS') {
+      if (e.data?.type === 'SYNC_SETTINGS' || e.data?.type === 'LIVE_SETTINGS_UPDATE') {
         const settings = e.data.settings;
         window.__liveSettings = settings;
         

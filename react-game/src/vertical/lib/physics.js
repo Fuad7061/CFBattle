@@ -213,6 +213,33 @@ export class PhysicsEngine {
   }
 
   /* ------------------------------------------------------------------ */
+  /*  REVIVE FLAG (Re-spawns flag back into physics simulation)          */
+  /* ------------------------------------------------------------------ */
+
+  reviveFlag(body, x, y) {
+    body.eliminated = false;
+    body.nearMissCount = 0;
+    body.immunityUntil = Date.now() + 4500;
+    body.isSensor = false;
+    body.collisionFilter = { category: 0x0001, mask: 0x0001 | 0x0002 };
+
+    Matter.Composite.add(this.world, body);
+    
+    if (!this.flagBodies.includes(body)) {
+      this.flagBodies.push(body);
+    }
+
+    Matter.Body.setPosition(body, { x, y });
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 9.0 + Math.random() * 4.0;
+    Matter.Body.setVelocity(body, {
+      x: Math.cos(angle) * speed,
+      y: Math.sin(angle) * speed,
+    });
+    Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.4);
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  PING PONG TUMBLER AGITATION                                       */
   /* ------------------------------------------------------------------ */
 
@@ -274,8 +301,13 @@ export class PhysicsEngine {
           const vDotN = b.velocity.x * nx + b.velocity.y * ny;
           if (vDotN > 0) {
             Matter.Body.setVelocity(b, {
-              x: (b.velocity.x - 2.0 * vDotN * nx) * 0.85,
-              y: (b.velocity.y - 2.0 * vDotN * ny) * 0.85,
+              x: (b.velocity.x - 2.0 * vDotN * nx) * 0.95,
+              y: (b.velocity.y - 2.0 * vDotN * ny) * 0.95,
+            });
+          } else {
+            Matter.Body.setVelocity(b, {
+              x: -nx * 6.0,
+              y: -ny * 6.0,
             });
           }
           continue; // Protected by revival shield — immune from elimination!

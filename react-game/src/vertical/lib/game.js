@@ -173,26 +173,27 @@ export class FlagBattle {
         this.reviveVotes[code] = 0;
         
         flag.eliminated = false;
-        if (flag.body.eliminated) {
-          flag.body.eliminated = false;
-          Matter.World.add(this.physics.world, flag.body);
-          this.aliveCount++;
-          this.standings = this.standings.filter(c => c.code !== code);
-        }
+        
+        // Spawn safely near center with slight random offset to prevent boundary clipping
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 25 + Math.random() * 35;
+        const spawnX = this.CX + Math.cos(ang) * rad;
+        const spawnY = this.CY + Math.sin(ang) * rad;
+        
+        this.physics.reviveFlag(flag.body, spawnX, spawnY);
+        
+        flag.reviveEffectEnd = Date.now() + 3500;
+        
+        this.aliveCount = this.flags.filter(f => !f.eliminated).length;
+        this.standings = this.standings.filter(c => c.code !== code);
 
         if (this.ui.showReviveToast) {
            this.ui.showReviveToast(flag.country, getFlagUrl(code, 80), vote.author || 'CHAT');
         }
         
-        Matter.Body.setPosition(flag.body, { x: this.CX, y: this.CY - 150 });
-        Matter.Body.setVelocity(flag.body, { x: (Math.random()-0.5)*10, y: 0 });
-        flag.body.isSensor = false;
-        
-        flag.reviveEffectEnd = Date.now() + 2000;
-        flag.body.immunityUntil = Date.now() + 3000;
-        
-        this.audio.playSfx('revive');
-        if (this.ui.resetRoster) this.ui.resetRoster();
+        if (this.audio.playDramaticHit) this.audio.playDramaticHit();
+        if (this.ui.reviveFlag) this.ui.reviveFlag(code);
+        if (this.ui.reviveTop5Card) this.ui.reviveTop5Card(code);
         if (this.ui.updateCounter) this.ui.updateCounter(this.aliveCount, this.totalCount);
         if (this.ui.hideReviveProgress) this.ui.hideReviveProgress(code);
       } else {

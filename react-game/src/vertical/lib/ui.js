@@ -289,6 +289,21 @@ export class UIManager {
     if (el) el.classList.add('elim');
   }
 
+  reviveFlag(code) {
+    const el = document.getElementById(`rf-${code}`);
+    if (el) el.classList.remove('elim');
+  }
+
+  reviveTop5Card(code) {
+    const card = document.getElementById(`t5-${code}`);
+    if (card) {
+      card.classList.remove('out');
+      card.classList.add('active');
+      const st = card.querySelector('.t5-status');
+      if (st) st.textContent = '🟢 ALIVE';
+    }
+  }
+
   resetRoster() {
     document.querySelectorAll('.rf').forEach(e => e.classList.remove('elim'));
   }

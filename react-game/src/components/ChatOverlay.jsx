@@ -12,7 +12,7 @@ export default function ChatOverlay({ messages, commentVotes = {}, targetVotes =
   }, [messages]);
 
   return (
-    <div className="relative w-full md:w-[320px] h-auto md:h-full bg-[#090e1a]/90 backdrop-blur-md border border-amber-500/30 rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.1)] flex flex-col overflow-hidden z-30 pointer-events-auto transition-all mx-auto">
+    <div className="relative w-full md:w-[320px] h-auto md:max-h-[calc(100vh-420px)] bg-[#090e1a]/90 backdrop-blur-md border border-amber-500/30 rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.1)] flex flex-col overflow-hidden z-30 pointer-events-auto transition-all mx-auto">
       {/* Header */}
       <div className="flex-none flex items-center justify-between px-3 py-1.5 border-b border-amber-500/15 bg-black/50">
         <div className="flex items-center gap-2">
