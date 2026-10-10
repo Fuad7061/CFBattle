@@ -265,9 +265,16 @@ async function beginStream() {
         currentPage = await browser.newPage();
         
         let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true&headless=true' : '?view=landscape&stream=true&headless=true';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${queryParam}`;
+        const internalHost = process.env.INTERNAL_HOST || '127.0.0.1';
+        const internalPort = process.env.PORT || 3000;
+        let gameUrl = `http://${internalHost}:${internalPort}/${queryParam}`;
         logMsg(`Puppeteer navigating to ${gameUrl}`);
-        await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
+        // Use domcontentloaded: networkidle2 hangs forever because of the active SSE live chat stream (/api/chat-stream)
+        await currentPage.goto(gameUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        try {
+            await currentPage.waitForSelector('#game-canvas, canvas, #game-wrapper, #app', { timeout: 8000 });
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 800));
 
         if (currentSettings.gameSettings) {
             await currentPage.evaluate((s) => {
@@ -340,10 +347,14 @@ async function beginStream() {
             logMsg("Applied saved game settings on stream boot.");
         }
 
-        // Auto-start gameplay
+        // Auto-start gameplay (fallback if not auto-started by engine)
         await currentPage.evaluate(() => {
             const btn = document.getElementById('btn-start');
-            if (btn && !btn.disabled) btn.click();
+            if (btn && !btn.disabled) {
+                btn.click();
+            } else if (window.gameInstance && !window.gameInstance.running && typeof window.gameInstance.start === 'function') {
+                window.gameInstance.start();
+            }
         });
         logMsg("Auto-started gameplay for the stream.");
 
@@ -543,8 +554,15 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         currentPage = await browser.newPage();
         
         let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true' : '?view=landscape&stream=true';
-        let gameUrl = `http://localhost:${process.env.PORT || 3000}/${queryParam}`;
-        await currentPage.goto(gameUrl, { waitUntil: 'networkidle2' });
+        const recHost = process.env.INTERNAL_HOST || '127.0.0.1';
+        const recPort = process.env.PORT || 3000;
+        let gameUrl = `http://${recHost}:${recPort}/${queryParam}`;
+        logMsg(`Puppeteer navigating to ${gameUrl}`);
+        await currentPage.goto(gameUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        try {
+            await currentPage.waitForSelector('#game-canvas, canvas, #game-wrapper, #app', { timeout: 8000 });
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 800));
 
         if (currentSettings.gameSettings) {
             await currentPage.evaluate((s) => {
