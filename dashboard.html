@@ -618,16 +618,17 @@
 
                         <div class="form-group">
                             <label style="display:flex; justify-content:space-between; align-items:center;">
-                                <span>Live Video ID, Video URL, or Channel ID</span>
+                                <span>Live Video ID, Video URL, Studio URL, or Channel ID</span>
                                 <span id="yt-target-detected" style="font-size:11px; color:#34d399; font-weight:600; display:none;">🎯 Target: Valid</span>
                             </label>
-                            <input type="text" id="set-youtube-live-id" oninput="detectYoutubeTargetInput()" placeholder="Paste YouTube Live URL (e.g. https://youtube.com/live/...), Video ID, or Channel ID">
+                            <input type="text" id="set-youtube-live-id" oninput="detectYoutubeTargetInput()" placeholder="Paste YouTube Live URL (e.g. https://studio.youtube.com/video/.../livestreaming, https://youtube.com/live/...), Video ID, or Channel ID">
                             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
-                                Accepts full live URLs (<code>https://youtube.com/live/xxx</code>, <code>watch?v=xxx</code>), 11-char Video IDs, or Channel IDs (<code>UC...</code>).
+                                Accepts Studio URLs (<code>https://studio.youtube.com/video/xxx/livestreaming</code>), standard live URLs (<code>https://youtube.com/live/xxx</code>, <code>watch?v=xxx</code>), 11-char Video IDs, or Channel IDs (<code>UC...</code>).
                             </div>
                         </div>
 
                         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
+                            <button class="btn btn-success" onclick="saveYoutubeChatSettings()" style="height:36px; padding:0 16px; font-weight:600;">⚡ Save &amp; Connect Live Chat</button>
                             <button class="btn" onclick="testYoutubeChat()">🧪 Test Chat Connection</button>
                             <span id="yt-chat-state" style="font-size:12px; color:var(--text-muted);">Status: unknown</span>
                         </div>
@@ -706,8 +707,18 @@
                         </div>
                         <p class="panel-desc">Pick when the stream should start and how long it should run. Times are interpreted in this server's local timezone (<span id="sched-tz">—</span>).</p>
 
-                        <div class="form-group" style="max-width: 420px;">
-                            <label>Start date &amp; time</label>
+                        <div class="form-group" style="max-width: 480px;">
+                            <label style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>Start date &amp; time</span>
+                                <span style="font-size:11px; color:var(--text-muted);">Zone: <span id="sched-tz">—</span></span>
+                            </label>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                                <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetSchedStart(15)">+15m</button>
+                                <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetSchedStart(30)">+30m</button>
+                                <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetSchedStart(60)">+1h</button>
+                                <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setSchedTonight(20)">Tonight 8 PM</button>
+                                <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setSchedTomorrow(10)">Tomorrow 10 AM</button>
+                            </div>
                             <input type="datetime-local" id="sched-start">
                         </div>
 
@@ -954,6 +965,13 @@
             });
             const target = document.getElementById(tabId);
             if (target) target.classList.add('active');
+
+            if (tabId === 'tab-schedule') {
+                const startEl = document.getElementById('sched-start');
+                if (startEl && !startEl.value) {
+                    offsetSchedStart(30);
+                }
+            }
         }
 
         // Open the single source-of-truth settings panel. Refreshes the inputs
@@ -1217,6 +1235,28 @@
             if (el) el.value = mins;
         }
 
+        function offsetSchedStart(mins) {
+            const d = new Date(Date.now() + mins * 60000);
+            const el = document.getElementById('sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
+        function setSchedTonight(hour = 20) {
+            const d = new Date();
+            d.setHours(hour, 0, 0, 0);
+            if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+            const el = document.getElementById('sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
+        function setSchedTomorrow(hour = 10) {
+            const d = new Date();
+            d.setDate(d.getDate() + 1);
+            d.setHours(hour, 0, 0, 0);
+            const el = document.getElementById('sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
         async function goLiveNow() {
             const dur = Number(document.getElementById('now-duration').value);
             if (!dur || dur <= 0) return showAlert('Enter a duration in minutes', true);
@@ -1326,6 +1366,11 @@
                 badge.textContent = '🎯 Channel ID Detected';
                 badge.style.color = '#38bdf8';
                 badge.style.display = 'inline';
+            } else if (val.includes('studio.youtube.com/video/')) {
+                const idMatch = val.match(/studio\.youtube\.com\/video\/([a-zA-Z0-9_-]{11})/i);
+                badge.textContent = idMatch ? `🎯 Studio Live URL Detected (${idMatch[1]})` : '🎯 Studio Live URL Detected';
+                badge.style.color = '#34d399';
+                badge.style.display = 'inline';
             } else if (val.includes('youtube.com/live/') || val.includes('watch?v=') || val.includes('youtu.be/') || /^[a-zA-Z0-9_-]{11}$/.test(val)) {
                 badge.textContent = '🎯 Live Video ID Detected';
                 badge.style.color = '#34d399';
@@ -1335,6 +1380,16 @@
                 badge.style.color = '#fbbf24';
                 badge.style.display = 'inline';
             }
+        }
+
+        async function saveYoutubeChatSettings() {
+            const el = document.getElementById('yt-chat-state');
+            if (el) {
+                el.textContent = '⏳ Saving and reconnecting live chat…';
+                el.style.color = 'var(--text-muted)';
+            }
+            await saveSettings();
+            setTimeout(testYoutubeChat, 1000);
         }
 
         async function testYoutubeChat() {

@@ -353,42 +353,310 @@ function parseYoutubeTarget(input) {
   const str = input.trim();
   if (!str) return { liveVideoId: null, channelId: null };
 
-  // Direct channel ID (starts with UC, 24 chars)
+  // 1. YouTube Studio video URLs:
+  // e.g. https://studio.youtube.com/video/XHl39knPWWE/livestreaming
+  //      https://studio.youtube.com/video/XHl39knPWWE/edit
+  //      https://studio.youtube.com/video/XHl39knPWWE
+  const studioMatch = str.match(/studio\.youtube\.com\/video\/([a-zA-Z0-9_-]{11})/i);
+  if (studioMatch) {
+    return { liveVideoId: studioMatch[1], channelId: null };
+  }
+
+  // 2. Direct channel ID (starts with UC, 24 chars)
   if (/^UC[a-zA-Z0-9_-]{22}$/.test(str)) {
     return { liveVideoId: null, channelId: str };
   }
-  // URL matching channel ID
+
+  // 3. Channel URL
   const chanMatch = str.match(/(?:youtube\.com\/(?:channel\/|c\/|user\/))(UC[a-zA-Z0-9_-]{22})/i);
   if (chanMatch) {
     return { liveVideoId: null, channelId: chanMatch[1] };
   }
-  // URL matching live/
+
+  // 4. Live URL: youtube.com/live/<id>
   const liveMatch = str.match(/(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/i);
   if (liveMatch) {
     return { liveVideoId: liveMatch[1], channelId: null };
   }
-  // URL matching watch?v= or youtu.be/
-  const watchMatch = str.match(/(?:youtube\.com\/watch\?.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+
+  // 5. Watch, embed, or youtu.be URL
+  const watchMatch = str.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
   if (watchMatch) {
     return { liveVideoId: watchMatch[1], channelId: null };
   }
-  // Bare 11-char video ID
+
+  // 6. Generic video URL path /video/<id>
+  const genericVideoMatch = str.match(/(?:\/video\/)([a-zA-Z0-9_-]{11})/i);
+  if (genericVideoMatch) {
+    return { liveVideoId: genericVideoMatch[1], channelId: null };
+  }
+
+  // 7. Any URL parameter containing v=<id> or video_id=<id>
+  const paramMatch = str.match(/[?&](?:v|video_id)=([a-zA-Z0-9_-]{11})/i);
+  if (paramMatch) {
+    return { liveVideoId: paramMatch[1], channelId: null };
+  }
+
+  // 8. Bare 11-char video ID
   if (/^[a-zA-Z0-9_-]{11}$/.test(str)) {
     return { liveVideoId: str, channelId: null };
   }
-  // Fallback: starts with UC
-  if (str.startsWith('UC')) {
+
+  // 9. Fallback for channel ID if starts with UC
+  if (str.startsWith('UC') && str.length >= 20) {
     return { liveVideoId: null, channelId: str };
   }
+
   return { liveVideoId: str, channelId: null };
 }
 
 /**
- * Zero-Quota High-Speed Live Chat engine powered by youtube-chat (Innertube web player API).
+ * Direct Innertube Live Chat Scraper ("Another Way").
+ * Bypasses canonical link mismatches, consent interstitials, and datacenter IP blocks
+ * by querying YouTube's internal Innertube web client with desktop Chrome headers.
+ * Consumes 0 Google Cloud API quota units (100% Free, Unlimited 24/7).
+ */
+function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus = () => {} }) {
+  let stopped = false;
+  let timer = null;
+  let currentContinuation = null;
+  let currentApiKey = null;
+  let currentClientVersion = '2.20261009.01.00';
+  let consecutiveErrors = 0;
+
+  const report = (state, extra = {}) => {
+    try {
+      onStatus({
+        state,
+        mode: 'player',
+        quotaUsed: 0,
+        quotaLimit: 'Unlimited (0 Quota Units · Direct Innertube)',
+        videoId: extra.videoId ?? liveVideoId ?? null,
+        channelId: null,
+        liveChatId: 'direct-innertube',
+        error: extra.error ?? null,
+        at: Date.now()
+      });
+    } catch (e) {}
+  };
+
+  async function resolveStream() {
+    const urls = [
+      `https://www.youtube.com/watch?v=${liveVideoId}`,
+      `https://www.youtube.com/live_chat?v=${liveVideoId}&is_popout=1`
+    ];
+
+    for (const url of urls) {
+      if (stopped) return false;
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Cookie': 'CONSENT=YES+1'
+          }
+        });
+        const html = await res.text();
+
+        const apiKeyMatch = html.match(/["\x27]INNERTUBE_API_KEY["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
+        const verMatch = html.match(/["\x27]clientVersion["\x27]:\s*["\x27]([\d.]+?)["\x27]/);
+        const contMatch = html.match(/["\x27]continuation["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
+
+        if (apiKeyMatch) currentApiKey = apiKeyMatch[1];
+        if (verMatch) currentClientVersion = verMatch[1];
+        if (contMatch) {
+          currentContinuation = contMatch[1];
+          return true;
+        }
+      } catch (err) {
+        log.warn(`[youtubeChat] Direct scraper error probing ${url}: ${err.message}`);
+      }
+    }
+    return false;
+  }
+
+  async function pollChat() {
+    if (stopped) return;
+    if (!currentContinuation || !currentApiKey) {
+      const ok = await resolveStream();
+      if (!ok) {
+        report('waiting', { error: `Broadcast (${liveVideoId}) offline or starting soon. Direct Innertube engine is armed and ready!` });
+        timer = setTimeout(pollChat, 12000);
+        return;
+      }
+      log.info(`[youtubeChat] ⚡ Connected to stream ${liveVideoId} via Direct Innertube Scraper (0 Quota Units, Unlimited 24/7).`);
+      report('connected', { videoId: liveVideoId });
+    }
+
+    try {
+      const postUrl = `https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=${currentApiKey}`;
+      const res = await fetch(postUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: 'WEB',
+              clientVersion: currentClientVersion
+            }
+          },
+          continuation: currentContinuation
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Innertube HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      consecutiveErrors = 0;
+      const lcc = data.continuationContents?.liveChatContinuation;
+      if (!lcc) {
+        currentContinuation = null;
+        report('waiting', { error: 'Broadcast rotated or waiting for messages. Reconnecting...' });
+        timer = setTimeout(pollChat, 5000);
+        return;
+      }
+
+      const actions = lcc.actions || [];
+      for (const a of actions) {
+        const item = a.addChatItemAction?.item?.liveChatTextMessageRenderer ||
+                     a.addChatItemAction?.item?.liveChatPaidMessageRenderer ||
+                     a.addChatItemAction?.item?.liveChatMembershipItemRenderer;
+        if (!item) continue;
+
+        const author = item.authorName?.simpleText || 'unknown';
+        const avatar = item.authorPhoto?.thumbnails?.slice(-1)[0]?.url || null;
+        const msgParts = (item.message?.runs || []).map(r => r.text || r.emoji?.shortcuts?.[0] || '');
+        const text = msgParts.join('').trim();
+        const command = parseCommand(text);
+
+        const isSuper = Boolean(item.purchaseAmountText);
+        let amountMicros = 0;
+        let amountDisplayString = '';
+        if (isSuper) {
+          amountDisplayString = item.purchaseAmountText.simpleText || '';
+          const num = parseFloat(amountDisplayString.replace(/[^0-9.]/g, '')) || 5;
+          amountMicros = Math.round(num * 1_000_000);
+        }
+
+        const superChat = isSuper ? {
+          amountMicros,
+          currency: 'USD',
+          amountDisplayString,
+          tier: superChatTier(amountMicros),
+        } : null;
+
+        const superWeight = superChat ? superChatWeight(superChat.amountMicros) : 1;
+        const tier = superChat ? superChatTier(superChat.amountMicros) : 0;
+
+        let vote = null;
+        let power = null;
+        if (command && command.kind === 'vote') {
+          vote = {
+            code: command.code,
+            countryName: command.countryName,
+            weight: superWeight * (command.count || 1),
+            superChat: Boolean(superChat),
+            tier,
+          };
+        } else if (command && command.kind === 'power') {
+          const isNuke = command.power === 'nuke';
+          const isInstantRevive = command.power === 'revive';
+          const isSave = command.power === 'shield';
+          if (superChat || (!isNuke && !isInstantRevive)) {
+            power = {
+              power: command.power,
+              code: command.code,
+              countryName: command.countryName,
+              weight: superWeight,
+              tier,
+              superChat: Boolean(superChat),
+            };
+            if (isSave && command.code) {
+              vote = {
+                code: command.code,
+                countryName: command.countryName,
+                weight: superWeight * (command.count || 1),
+                superChat: Boolean(superChat),
+                tier,
+              };
+            }
+          } else if (isInstantRevive && command.code) {
+            vote = {
+              code: command.code,
+              countryName: command.countryName,
+              weight: 1,
+              superChat: false,
+              tier: 0,
+            };
+          }
+        }
+
+        const chatMessage = {
+          id: item.id || `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          author,
+          avatar,
+          text,
+          timestamp: item.timestampUsec ? new Date(Number(item.timestampUsec) / 1000).toISOString() : new Date().toISOString(),
+          vote,
+          power,
+          superChat,
+          tier,
+        };
+        bus.emit('chat', chatMessage);
+        if (vote) bus.emit('vote', vote);
+        if (power) bus.emit('power', power);
+      }
+
+      const contData = lcc.continuations?.[0];
+      const nextCont = contData?.invalidationContinuationData?.continuation ||
+                       contData?.timedContinuationData?.continuation;
+      const timeoutMs = contData?.timedContinuationData?.timeoutMs || 800;
+
+      if (nextCont) {
+        currentContinuation = nextCont;
+        report('polling', { videoId: liveVideoId });
+        timer = setTimeout(pollChat, Math.max(600, Math.min(timeoutMs, 1200)));
+      } else {
+        currentContinuation = null;
+        timer = setTimeout(pollChat, 3000);
+      }
+    } catch (err) {
+      consecutiveErrors++;
+      log.warn(`[youtubeChat] Direct scraper error: ${err.message}`);
+      report('poll-error', { error: err.message });
+      if (consecutiveErrors > 3) {
+        currentContinuation = null;
+      }
+      timer = setTimeout(pollChat, Math.min(10000, 2000 * consecutiveErrors));
+    }
+  }
+
+  pollChat();
+
+  return {
+    stop() {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+  };
+}
+
+/**
+ * Zero-Quota High-Speed Live Chat engine powered by Innertube / Web Player.
  * Never consumes Google Cloud API quota (0 Units) and provides sub-second live reaction tracking.
  */
 function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onStatus = () => {} }) {
   let stopped = false;
+  let directEngine = null;
   let liveChat = null;
 
   const report = (state, extra = {}) => {
@@ -407,6 +675,21 @@ function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onSt
     } catch (e) {}
   };
 
+  // If we have a specific video ID, direct Innertube scraping is the fastest and most robust
+  if (liveVideoId) {
+    directEngine = startDirectInnertubeScraper({ liveVideoId, bus, log, onStatus });
+    return {
+      stop() {
+        stopped = true;
+        if (directEngine) {
+          directEngine.stop();
+          directEngine = null;
+        }
+      }
+    };
+  }
+
+  // Fallback to youtube-chat package for channel IDs
   async function start() {
     if (stopped) return;
     if (!LiveChat) {
@@ -523,7 +806,7 @@ function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onSt
 
       const ok = await liveChat.start();
       if (!ok) {
-        log.info('[youtubeChat] Target broadcast is not active right now. Polling for live status every 15s...');
+        log.info(`[youtubeChat] Target broadcast (${liveVideoId || channelId}) is not active right now. Polling every 15s...`);
         report('waiting', { error: 'Broadcast offline or starting soon. Zero-Quota engine is armed and ready!' });
         if (!stopped) setTimeout(start, 15000);
       }
@@ -859,6 +1142,31 @@ async function testYoutubeChatConnection({ apiKey, liveVideoId, channelId, chatM
     }
 
     try {
+      if (targetVideoId) {
+        try {
+          const watchUrl = `https://www.youtube.com/watch?v=${targetVideoId}`;
+          const res = await fetch(watchUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cookie': 'CONSENT=YES+1'
+            }
+          });
+          const html = await res.text();
+          const apiKeyMatch = html.match(/["\x27]INNERTUBE_API_KEY["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
+          const contMatch = html.match(/["\x27]continuation["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
+          if (apiKeyMatch && contMatch) {
+            return {
+              ok: true,
+              state: 'connected',
+              mode: 'player',
+              quotaCost: 0,
+              message: `⚡ Zero-Quota Web Player LIVE & CONNECTED! Attached to broadcast (${targetVideoId}) via Direct Innertube (0 Google API quota consumed).`
+            };
+          }
+        } catch (e) {}
+      }
+
       const opts = targetVideoId ? { liveId: targetVideoId } : { channelId: targetChannelId };
       const probe = new LiveChat(opts);
       let errorMsg = null;

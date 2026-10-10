@@ -236,7 +236,11 @@ async function beginStream() {
             '--disable-breakpad',
             '--disable-component-update',
             '--disable-ipc-flooding-protection',
-            '--disable-features=CalculateNativeWinOcclusion,TranslateUI'
+            '--disable-features=CalculateNativeWinOcclusion,TranslateUI',
+            '--disable-gpu-vsync',
+            '--disable-frame-rate-limit',
+            '--run-all-compositor-stages-before-draw',
+            '--disable-threaded-scrolling'
         ];
 
         if (process.platform !== 'darwin' && !process.env.USE_GPU) {
@@ -381,24 +385,26 @@ async function beginStream() {
                 rtmpUrl
             ];
         } else {
-            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade 1080p60
+            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade 1080p60 Low-Latency Real-Time
             ffmpegArgs = [
                 '-thread_queue_size', '1024',
                 '-f', 'x11grab',
                 '-video_size', '1080x1920',
                 '-framerate', '60',
                 '-draw_mouse', '0',
+                '-use_wallclock_as_timestamps', '1',
                 '-i', process.env.DISPLAY || ':99',
                 '-thread_queue_size', '1024',
                 '-f', 'pulse',
                 '-i', 'v1.monitor',
                 '-c:v', 'libx264',
                 '-preset', presetVal,
+                '-tune', 'zerolatency',
                 '-threads', '0',
                 '-b:v', bitrateStr,
                 '-minrate', bitrateStr,
                 '-maxrate', bitrateStr,
-                '-bufsize', bufsizeStr,
+                '-bufsize', bitrateStr, // 1.0x buffer for real-time responsiveness without backlog lag
                 '-nal-hrd', 'cbr',
                 '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
@@ -406,6 +412,8 @@ async function beginStream() {
                 '-c:a', 'aac',
                 '-b:a', '160k',
                 '-ar', '44100',
+                '-af', 'aresample=async=1000',
+                '-flvflags', 'no_duration_filesize',
                 '-f', 'flv',
                 rtmpUrl
             ];

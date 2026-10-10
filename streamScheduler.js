@@ -128,6 +128,10 @@ class StreamScheduler {
             : [];
         if (repeat === 'weekly' && repeatDays.length === 0) repeatDays = [now.getDay()];
 
+        const graceMinutes = Number.isFinite(Number(input.graceMinutes))
+            ? Math.max(0, Math.min(120, Math.round(Number(input.graceMinutes))))
+            : DEFAULTS.graceMinutes;
+
         let startAt = null;
         if (mode === 'now') {
             startAt = now.toISOString();
@@ -135,15 +139,14 @@ class StreamScheduler {
             if (!input.startAt) return { ok: false, error: 'A start date and time is required.' };
             const parsed = new Date(input.startAt);
             if (Number.isNaN(parsed.getTime())) return { ok: false, error: 'Start time could not be understood.' };
-            if (parsed.getTime() < now.getTime() - 60 * 1000) {
+            // For one-off streams, reject if already past the grace window.
+            // For recurring daily/weekly schedules, past times of day are valid
+            // reference times and will automatically roll forward to the next slot.
+            if (repeat === 'none' && parsed.getTime() < now.getTime() - graceMinutes * 60 * 1000) {
                 return { ok: false, error: 'Start time is in the past. Pick a future time, or use "Go Live Now".' };
             }
             startAt = parsed.toISOString();
         }
-
-        const graceMinutes = Number.isFinite(Number(input.graceMinutes))
-            ? Math.max(0, Math.min(120, Math.round(Number(input.graceMinutes))))
-            : DEFAULTS.graceMinutes;
 
         return {
             ok: true,
@@ -235,13 +238,16 @@ class StreamScheduler {
         if (c.repeat === 'none') {
             // Already consumed? Then there is nothing left to run.
             if (this.lastFiredAt && new Date(this.lastFiredAt).getTime() >= base.getTime()) return null;
+            // Expired slot past the grace window cannot be started.
+            if (base.getTime() <= cutoff) return null;
             return base;
         }
 
-        // The very first occurrence is whatever datetime the operator picked,
-        // even if it does not fall on one of the repeat days. Only *later*
-        // occurrences are filtered by repeatDays.
-        if (!this.lastFiredAt && base.getTime() > cutoff) return base;
+        // The very first occurrence if in future and matching the recurrence criteria
+        if (!this.lastFiredAt && base.getTime() > cutoff) {
+            const matchesDay = c.repeat === 'daily' || (Array.isArray(c.repeatDays) && c.repeatDays.includes(base.getDay()));
+            if (matchesDay) return base;
+        }
 
         // Repeating: walk forward day by day looking for a matching weekday.
         const wanted = c.repeat === 'daily' ? null : new Set(c.repeatDays);
