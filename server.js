@@ -41,16 +41,31 @@ let isRecording = false;
 let recordingProgress = null;
 let liveViewerCount = null;
 
+// Telemetry for real-time encoder health & speed (detects CPU bottlenecks early)
+let streamTelemetry = {
+    fps: 0,
+    bitrate: '',
+    speed: '0x',
+    health: 'offline', // 'excellent' | 'fair' | 'struggling' | 'offline'
+    lastUpdate: 0
+};
+
+// Ensure Linux PulseAudio connection points to local daemon
+if (process.platform !== 'darwin' && !process.env.PULSE_SERVER) {
+    process.env.PULSE_SERVER = '127.0.0.1:4713';
+}
+
 // Default Settings
 let currentSettings = {
     streamUrl: '',
     streamKey: '',
-    bitrate: 8000, // 8000k standard for Super HD 1080p60
-    preset: 'veryfast', // broadcast grade compression
+    bitrate: 4500, // 4500k sweet spot for 1080p30 / 1080p60 on YouTube Live
+    fps: 30, // 30 FPS recommended for smooth real-time cloud VPS; 60 FPS for high-core dedicated VPS
+    preset: 'ultrafast', // ultrafast guarantees speed >= 1.0x on VPS CPU without frame drops
     crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
     activeEngine: 'vertical', // 'vertical' for Super HD Vertical, 'landscape' for React
     youtubeChatMode: 'player', // 'player' (Zero-Quota Web Player, Unlimited 24/7) | 'hybrid' | 'api'
-    youtubePollInterval: 1000 // 800ms / 1000ms / 2000ms
+    youtubePollInterval: 500 // 500ms fast-reaction polling
 };
 
 // Load settings on boot
@@ -127,7 +142,7 @@ app.get('/api/status', checkAuth, (req, res) => {
             progress = null; // Reset
         }
     }
-    res.json({ isStreaming, isRecording, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState(), youtubeChat: youtubeChatStatus });
+    res.json({ isStreaming, isRecording, streamTelemetry, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState(), youtubeChat: youtubeChatStatus });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
@@ -229,17 +244,15 @@ async function beginStream() {
             '--kiosk',
             '--js-flags="--max-old-space-size=1024"',
             '--enable-features=CanvasOopRasterization',
-            '--enable-gpu-rasterization',
-            '--ignore-gpu-blocklist',
             '--force-device-scale-factor=1',
             '--force-color-profile=srgb',
             '--disable-breakpad',
             '--disable-component-update',
             '--disable-ipc-flooding-protection',
-            '--disable-features=CalculateNativeWinOcclusion,TranslateUI',
-            '--disable-gpu-vsync',
-            '--disable-frame-rate-limit',
-            '--run-all-compositor-stages-before-draw',
+            '--disable-features=CalculateNativeWinOcclusion,TranslateUI,Translate,MediaRouter,OptimizationHints,AudioServiceSandbox',
+            '--enable-audio-service-sandbox=false',
+            '--no-first-run',
+            '--no-default-browser-check',
             '--disable-threaded-scrolling'
         ];
 
@@ -347,7 +360,7 @@ async function beginStream() {
             logMsg("Applied saved game settings on stream boot.");
         }
 
-        // Auto-start gameplay (fallback if not auto-started by engine)
+        // Auto-start gameplay and sound engine (fallback if not auto-started by engine)
         await currentPage.evaluate(() => {
             const btn = document.getElementById('btn-start');
             if (btn && !btn.disabled) {
@@ -355,8 +368,20 @@ async function beginStream() {
             } else if (window.gameInstance && !window.gameInstance.running && typeof window.gameInstance.start === 'function') {
                 window.gameInstance.start();
             }
+            // Ensure audio context and procedural music are active so sound feeds to PulseAudio
+            try {
+                if (window.gameInstance && window.gameInstance.audio) {
+                    if (typeof window.gameInstance.audio.playBgMusic === 'function') {
+                        window.gameInstance.audio.playBgMusic();
+                    }
+                    const actx = window.gameInstance.audio._ctx ? window.gameInstance.audio._ctx() : null;
+                    if (actx && actx.state === 'suspended') {
+                        actx.resume().catch(() => {});
+                    }
+                }
+            } catch (e) {}
         });
-        logMsg("Auto-started gameplay for the stream.");
+        logMsg("Auto-started gameplay and sound engine for the stream.");
 
         logMsg("Starting FFmpeg streaming...");
 
@@ -368,10 +393,11 @@ async function beginStream() {
             logMsg(`Applying crop filter: ${videoFilter}`);
         }
 
-        const bitrateVal = currentSettings.bitrate || 8000;
+        const bitrateVal = Number(currentSettings.bitrate) || 4500;
         const bitrateStr = `${bitrateVal}k`;
         const bufsizeStr = `${bitrateVal * 2}k`;
-        const presetVal = currentSettings.preset || 'veryfast';
+        const fpsVal = Number(currentSettings.fps) || 30;
+        const presetVal = currentSettings.preset || 'ultrafast';
         const rtmpUrl = (currentSettings.streamUrl.endsWith('/') ? currentSettings.streamUrl : currentSettings.streamUrl + '/') + currentSettings.streamKey;
 
         // Build FFmpeg Args conditionally based on OS
@@ -380,7 +406,7 @@ async function beginStream() {
             logMsg("macOS detected: using avfoundation for local testing capture.");
             ffmpegArgs = [
                 '-f', 'avfoundation',
-                '-framerate', '60',
+                '-framerate', String(fpsVal),
                 '-i', '1:none', // Disable audio capture on Mac to avoid device errors
                 '-c:v', 'libx264',
                 '-preset', presetVal,
@@ -390,18 +416,20 @@ async function beginStream() {
                 '-bufsize', bufsizeStr,
                 '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
-                '-g', '120',
+                '-g', String(fpsVal * 2),
                 '-an', // Disable audio completely for local mac tests
                 '-f', 'flv',
                 rtmpUrl
             ];
         } else {
-            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade 1080p60 Low-Latency Real-Time
+            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade Low-Latency Real-Time
+            const gopVal = String(fpsVal * 2); // Strict 2.0-second GOP (YouTube Live specification)
+            const keyintMinVal = String(fpsVal);
             ffmpegArgs = [
                 '-thread_queue_size', '1024',
                 '-f', 'x11grab',
                 '-video_size', '1080x1920',
-                '-framerate', '60',
+                '-framerate', String(fpsVal),
                 '-draw_mouse', '0',
                 '-use_wallclock_as_timestamps', '1',
                 '-i', process.env.DISPLAY || ':99',
@@ -413,17 +441,18 @@ async function beginStream() {
                 '-tune', 'zerolatency',
                 '-threads', '0',
                 '-b:v', bitrateStr,
-                '-minrate', bitrateStr,
                 '-maxrate', bitrateStr,
-                '-bufsize', bitrateStr, // 1.0x buffer for real-time responsiveness without backlog lag
-                '-nal-hrd', 'cbr',
+                '-bufsize', bufsizeStr,
                 '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
-                '-g', '120', // Strict 2.0-second GOP for 60fps (YouTube Live specification)
+                '-g', gopVal,
+                '-keyint_min', keyintMinVal,
+                '-sc_threshold', '0',
+                '-vsync', 'cfr',
                 '-c:a', 'aac',
-                '-b:a', '160k',
+                '-b:a', '128k', // YouTube recommended live audio bitrate
                 '-ar', '44100',
-                '-af', 'aresample=async=1000',
+                '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0,apad',
                 '-flvflags', 'no_duration_filesize',
                 '-f', 'flv',
                 rtmpUrl
@@ -434,7 +463,27 @@ async function beginStream() {
 
         streamProcess.stderr.on('data', (data) => {
             const msg = data.toString();
-            // Suppress verbose FFmpeg output, only log errors to file
+            // Parse FFmpeg telemetry for encoder speed & stream health
+            const statsMatch = msg.match(/fps=\s*([\d.]+).*?bitrate=\s*([\d.]+\s*\w*bits\/s).*?speed=\s*([\d.]+)x/i);
+            if (statsMatch) {
+                const curFps = parseFloat(statsMatch[1]) || 0;
+                const curBitrate = statsMatch[2].trim();
+                const curSpeed = parseFloat(statsMatch[3]) || 0;
+                let health = 'excellent';
+                if (curSpeed < 0.90) {
+                    health = 'struggling'; // VPS CPU bottleneck detected
+                } else if (curSpeed < 0.98) {
+                    health = 'fair';
+                }
+                streamTelemetry = {
+                    fps: curFps,
+                    bitrate: curBitrate,
+                    speed: `${curSpeed.toFixed(2)}x`,
+                    health,
+                    lastUpdate: Date.now()
+                };
+            }
+            // Suppress verbose output, only log errors/warnings to file
             if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
                 logMsg(`FFmpeg ERR: ${msg.trim()}`, true);
             }
@@ -443,6 +492,7 @@ async function beginStream() {
         streamProcess.on('close', (code) => {
             logMsg(`FFmpeg exited with code ${code}`);
             isStreaming = false;
+            streamTelemetry = { fps: 0, bitrate: '', speed: '0x', health: 'offline', lastUpdate: 0 };
             currentPage = null;
             if (browser) {
                 browser.close();

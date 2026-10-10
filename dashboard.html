@@ -551,19 +551,29 @@
                             <label>Secret Key (Keep private!)</label>
                             <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
                         </div>
-                        <div style="display:flex; gap:12px;">
-                            <div class="form-group" style="flex:1;">
-                                <label>Video Bitrate (Kbps)</label>
-                                <input type="number" id="set-bitrate" value="8000" min="1000" max="20000" step="100">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label>Encoding Preset</label>
-                                <select id="set-preset" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
-                                    <option value="veryfast" selected>Veryfast (Recommended · Super HD 1080p60)</option>
-                                    <option value="faster">Faster (High Quality · Needs 4+ CPU Cores)</option>
-                                    <option value="ultrafast">Ultrafast (Low CPU)</option>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+                            <div class="form-group">
+                                <label>Framerate (FPS)</label>
+                                <select id="set-fps" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
+                                    <option value="30" selected>30 FPS (Recommended · Silky Smooth on VPS · Zero Lag)</option>
+                                    <option value="60">60 FPS (Ultra 60fps · High-End 4+ vCPU VPS)</option>
                                 </select>
                             </div>
+                            <div class="form-group">
+                                <label>Video Bitrate (Kbps)</label>
+                                <input type="number" id="set-bitrate" value="4500" min="1000" max="20000" step="100">
+                            </div>
+                            <div class="form-group">
+                                <label>Encoding Preset</label>
+                                <select id="set-preset" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
+                                    <option value="ultrafast" selected>Ultrafast (Recommended for VPS · Real-Time Speed >= 1.0x)</option>
+                                    <option value="superfast">Superfast (Balanced)</option>
+                                    <option value="veryfast">Veryfast (High CPU · May Buffer on Standard VPS)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px; line-height:1.4;">
+                            💡 <strong style="color:#38bdf8;">Optimal VPS Streaming Settings:</strong> 30 FPS + Ultrafast + 4500 Kbps guarantees that video renders as buttery-smooth as the dashboard preview, eliminates YouTube's "insufficient video" error, and keeps chat latency under ~2-3 seconds.
                         </div>
                     </div>
                     
@@ -1064,7 +1074,22 @@
 
             if (data.isStreaming) {
                 badge.classList.add('is-live');
-                txt.textContent = 'STREAMING LIVE';
+                if (data.streamTelemetry && data.streamTelemetry.speed && data.streamTelemetry.speed !== '0x') {
+                    const st = data.streamTelemetry;
+                    if (st.health === 'struggling') {
+                        txt.textContent = `LIVE · CPU LAG (${st.speed} @ ${st.fps}fps) — Switch to 30 FPS / Ultrafast!`;
+                        badge.style.color = '#ef4444';
+                        badge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                    } else {
+                        txt.textContent = `STREAMING LIVE · ${st.fps} FPS (${st.speed} · ${st.bitrate})`;
+                        badge.style.color = '';
+                        badge.style.borderColor = '';
+                    }
+                } else {
+                    txt.textContent = 'STREAMING LIVE';
+                    badge.style.color = '';
+                    badge.style.borderColor = '';
+                }
                 btnRecord.disabled = true;
                 btnRecord.innerHTML = '⏺ Start Offline Recording';
             } else if (data.isRecording) {
@@ -1493,6 +1518,7 @@
             if (s.youtubePollInterval) document.getElementById('set-youtube-poll-interval').value = s.youtubePollInterval;
             onYoutubeModeChange();
             detectYoutubeTargetInput();
+            if (s.fps !== undefined) document.getElementById('set-fps').value = s.fps;
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
             if (s.preset !== undefined) document.getElementById('set-preset').value = s.preset;
             if (s.crop) {
@@ -1624,8 +1650,9 @@
             const rtmpPayload = {
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
-                bitrate: parseInt(document.getElementById('set-bitrate').value) || 8000,
-                preset: document.getElementById('set-preset').value || 'veryfast',
+                fps: parseInt(document.getElementById('set-fps').value) || 30,
+                bitrate: parseInt(document.getElementById('set-bitrate').value) || 4500,
+                preset: document.getElementById('set-preset').value || 'ultrafast',
                 activeEngine: document.getElementById('live-engine-select').value,
                 youtubeApiKey: document.getElementById('set-youtube-api-key').value,
                 youtubeLiveId: document.getElementById('set-youtube-live-id').value,

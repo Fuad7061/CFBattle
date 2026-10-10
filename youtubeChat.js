@@ -416,7 +416,7 @@ function parseYoutubeTarget(input) {
  * by querying YouTube's internal Innertube web client with desktop Chrome headers.
  * Consumes 0 Google Cloud API quota units (100% Free, Unlimited 24/7).
  */
-function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus = () => {} }) {
+function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus = () => {}, pollInterval = 500 }) {
   let stopped = false;
   let timer = null;
   let currentContinuation = null;
@@ -576,6 +576,7 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
               weight: superWeight,
               tier,
               superChat: Boolean(superChat),
+              author,
             };
             if (isSave && command.code) {
               vote = {
@@ -614,14 +615,20 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
       }
 
       const contData = lcc.continuations?.[0];
+      const isInvalidation = Boolean(contData?.invalidationContinuationData?.continuation);
       const nextCont = contData?.invalidationContinuationData?.continuation ||
                        contData?.timedContinuationData?.continuation;
-      const timeoutMs = contData?.timedContinuationData?.timeoutMs || 800;
+      const timeoutMs = contData?.timedContinuationData?.timeoutMs || 400;
 
       if (nextCont) {
         currentContinuation = nextCont;
         report('polling', { videoId: liveVideoId });
-        timer = setTimeout(pollChat, Math.max(600, Math.min(timeoutMs, 1200)));
+        // Event-driven instant trigger: if comments were received or YouTube issued an invalidation push token,
+        // fetch the next batch immediately (50ms) to ensure zero-delay reaction on gameplay!
+        const delay = (actions.length > 0 || isInvalidation)
+          ? 50
+          : Math.max(250, Math.min(timeoutMs, pollInterval || 500));
+        timer = setTimeout(pollChat, delay);
       } else {
         currentContinuation = null;
         timer = setTimeout(pollChat, 3000);
@@ -654,7 +661,7 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
  * Zero-Quota High-Speed Live Chat engine powered by Innertube / Web Player.
  * Never consumes Google Cloud API quota (0 Units) and provides sub-second live reaction tracking.
  */
-function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onStatus = () => {} }) {
+function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onStatus = () => {}, pollInterval = 500 }) {
   let stopped = false;
   let directEngine = null;
   let liveChat = null;
@@ -677,7 +684,7 @@ function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onSt
 
   // If we have a specific video ID, direct Innertube scraping is the fastest and most robust
   if (liveVideoId) {
-    directEngine = startDirectInnertubeScraper({ liveVideoId, bus, log, onStatus });
+    directEngine = startDirectInnertubeScraper({ liveVideoId, bus, log, onStatus, pollInterval });
     return {
       stop() {
         stopped = true;
@@ -756,6 +763,7 @@ function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onSt
               weight: superWeight,
               tier,
               superChat: Boolean(superChat),
+              author,
             };
             if (isSave && command.code) {
               vote = {
@@ -881,7 +889,7 @@ function startYoutubeChatPolling({
       return { stop: () => {} };
     }
     log.info(`[youtubeChat] 🚀 Starting Zero-Quota Live Player Engine for target (${liveVideoId || channelId}) — 0 Google API quota consumed.`);
-    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus, pollInterval });
     return {
       stop() {
         stopped = true;
@@ -896,7 +904,7 @@ function startYoutubeChatPolling({
   // 2. SMART HYBRID MODE
   if (chatMode === 'hybrid') {
     log.info(`[youtubeChat] 🔄 Starting Smart Hybrid Mode: Zero-Quota Player for sub-second chat + API for stream telemetry.`);
-    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus, pollInterval });
 
     // Optional background viewer count fetch using API if key provided (only once per 30s = ~120 units/hour)
     if (apiKey && liveVideoId) {
@@ -933,7 +941,7 @@ function startYoutubeChatPolling({
     if (!apiKey) {
       log.warn('[youtubeChat] API mode requested but no API key provided — falling back to Zero-Quota Player engine.');
       if (LiveChat && (liveVideoId || channelId)) {
-        scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+        scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus, pollInterval });
         return;
       }
       report('no-api-key', { error: 'No YouTube API key configured.' });
@@ -953,7 +961,7 @@ function startYoutubeChatPolling({
       if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
         log.warn(`[youtubeChat] ⚠️ Google Data API quota exceeded during target resolution: ${err.message}. Engaging Zero-Quota Web Player fallback!`);
         if (LiveChat && (liveVideoId || channelId)) {
-          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus, pollInterval });
           return;
         }
       }
@@ -1049,6 +1057,7 @@ function startYoutubeChatPolling({
               weight: superWeight,
               tier,
               superChat: Boolean(superChat),
+              author,
             };
             if (isSave && command.code) {
               vote = {
@@ -1097,7 +1106,7 @@ function startYoutubeChatPolling({
       if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
         log.warn(`[youtubeChat] ⚠️ Google Data API Daily Quota Exceeded (10,000 unit limit reached). Automatically switching to Zero-Quota Web Player engine fallback!`);
         if (LiveChat && (liveVideoId || channelId)) {
-          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus, pollInterval });
           return;
         }
       }
