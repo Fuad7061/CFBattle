@@ -140,6 +140,8 @@ export class FlagBattleEngine extends EventEmitter {
 
     this.flags = [];
     this.running = true;
+    this.paused = false;
+    this._pauseStartTs = 0;
     this._rafId = null;
 
     this.roundNumber = 0;
@@ -164,6 +166,8 @@ export class FlagBattleEngine extends EventEmitter {
     this.eliminatedList = []; // {code, name} — oldest first, mirrors the DOM chip strip
     this.fireworks = [];
     this.particles = []; // short-lived vertical-style elimination/boost debris
+    this.chatFloaters = [];
+    this.shockwaves = [];
 
     // ---- Sound state ----
     this.soundEnabled = true;
@@ -219,7 +223,52 @@ export class FlagBattleEngine extends EventEmitter {
 
   // ================= Public API =================
 
+  pause() {
+    if (this.paused) return this.paused;
+    this.paused = true;
+    this._pauseStartTs = Date.now();
+    this._stopProceduralBg();
+    this._stopCrowdAmbience();
+    if (this._currentVoiceAudio) {
+      try { this._currentVoiceAudio.pause(); } catch (e) {}
+    }
+    this.emit('pauseChanged', { paused: true });
+    return this.paused;
+  }
+
+  resume() {
+    if (!this.paused) return this.paused;
+    this.paused = false;
+    this.running = true;
+    this._lastStepTs = 0;
+    this._physAccum = 0;
+    if (this._pauseStartTs) {
+      this.roundStartTime += (Date.now() - this._pauseStartTs);
+      this._pauseStartTs = 0;
+    }
+    if (this.soundEnabled) {
+      this._ensureAudio();
+      this._startCrowdAmbience();
+      this._startProceduralBg();
+    }
+    this.emit('pauseChanged', { paused: false });
+    return this.paused;
+  }
+
+  togglePause() {
+    if (this.paused) {
+      this.resume();
+    } else {
+      this.pause();
+    }
+    return this.paused;
+  }
+
   start() {
+    if (this.paused) {
+      this.resume();
+      return;
+    }
     this.commentVotes = {};
     this.emit('commentVotes', { ...this.commentVotes });
     if (!this._timerInterval) this._timerInterval = setInterval(() => this._tickTimer(), 1000);
@@ -275,7 +324,7 @@ export class FlagBattleEngine extends EventEmitter {
     const newW = Math.max(1, Math.round(width));
     const newH = Math.max(100, Math.round(height));
     const pixelRatio = typeof window !== 'undefined' && window.devicePixelRatio
-      ? Math.min(Math.max(1, window.devicePixelRatio), 2)
+      ? Math.min(Math.max(1, window.devicePixelRatio), 3)
       : 1;
     const pixelW = Math.max(1, Math.round(newW * pixelRatio));
     const pixelH = Math.max(1, Math.round(newH * pixelRatio));
@@ -294,6 +343,11 @@ export class FlagBattleEngine extends EventEmitter {
     this.ARENA_RADIUS = this._computeArenaRadius(newW, newH);
     this.FLAG_R = this._computeFlagR();
     this.CENTER = this._computeCenter(newW, newH);
+    if (this.flags && this.flags.length) {
+      for (const f of this.flags) {
+        f.r = this.FLAG_R;
+      }
+    }
   }
 
   _applyCanvasScale() {
@@ -309,9 +363,14 @@ export class FlagBattleEngine extends EventEmitter {
 
   setSoundEnabled(enabled) {
     this.soundEnabled = enabled;
-    if (!enabled) this._stopHeartbeat();
-    this._ensureAudio();
-    this._startCrowdAmbience();
+    if (!enabled) {
+      this._stopHeartbeat();
+      this._stopProceduralBg();
+    } else {
+      this._ensureAudio();
+      this._startCrowdAmbience();
+      this._startProceduralBg();
+    }
     if (this.ambienceGain) this.ambienceGain.gain.value = enabled ? 0.05 : 0;
     if (!enabled) {
       if (this._currentVoiceAudio) {
@@ -328,6 +387,9 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   newRound() {
+    this.paused = false;
+    this._pauseStartTs = 0;
+    this.emit('pauseChanged', { paused: false });
     this.commentVotes = {};
     this.emit('commentVotes', { ...this.commentVotes });
     this.qualifiedDisplayList = [];
@@ -382,6 +444,11 @@ export class FlagBattleEngine extends EventEmitter {
     const flag = targetCode ? this.flags.find(f => (f.code || '').toUpperCase() === targetCode) : null;
     const author = power.author || power.displayName || power.name || '';
     const tname = targetCode ? (this.countryNames[targetCode] || targetCode) : 'the whole arena';
+
+    if (flag) {
+      this.addChatFloater(flag, author, p.toUpperCase() + '!', '#ffd700');
+      this.addShockwave(flag.x, flag.y, '#ffd700');
+    }
 
     switch (p) {
       case 'revive': {
@@ -591,44 +658,47 @@ export class FlagBattleEngine extends EventEmitter {
         this.eliminatedList = this.eliminatedList.filter(e => (e.code || '').toUpperCase() !== targetCode);
         this.emit('eliminated', this.eliminatedList.slice());
         this._emitHud();
+        this.addChatFloater(flag, author, 'REVIVED ⚡', '#ffd700');
+        this.addShockwave(flag.x, flag.y, '#ffd700');
         
         if (this.soundEnabled) {
           this._playTone(1046, 0.6, 'sawtooth', 0, 0.2);
           const countryName = this.countryNames[targetCode] || targetCode;
           this._queueShoutout(author || 'The chat', countryName, 'revived');
         }
+      } else {
+        // Immediate visual response that vote was counted toward revive!
+        const rx = this.CENTER.x + (Math.random() * 50 - 25);
+        const ry = this.CENTER.y + (Math.random() * 50 - 25);
+        this.addChatFloater(rx, ry, author, `REVIVE ${currentVotes}/${targetVotes}`, '#38bdf8');
+        this.addShockwave(rx, ry, 'rgba(56, 189, 248, 0.7)');
+        if (this.soundEnabled) {
+          this._playTone(520, 0.1, 'sine', 0, 0.15);
+        }
       }
       return;
     }
 
-    // A plain country-name comment (or "!vote X") is a SAVE move: reverse the
-    // flag's momentum so viewers can pull it back from the elimination gate,
-    // and slow it briefly so the turnaround reads clearly on stream.
-    const vx = -flag.vx;
-    const vy = -flag.vy;
+    // A plain country-name comment (or "!vote X") is a powerful RESCUE move:
+    // steer the flag immediately toward the safe center of the arena, saving it
+    // from outer boundary pocket elimination!
+    const dx = this.CENTER.x - flag.x;
+    const dy = this.CENTER.y - flag.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const rescueSpeed = 5.2 + Math.min(weight, 30) * 0.15;
+    flag.vx = (dx / dist) * rescueSpeed;
+    flag.vy = (dy / dist) * rescueSpeed;
+    flag.spin = rand(-0.6, 0.6);
+    flag.immunityUntil = Math.max(flag.immunityUntil || 0, Date.now() + 1800);
+    flag.flashUntil = Math.max(flag.flashUntil || 0, Date.now() + 1800);
 
-    if (Math.abs(vx) + Math.abs(vy) < 0.6) {
-      // Nearly still: aim a firm nudge back toward the arena centre so the
-      // save still visibly moves the flag.
-      const dx = this.CENTER.x - flag.x;
-      const dy = this.CENTER.y - flag.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      flag.vx = (dx / dist) * 3.2;
-      flag.vy = (dy / dist) * 3.2;
-    } else {
-      // Reverse direction (to the opposite side) with an extra kick for big Supers.
-      const kick = 1.15 + Math.min(weight, 40) * 0.01;
-      flag.vx = vx * kick;
-      flag.vy = vy * kick;
-    }
-
-    // Brief slow-motion so the turnaround is easy to see.
-    flag.slowUntil = Date.now() + Math.min(3000, 1500 + weight * 25);
     this._spawnVerticalBurst(flag.x, flag.y, '#66ff99');
+    this.addChatFloater(flag, author, '+1 ' + (flag.country?.code || flag.code || targetCode).toUpperCase(), '#4ade80');
+    this.addShockwave(flag.x, flag.y, 'rgba(74, 222, 128, 0.85)');
     
-    if (weight > 1 && this.soundEnabled) {
-      this._playTone(880, 0.3, 'square', 0, 0.2 * Math.min(weight, 2));
-      if (author) {
+    if (this.soundEnabled) {
+      this._playTone(880, 0.12, 'sine', 0, 0.15);
+      if (weight > 1 && author) {
         const countryName = this.countryNames[flag.code] || flag.code;
         this._queueShoutout(author, countryName, 'saved');
       }
@@ -762,7 +832,7 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _triggerVoiceCTA() {
-    if (!this.running || !this.soundEnabled) return;
+    if (!this.running || this.paused || !this.soundEnabled) return;
     
     const aliveFlags = this.flags.filter(f => f.alive);
     const randomCountry = aliveFlags.length > 0
@@ -815,11 +885,23 @@ export class FlagBattleEngine extends EventEmitter {
     filter2.Q.value = 0.3;
     this.ambienceGain = c.createGain();
     this.ambienceGain.gain.value = this.soundEnabled ? 0.05 : 0;
+    this.ambienceSrc = src;
     src.connect(filter1);
     filter1.connect(filter2);
     filter2.connect(this.ambienceGain);
     this.ambienceGain.connect(c.destination);
     src.start();
+  }
+
+  _stopCrowdAmbience() {
+    if (this.ambienceGain) {
+      try { this.ambienceGain.gain.value = 0; } catch (e) {}
+    }
+    if (this.ambienceSrc) {
+      try { this.ambienceSrc.stop(); } catch (e) {}
+      this.ambienceSrc = null;
+    }
+    this.ambienceStarted = false;
   }
 
   _playTone(freq, duration, type, delay, peak) {
@@ -1215,6 +1297,7 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _tickTimer() {
+    if (this.paused) return;
     const secs = Math.floor((Date.now() - this.roundStartTime) / 1000);
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
@@ -1403,8 +1486,9 @@ export class FlagBattleEngine extends EventEmitter {
   // ================= Flag sprites (real flag-icons SVGs) =================
 
   _flagSize(f) {
-    const w = f.r * 2;
-    const h = (f.r * 18) / 14;
+    const r = (f && f.r) || this.FLAG_R;
+    const w = r * 2;
+    const h = (r * 18) / 14;
     return { w, h };
   }
 
@@ -1415,16 +1499,20 @@ export class FlagBattleEngine extends EventEmitter {
     this._sprites.set(code, entry);
     const img = new Image();
     img.onload = () => {
-      const sw = 128;
-      const sh = 80;
+      const sw = 256;
+      const sh = 160;
       const off = document.createElement('canvas');
       off.width = sw;
       off.height = sh;
       const octx = off.getContext('2d');
+      octx.imageSmoothingEnabled = true;
+      try { octx.imageSmoothingQuality = 'high'; } catch (e) {}
       // Letterbox the (usually 4:3) source into our fixed sprite box.
-      const scale = Math.min(sw / img.width, sh / img.height);
-      const dw = img.width * scale;
-      const dh = img.height * scale;
+      const srcW = img.naturalWidth || img.width || 640;
+      const srcH = img.naturalHeight || img.height || 480;
+      const scale = Math.min(sw / srcW, sh / srcH);
+      const dw = srcW * scale;
+      const dh = srcH * scale;
       octx.drawImage(img, (sw - dw) / 2, (sh - dh) / 2, dw, dh);
       entry.canvas = off;
       entry.ready = true;
@@ -1451,18 +1539,24 @@ export class FlagBattleEngine extends EventEmitter {
     ctx.translate(f.x, f.y);
     ctx.rotate(f.angle || 0);
 
-    // Soft grounded shadow beneath the flag for depth.
-    ctx.save();
-    ctx.shadowBlur = 6 * scale;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 3 * scale;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 2 * scale);
-    else ctx.rect(-w / 2, -h / 2, w, h);
-    ctx.fill();
-    ctx.restore();
+    // Soft grounded shadow beneath the flag for depth (ultra-fast fill for 60 FPS)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    if (showNameplate) {
+      ctx.save();
+      ctx.shadowBlur = 6 * scale;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowOffsetY = 3 * scale;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 2 * scale);
+      else ctx.rect(-w / 2, -h / 2, w, h);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2 + 2 * scale, w, h, 2 * scale);
+      else ctx.rect(-w / 2, -h / 2 + 2 * scale, w, h);
+      ctx.fill();
+    }
 
     const sprite = this._getSprite(f.code);
     if (sprite.ready && sprite.canvas) {
@@ -1471,7 +1565,11 @@ export class FlagBattleEngine extends EventEmitter {
       if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 2 * scale);
       else ctx.rect(-w / 2, -h / 2, w, h);
       ctx.clip();
-      this._drawWavingFlag(ctx, sprite.canvas, w, h, f);
+      if (showNameplate) {
+        this._drawWavingFlag(ctx, sprite.canvas, w, h, f);
+      } else {
+        ctx.drawImage(sprite.canvas, -w / 2, -h / 2, w, h);
+      }
       ctx.restore();
     } else {
       ctx.fillStyle = this._codeColor(f.code);
@@ -2013,15 +2111,17 @@ export class FlagBattleEngine extends EventEmitter {
     });
 
     for (let i = 0; i < alive.length; i++) {
+      const a = alive[i];
+      if (frozenFlags.has(a)) continue;
       for (let j = i + 1; j < alive.length; j++) {
-        const a = alive[i];
         const b = alive[j];
-        if (frozenFlags.has(a) || frozenFlags.has(b)) continue;
+        if (frozenFlags.has(b)) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const dist = Math.hypot(dx, dy);
         const minDist = a.r + b.r;
-        if (dist < minDist && dist > 0) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDist * minDist && distSq > 0) {
+          const dist = Math.sqrt(distSq);
           const overlap = (minDist - dist) / 2;
           const nx = dx / dist;
           const ny = dy / dist;
@@ -2051,9 +2151,10 @@ export class FlagBattleEngine extends EventEmitter {
       if (frozenFlags.has(f)) return;
       const dx = f.x - this.CENTER.x;
       const dy = f.y - this.CENTER.y;
-      const dist = Math.hypot(dx, dy);
       const limit = this.ARENA_RADIUS - f.r;
-      if (dist <= limit) return;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= limit * limit) return;
+      const dist = Math.sqrt(distSq) || 1;
 
       const posAngle = Math.atan2(dy, dx);
       const inGate = this._isInGate(posAngle);
@@ -2092,20 +2193,11 @@ export class FlagBattleEngine extends EventEmitter {
           this._playNearMiss();
           return;
         }
-        // Eliminate once the flag's rotated outer edge actually touches the
-        // drawn wire. A corner grazing the wire counts, exactly as in
-        // vertical gameplay.
-        const { w, h } = this._flagSize(f);
-        const halfW = w * 0.5;
-        const halfH = h * 0.5;
-        const angle = f.angle || 0;
-        const cosAngle = Math.cos(angle);
-        const sinAngle = Math.sin(angle);
-        const ux = Math.cos(posAngle);
-        const uy = Math.sin(posAngle);
-        const edgeReach = Math.abs(halfW * (cosAngle * ux + sinAngle * uy))
-          + Math.abs(halfH * (-sinAngle * ux + cosAngle * uy));
-        if (dist + edgeReach >= this.ARENA_RADIUS - 0.5) this._eliminate(f);
+        // Fair hole elimination: allow flag to physically travel through the hole.
+        // It is fairly eliminated only once it actually crosses outside the arena circle perimeter.
+        if (dist >= this.ARENA_RADIUS) {
+          this._eliminate(f);
+        }
         return;
       }
 
@@ -2290,7 +2382,47 @@ export class FlagBattleEngine extends EventEmitter {
     this._renderParticles();
     this._renderFallingFlags();
     this._renderFireworks();
+    this._renderShockwaves();
+    this._renderChatFloaters();
     this._renderSuspenseNotice();
+    if (this.paused) {
+      this._renderPausedBanner();
+    }
+    this.setMusicIntensity(aliveCount);
+  }
+
+  _renderPausedBanner() {
+    const ctx = this.ctx;
+    ctx.save();
+    const cx = this.CENTER.x;
+    const cy = this.CENTER.y;
+    const r = Math.min(130, this.ARENA_RADIUS * 0.42);
+
+    // Dim frosted circular badge
+    ctx.fillStyle = 'rgba(7, 10, 15, 0.78)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Elegant amber glow ring
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(245, 158, 11, 0.9)';
+    ctx.shadowBlur = 14;
+    ctx.stroke();
+
+    // Text: ⏸ PAUSED
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 22px "Inter", "Segoe UI", sans-serif';
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillText('⏸ PAUSED', cx, cy - 8);
+
+    ctx.font = '700 10px "Inter", "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.shadowBlur = 0;
+    ctx.fillText('CLICK RESUME OR PRESS P', cx, cy + 16);
+    ctx.restore();
   }
 
   _computeArenaRadius(w, h) {
@@ -2309,11 +2441,11 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _computeFlagR() {
-    return Math.max(9, Math.min(22, this.ARENA_RADIUS / 16));
+    return Math.max(10, Math.min(24, Math.round(this.ARENA_RADIUS / 15.5)));
   }
 
   _loop(ts = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
-    if (this.running) {
+    if (this.running && !this.paused) {
       if (!this._lastStepTs) this._lastStepTs = ts;
       let dt = ts - this._lastStepTs;
       this._lastStepTs = ts;
@@ -2334,15 +2466,20 @@ export class FlagBattleEngine extends EventEmitter {
       speedMult *= timeScale;
 
       const STEP_MS = 1000 / 60;
-      this._physAccum += dt * speedMult;
-      const maxSteps = Math.min(8, Math.max(4, Math.ceil(speedMult)));
-      let steps = 0;
-      while (this._physAccum >= STEP_MS && steps < maxSteps) {
+      if (speedMult === 1 && dt >= 13 && dt <= 19 && this._physAccum < STEP_MS) {
         this._physicsStep();
-        this._physAccum -= STEP_MS;
-        steps += 1;
+        this._physAccum = 0;
+      } else {
+        this._physAccum += dt * speedMult;
+        const maxSteps = Math.min(8, Math.max(4, Math.ceil(speedMult)));
+        let steps = 0;
+        while (this._physAccum >= STEP_MS && steps < maxSteps) {
+          this._physicsStep();
+          this._physAccum -= STEP_MS;
+          steps += 1;
+        }
+        if (steps >= maxSteps || this._physAccum > STEP_MS * 2) this._physAccum = 0;
       }
-      if (steps >= maxSteps) this._physAccum = 0;
     } else {
       this._lastStepTs = 0;
       this._physAccum = 0;
@@ -2351,6 +2488,438 @@ export class FlagBattleEngine extends EventEmitter {
     this._updateParticles();
     this._render();
     this._rafId = requestAnimationFrame((nextTs) => this._loop(nextTs));
+  }
+
+  // ================= Chat Floaters & Visual FX =================
+
+  addChatFloater(targetOrX, authorOrY, labelOrAuthor, colorOrLabel, maybeColor) {
+    if (this.chatFloaters.length > 30) this.chatFloaters.shift();
+
+    let target = null;
+    let x = this.CENTER.x;
+    let y = this.CENTER.y;
+    let author = 'CHAT';
+    let label = '+1';
+    let color = '#4ade80';
+
+    if (typeof targetOrX === 'object' && targetOrX !== null) {
+      target = targetOrX;
+      author = String(authorOrY || 'CHAT').trim();
+      label = String(labelOrAuthor || '+1').trim();
+      color = colorOrLabel || '#4ade80';
+      x = target.x !== undefined ? target.x : this.CENTER.x;
+      y = target.y !== undefined ? target.y : this.CENTER.y;
+    } else {
+      x = Number(targetOrX) || this.CENTER.x;
+      y = Number(authorOrY) || this.CENTER.y;
+      author = String(labelOrAuthor || 'CHAT').trim();
+      label = String(colorOrLabel || '+1').trim();
+      color = maybeColor || '#4ade80';
+    }
+
+    let hash = 0;
+    for (let i = 0; i < author.length; i++) hash = ((hash << 5) - hash) + author.charCodeAt(i);
+    const avatarColor = `hsl(${Math.abs(hash) % 360}, 80%, 48%)`;
+    const initial = (author.charAt(0) || '★').toUpperCase();
+
+    this.chatFloaters.push({
+      target,
+      x,
+      y,
+      author: author.slice(0, 16),
+      initial,
+      avatarColor,
+      label: label.slice(0, 14),
+      color,
+      frame: 0,
+      maxFrames: 170,    // ~2.8s total duration at 60fps
+      pinnedFrames: 110, // Locks/tethers directly to the ball for ~1.8s
+      floatY: 0,
+    });
+  }
+
+  addShockwave(x, y, color = 'rgba(255, 215, 0, 0.8)') {
+    if (this.shockwaves.length > 15) this.shockwaves.shift();
+    this.shockwaves.push({
+      x, y,
+      r: 12,
+      maxR: 48,
+      color,
+      life: 1.0,
+      decay: 0.035
+    });
+  }
+
+  _renderShockwaves() {
+    if (!this.shockwaves.length) return;
+    const ctx = this.ctx;
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const sw = this.shockwaves[i];
+      sw.r += (sw.maxR - sw.r) * 0.15 + 1.2;
+      sw.life -= sw.decay;
+      if (sw.life <= 0 || sw.r >= sw.maxR) {
+        this.shockwaves.splice(i, 1);
+        continue;
+      }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, sw.life * 0.7);
+      ctx.strokeStyle = sw.color;
+      ctx.lineWidth = 2.5 * sw.life;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = sw.color;
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  _renderChatFloaters() {
+    if (!this.chatFloaters.length) return;
+    const ctx = this.ctx;
+    ctx.save();
+
+    for (let i = this.chatFloaters.length - 1; i >= 0; i--) {
+      const f = this.chatFloaters[i];
+      f.frame++;
+
+      if (f.frame >= f.maxFrames) {
+        this.chatFloaters.splice(i, 1);
+        continue;
+      }
+
+      if (f.target && f.target.x !== undefined && f.target.y !== undefined) {
+        f.x = f.target.x;
+        const fh = (f.target.r ? (f.target.r * 18 / 14) : 24);
+        f.y = f.target.y - (fh / 2 + 16);
+      }
+
+      if (f.frame > f.pinnedFrames) {
+        f.floatY -= 0.65;
+      }
+
+      let alpha = 1.0;
+      if (f.frame > f.pinnedFrames) {
+        alpha = Math.max(0, 1 - (f.frame - f.pinnedFrames) / (f.maxFrames - f.pinnedFrames));
+      } else if (f.frame < 10) {
+        alpha = f.frame / 10;
+      }
+
+      const drawX = Math.max(70, Math.min(this.STAGE_W - 70, f.x));
+      const drawY = Math.max(22, Math.min(this.STAGE_H - 22, f.y + f.floatY));
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      ctx.font = 'bold 9.5px "Outfit", "Inter", sans-serif';
+      const nameWidth = ctx.measureText(f.author).width;
+      ctx.font = 'bold 8.5px "Outfit", "Inter", sans-serif';
+      const labelWidth = ctx.measureText(f.label).width;
+
+      const avatarR = 6.5;
+      const avatarW = avatarR * 2;
+      const pillPad = 5;
+      const pillW = labelWidth + pillPad * 2;
+      const badgeH = 20;
+      const badgeW = avatarW + 6 + nameWidth + 8 + pillW + 8;
+      const bx = drawX - badgeW / 2;
+      const by = drawY - badgeH / 2;
+
+      // Downward pointer arrow connecting badge directly to flag ball
+      if (f.frame <= f.pinnedFrames + 20) {
+        ctx.beginPath();
+        ctx.moveTo(drawX - 4, by + badgeH);
+        ctx.lineTo(drawX + 4, by + badgeH);
+        ctx.lineTo(drawX, by + badgeH + 5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(12, 18, 30, 0.92)';
+        ctx.fill();
+        ctx.strokeStyle = f.color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Glassmorphic tag badge container
+      ctx.fillStyle = 'rgba(10, 16, 28, 0.92)';
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 1.2;
+      ctx.shadowColor = f.color;
+      ctx.shadowBlur = 8;
+
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx, by, badgeW, badgeH, 10);
+      else ctx.rect(bx, by, badgeW, badgeH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 1. Avatar circle
+      const avCenterX = bx + 4 + avatarR;
+      const avCenterY = drawY;
+      ctx.beginPath();
+      ctx.arc(avCenterX, avCenterY, avatarR, 0, Math.PI * 2);
+      ctx.fillStyle = f.avatarColor;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.font = 'bold 8px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(f.initial, avCenterX, avCenterY + 0.5);
+
+      // 2. Author username
+      ctx.font = 'bold 9.5px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f8fafc';
+      const nameX = avCenterX + avatarR + 5;
+      ctx.fillText(f.author, nameX, drawY);
+
+      // 3. Action pill badge
+      const pillX = nameX + nameWidth + 5;
+      const pillY = drawY - 7;
+      const pillH = 14;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillW, pillH, 7);
+      else ctx.rect(pillX, pillY, pillW, pillH);
+      ctx.fill();
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.font = 'bold 8.5px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.label, pillX + pillW / 2, drawY + 0.5);
+
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // ================= Dopamine Procedural Synthwave Music =================
+
+  setMusicIntensity(stageOrCount) {
+    if (typeof stageOrCount === 'number') {
+      if (stageOrCount <= 2) this._musicStage = 'showdown';
+      else if (stageOrCount <= 5) this._musicStage = 'top5';
+      else this._musicStage = 'normal';
+    } else if (typeof stageOrCount === 'string') {
+      this._musicStage = stageOrCount;
+    }
+  }
+
+  _startProceduralBg() {
+    if (this._proceduralActive || !this.soundEnabled) return;
+    const ctx = this._ensureAudio();
+    if (!ctx) return;
+    this._proceduralActive = true;
+    this._musicStage = this._musicStage || 'normal';
+
+    if (!this._noiseBuffer) {
+      const sampleRate = ctx.sampleRate || 44100;
+      const b = ctx.createBuffer(1, sampleRate, sampleRate);
+      const data = b.getChannelData(0);
+      for (let i = 0; i < sampleRate; i++) data[i] = Math.random() * 2 - 1;
+      this._noiseBuffer = b;
+    }
+
+    const bassRoots = [
+      33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 43,
+      29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 40,
+      36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 47,
+      31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 41
+    ];
+
+    const arpLead = [
+      69, 72, 76, 81,  76, 72, 81, 76,  69, 72, 76, 81,  84, 81, 76, 72,
+      65, 69, 72, 77,  72, 69, 77, 72,  65, 69, 72, 77,  81, 77, 72, 69,
+      60, 64, 67, 72,  67, 64, 72, 67,  60, 64, 67, 72,  76, 72, 67, 64,
+      67, 71, 74, 79,  74, 71, 79, 74,  67, 71, 74, 79,  83, 79, 74, 71
+    ];
+
+    const m2f = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+    let step = 0;
+    let nextNoteTime = ctx.currentTime + 0.08;
+
+    this._scheduler = () => {
+      if (!this._proceduralActive || !this.soundEnabled) return;
+
+      let bpm = 126;
+      let filterCutoff = 1500;
+      let isShowdown = this._musicStage === 'showdown';
+      let isTop5 = this._musicStage === 'top5' || isShowdown;
+
+      if (isShowdown) {
+        bpm = 138;
+        filterCutoff = 4200;
+      } else if (isTop5) {
+        bpm = 132;
+        filterCutoff = 2600;
+      }
+
+      const stepTime = (60 / bpm) / 4;
+
+      while (nextNoteTime < ctx.currentTime + 0.16) {
+        const t = nextNoteTime;
+        const barStep = step % 64;
+        const beat16 = step % 16;
+        const isQuarter = beat16 % 4 === 0;
+
+        // Kick Drum
+        if (isQuarter) {
+          const kOsc = ctx.createOscillator();
+          const kGain = ctx.createGain();
+          kOsc.connect(kGain);
+          kGain.connect(ctx.destination);
+          kOsc.frequency.setValueAtTime(isShowdown ? 150 : 135, t);
+          kOsc.frequency.exponentialRampToValueAtTime(36, t + 0.085);
+          kGain.gain.setValueAtTime(0.18 * (isShowdown ? 1.2 : 1.0), t);
+          kGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+          kOsc.start(t);
+          kOsc.stop(t + 0.095);
+        }
+
+        // Snare / Clap
+        if (beat16 === 4 || beat16 === 12) {
+          if (this._noiseBuffer) {
+            const snNode = ctx.createBufferSource();
+            snNode.buffer = this._noiseBuffer;
+            const snFilter = ctx.createBiquadFilter();
+            snFilter.type = 'bandpass';
+            snFilter.frequency.value = 1900;
+            snFilter.Q.value = 1.2;
+            const snGain = ctx.createGain();
+            snNode.connect(snFilter);
+            snFilter.connect(snGain);
+            snGain.connect(ctx.destination);
+            snGain.gain.setValueAtTime(0.08, t);
+            snGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            snNode.start(t);
+            snNode.stop(t + 0.125);
+          }
+          const snOsc = ctx.createOscillator();
+          const snToneGain = ctx.createGain();
+          snOsc.connect(snToneGain);
+          snToneGain.connect(ctx.destination);
+          snOsc.frequency.setValueAtTime(220, t);
+          snOsc.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+          snToneGain.gain.setValueAtTime(0.05, t);
+          snToneGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+          snOsc.start(t);
+          snOsc.stop(t + 0.085);
+        }
+
+        // Hi-Hats
+        if (this._noiseBuffer) {
+          const isOffbeat = beat16 % 4 === 2;
+          const isClosed = (beat16 % 2 === 1) || (isTop5 && beat16 % 2 === 0);
+
+          if (isOffbeat) {
+            const ohNode = ctx.createBufferSource();
+            ohNode.buffer = this._noiseBuffer;
+            const ohFilter = ctx.createBiquadFilter();
+            ohFilter.type = 'highpass';
+            ohFilter.frequency.value = 7500;
+            const ohGain = ctx.createGain();
+            ohNode.connect(ohFilter);
+            ohFilter.connect(ohGain);
+            ohGain.connect(ctx.destination);
+            ohGain.gain.setValueAtTime(0.035, t);
+            ohGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+            ohNode.start(t);
+            ohNode.stop(t + 0.115);
+          } else if (isClosed && !isQuarter) {
+            const chNode = ctx.createBufferSource();
+            chNode.buffer = this._noiseBuffer;
+            const chFilter = ctx.createBiquadFilter();
+            chFilter.type = 'highpass';
+            chFilter.frequency.value = 9000;
+            const chGain = ctx.createGain();
+            chNode.connect(chFilter);
+            chFilter.connect(chGain);
+            chGain.connect(ctx.destination);
+            chGain.gain.setValueAtTime(0.02, t);
+            chGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+            chNode.start(t);
+            chNode.stop(t + 0.045);
+          }
+        }
+
+        // Bassline
+        const bassMidi = bassRoots[barStep];
+        if (bassMidi) {
+          const bOsc = ctx.createOscillator();
+          const bFilter = ctx.createBiquadFilter();
+          const bGain = ctx.createGain();
+
+          bOsc.type = 'sawtooth';
+          bOsc.frequency.setValueAtTime(m2f(bassMidi), t);
+
+          bFilter.type = 'lowpass';
+          bFilter.frequency.setValueAtTime(isQuarter ? 450 : 850, t);
+          bFilter.Q.value = 3.0;
+
+          bOsc.connect(bFilter);
+          bFilter.connect(bGain);
+          bGain.connect(ctx.destination);
+
+          const bassVol = isQuarter ? 0.04 : 0.08;
+          bGain.gain.setValueAtTime(bassVol, t);
+          bGain.gain.exponentialRampToValueAtTime(0.005, t + stepTime * 0.88);
+
+          bOsc.start(t);
+          bOsc.stop(t + stepTime * 0.9);
+        }
+
+        // Arpeggiator Lead
+        const arpMidi = arpLead[barStep];
+        if (arpMidi) {
+          const lOsc = ctx.createOscillator();
+          const lFilter = ctx.createBiquadFilter();
+          const lGain = ctx.createGain();
+
+          lOsc.type = 'square';
+          lOsc.frequency.setValueAtTime(m2f(arpMidi), t);
+
+          lFilter.type = 'lowpass';
+          lFilter.frequency.setValueAtTime(filterCutoff, t);
+          lFilter.Q.value = 2.5;
+
+          lOsc.connect(lFilter);
+          lFilter.connect(lGain);
+          lGain.connect(ctx.destination);
+
+          const arpVol = isShowdown ? 0.045 : 0.03;
+          lGain.gain.setValueAtTime(arpVol, t);
+          lGain.gain.linearRampToValueAtTime(0.001, t + stepTime * 0.85);
+
+          lOsc.start(t);
+          lOsc.stop(t + stepTime * 0.9);
+        }
+
+        step++;
+        nextNoteTime += stepTime;
+      }
+
+      this._seqTimer = setTimeout(this._scheduler, 30);
+    };
+
+    this._scheduler();
+  }
+
+  _stopProceduralBg() {
+    this._proceduralActive = false;
+    if (this._seqTimer) {
+      clearTimeout(this._seqTimer);
+      this._seqTimer = null;
+    }
   }
 
   _bindResize() {

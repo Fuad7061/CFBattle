@@ -498,6 +498,9 @@
                                         <button class="btn" id="dir-btn-reset" onclick="sendDirectorCmd('reset')" title="Reset Tournament" style="padding: 6px 12px; font-size: 12px;">
                                             ↺ RESET
                                         </button>
+                                        <button class="btn" id="dir-btn-clear-sup" onclick="sendDirectorCmd('clear_supporters')" title="Clear Top Supporters & Shoutouts for fresh stream" style="padding: 6px 10px; font-size: 12px; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;">
+                                            👑 RESET SUPPORTERS
+                                        </button>
                                     </div>
 
                                     <div style="height: 18px; width: 1px; background: var(--border);"></div>
@@ -548,29 +551,83 @@
                             <label>Secret Key (Keep private!)</label>
                             <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
                         </div>
-                        <div class="form-group" style="width: 50%;">
-                            <label>Video Bitrate (Kbps)</label>
-                            <input type="number" id="set-bitrate" value="6800" min="1000" max="20000" step="100">
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label>Video Bitrate (Kbps)</label>
+                                <input type="number" id="set-bitrate" value="8000" min="1000" max="20000" step="100">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>Encoding Preset</label>
+                                <select id="set-preset" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
+                                    <option value="veryfast" selected>Veryfast (Recommended · Super HD 1080p60)</option>
+                                    <option value="faster">Faster (High Quality · Needs 4+ CPU Cores)</option>
+                                    <option value="ultrafast">Ultrafast (Low CPU)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
                     <div class="panel">
                         <div class="panel-header">
                             <h2>YouTube Live Chat Integration</h2>
+                            <span class="badge" id="badge-quota-mode" style="background:#10b98122; color:#34d399; border:1px solid #10b98144; font-size:11px;">⚡ 0 Quota Units · Unlimited 24/7</span>
                         </div>
-                        <p class="panel-desc">Enable audience interactions by hooking into the Live Chat.</p>
-                        <div class="form-group">
-                            <label>YouTube API Key</label>
-                            <input type="password" id="set-youtube-api-key" placeholder="AIzaSy...">
-                        </div>
-                        <div class="form-group">
-                            <label>Live Video ID (or Channel ID)</label>
-                            <input type="text" id="set-youtube-live-id" placeholder="dQw4w9WgXcQ">
-                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
-                                Prefer your <strong>Channel ID</strong> (starts with <code>UC</code>, 24 characters). Chat then attaches to whatever broadcast is live, automatically. A one-off <strong>Video ID</strong> only works during that exact broadcast.
+                        <p class="panel-desc">Real-time audience interaction engine. Choose your preferred polling engine and quota strategy.</p>
+                        
+                        <!-- Quota Architecture Breakdown & Advisory -->
+                        <div id="yt-quota-advisory" style="background:rgba(15,23,42,0.7); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; line-height:1.5;">
+                            <div style="font-weight:600; color:#38bdf8; display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                                <span>⚡ YouTube Quota & Engine Comparison:</span>
+                            </div>
+                            <div style="color:var(--text-muted); display:flex; flex-direction:column; gap:5px;">
+                                <div>• <strong style="color:#34d399;">Zero-Quota Web Player (Rank #1 Recommended):</strong> Consumes <strong>0 quota units</strong> ($0.00 cost). Runs <strong>unlimited 24/7</strong> with sub-second (~400ms–800ms) reactions. Requires <em>NO Google Cloud account or API key</em>!</div>
+                                <div>• <strong style="color:#fbbf24;">Google Data API v3 (Rank #3):</strong> Free tier gives <strong>10,000 units/day</strong>. Polling live messages costs 5 units/call. At 1s polling (60/min = 300 units/min), Google's quota is <strong>completely exhausted after only ~33 minutes</strong>!</div>
+                                <div>• <strong style="color:#60a5fa;">Shielded Fallback Protection:</strong> In all modes, if Google API quota is exceeded (403 <code>quotaExceeded</code>), the engine automatically falls back to the Zero-Quota Web Player so live chat never stops mid-stream.</div>
                             </div>
                         </div>
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;">
+
+                        <div class="form-group">
+                            <label style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>Chat Engine & Fallback Architecture</span>
+                                <span style="font-size:11px; color:#38bdf8;">Configurable Mode</span>
+                            </label>
+                            <select id="set-youtube-chat-mode" onchange="onYoutubeModeChange()" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px; font-weight:500;">
+                                <option value="player" selected>⚡ Zero-Quota Web Player (100% Free · Unlimited 24/7 · Sub-Second) [RECOMMENDED]</option>
+                                <option value="hybrid">🔄 Smart Hybrid (Zero-Quota Player for Chat + API for Metadata · Quota-Safe)</option>
+                                <option value="api">🔑 Google YouTube Data API v3 (Official API · Auto-Fallback to Player on Quota Limit)</option>
+                            </select>
+                        </div>
+
+                        <div style="display:flex; gap:12px; margin-bottom:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label>Reaction & Polling Speed</label>
+                                <select id="set-youtube-poll-interval" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
+                                    <option value="800">⚡ 800ms — Ultra Sub-Second (Instant reaction & hype)</option>
+                                    <option value="1000" selected>⚡ 1,000ms — Superfast Realtime (Recommended live)</option>
+                                    <option value="2000">⏱️ 2,000ms — Relaxed (Low CPU polling)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;" id="grp-youtube-api-key">
+                                <label style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span>YouTube API Key</span>
+                                    <span id="lbl-api-req" style="font-size:10px; color:var(--text-muted);">(Optional for Player)</span>
+                                </label>
+                                <input type="password" id="set-youtube-api-key" placeholder="AIzaSy... (Leave blank for Player mode)" style="height:38px;">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>Live Video ID, Video URL, or Channel ID</span>
+                                <span id="yt-target-detected" style="font-size:11px; color:#34d399; font-weight:600; display:none;">🎯 Target: Valid</span>
+                            </label>
+                            <input type="text" id="set-youtube-live-id" oninput="detectYoutubeTargetInput()" placeholder="Paste YouTube Live URL (e.g. https://youtube.com/live/...), Video ID, or Channel ID">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                                Accepts full live URLs (<code>https://youtube.com/live/xxx</code>, <code>watch?v=xxx</code>), 11-char Video IDs, or Channel IDs (<code>UC...</code>).
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
                             <button class="btn" onclick="testYoutubeChat()">🧪 Test Chat Connection</button>
                             <span id="yt-chat-state" style="font-size:12px; color:var(--text-muted);">Status: unknown</span>
                         </div>
@@ -1220,21 +1277,85 @@
             } catch (e) { showAlert('Network Error', true); }
         }
 
+        function onYoutubeModeChange() {
+            const mode = document.getElementById('set-youtube-chat-mode').value;
+            const badge = document.getElementById('badge-quota-mode');
+            const reqLbl = document.getElementById('lbl-api-req');
+            const keyInput = document.getElementById('set-youtube-api-key');
+
+            if (mode === 'player') {
+                if (badge) {
+                    badge.textContent = '⚡ 0 Quota Units · Unlimited 24/7';
+                    badge.style.background = '#10b98122';
+                    badge.style.color = '#34d399';
+                    badge.style.borderColor = '#10b98144';
+                }
+                if (reqLbl) reqLbl.textContent = '(Optional for Player mode)';
+                if (keyInput) keyInput.placeholder = 'AIzaSy... (Not needed for Player mode)';
+            } else if (mode === 'hybrid') {
+                if (badge) {
+                    badge.textContent = '🔄 Smart Hybrid · Quota-Safe';
+                    badge.style.background = '#0284c722';
+                    badge.style.color = '#38bdf8';
+                    badge.style.borderColor = '#0284c744';
+                }
+                if (reqLbl) reqLbl.textContent = '(Optional for Metadata)';
+                if (keyInput) keyInput.placeholder = 'AIzaSy... (Used for viewer counts)';
+            } else {
+                if (badge) {
+                    badge.textContent = '⚠️ 10k Quota Limit · Auto-Fallback Active';
+                    badge.style.background = '#d9770622';
+                    badge.style.color = '#fbbf24';
+                    badge.style.borderColor = '#d9770644';
+                }
+                if (reqLbl) reqLbl.textContent = '(Required for API mode)';
+                if (keyInput) keyInput.placeholder = 'AIzaSy... (Google Cloud API Key)';
+            }
+        }
+
+        function detectYoutubeTargetInput() {
+            const input = document.getElementById('set-youtube-live-id');
+            const badge = document.getElementById('yt-target-detected');
+            if (!input || !badge) return;
+            const val = input.value.trim();
+            if (!val) {
+                badge.style.display = 'none';
+                return;
+            }
+            if (/^UC[a-zA-Z0-9_-]{22}$/.test(val) || val.includes('youtube.com/channel/')) {
+                badge.textContent = '🎯 Channel ID Detected';
+                badge.style.color = '#38bdf8';
+                badge.style.display = 'inline';
+            } else if (val.includes('youtube.com/live/') || val.includes('watch?v=') || val.includes('youtu.be/') || /^[a-zA-Z0-9_-]{11}$/.test(val)) {
+                badge.textContent = '🎯 Live Video ID Detected';
+                badge.style.color = '#34d399';
+                badge.style.display = 'inline';
+            } else {
+                badge.textContent = '⚠️ Unrecognized Format';
+                badge.style.color = '#fbbf24';
+                badge.style.display = 'inline';
+            }
+        }
+
         async function testYoutubeChat() {
             const el = document.getElementById('yt-chat-state');
-            el.textContent = 'Testing…';
+            el.textContent = '⏳ Testing connection…';
             el.style.color = 'var(--text-muted)';
+            const chatMode = document.getElementById('set-youtube-chat-mode').value;
+            const apiKey = document.getElementById('set-youtube-api-key').value;
+            const target = document.getElementById('set-youtube-live-id').value;
+
             try {
                 const res = await fetch('/api/youtube-chat-test', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ chatMode, apiKey, target })
                 });
                 const d = await res.json();
                 el.dataset.manual = '1';
                 el.textContent = (d.ok ? '✅ ' : '❌ ') + d.message;
                 el.style.color = d.ok ? 'var(--success)' : '#ef8c67';
-                setTimeout(() => { el.dataset.manual = '0'; }, 15000);
+                setTimeout(() => { el.dataset.manual = '0'; }, 20000);
             } catch (e) {
                 el.textContent = '❌ Network Error';
                 el.style.color = '#ef8c67';
@@ -1245,15 +1366,16 @@
         function renderYoutubeChatState(s) {
             const el = document.getElementById('yt-chat-state');
             if (!el || !s) return;
+            const modeName = s.mode === 'player' ? 'Zero-Quota Player' : (s.mode === 'hybrid' ? 'Smart Hybrid' : 'Google API');
             const map = {
-                'connected': ['✅ Chat connected', 'var(--success)'],
-                'polling': ['✅ Chat connected (polling)', 'var(--success)'],
-                'waiting': ['⏳ Waiting for a live broadcast', '#38bdf8'],
-                'starting': ['⏳ Starting chat poller…', '#38bdf8'],
-                'no-api-key': ['❌ No YouTube API key saved', '#ef8c67'],
-                'no-target': ['❌ No Live Video / Channel ID saved', '#ef8c67'],
-                'resolve-error': ['❌ Could not resolve live chat', '#ef8c67'],
-                'poll-error': ['❌ Polling error', '#ef8c67'],
+                'connected': ['✅ Chat Connected (' + modeName + ')', 'var(--success)'],
+                'polling': ['✅ Chat Polling (' + modeName + ')', 'var(--success)'],
+                'waiting': ['⏳ ' + modeName + ' Ready · Waiting for stream to go live', '#38bdf8'],
+                'starting': ['⏳ Booting ' + modeName + '…', '#38bdf8'],
+                'no-api-key': ['❌ No API Key · Switch to Zero-Quota Player for free unlimited mode', '#ef8c67'],
+                'no-target': ['❌ No Live Video ID, URL, or Channel ID saved', '#ef8c67'],
+                'resolve-error': ['❌ Target Resolution Error', '#ef8c67'],
+                'poll-error': ['⚠️ Polling Warning (Auto-reconnecting…)', '#fbbf24'],
                 'idle': ['Status: idle', 'var(--text-muted)'],
             };
             const [text, color] = map[s.state] || ['Status: ' + s.state, 'var(--text-muted)'];
@@ -1312,7 +1434,12 @@
             document.getElementById('set-stream-key').value = s.streamKey || '';
             document.getElementById('set-youtube-api-key').value = s.youtubeApiKey || '';
             document.getElementById('set-youtube-live-id').value = s.youtubeLiveId || s.youtubeChannelId || '';
+            if (s.youtubeChatMode) document.getElementById('set-youtube-chat-mode').value = s.youtubeChatMode;
+            if (s.youtubePollInterval) document.getElementById('set-youtube-poll-interval').value = s.youtubePollInterval;
+            onYoutubeModeChange();
+            detectYoutubeTargetInput();
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
+            if (s.preset !== undefined) document.getElementById('set-preset').value = s.preset;
             if (s.crop) {
                 document.getElementById('set-crop-enabled').checked = !!s.crop.enabled;
                 if (s.crop.w !== undefined) document.getElementById('set-crop-w').value = s.crop.w;
@@ -1442,10 +1569,13 @@
             const rtmpPayload = {
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
-                bitrate: parseInt(document.getElementById('set-bitrate').value) || 6800,
+                bitrate: parseInt(document.getElementById('set-bitrate').value) || 8000,
+                preset: document.getElementById('set-preset').value || 'veryfast',
                 activeEngine: document.getElementById('live-engine-select').value,
                 youtubeApiKey: document.getElementById('set-youtube-api-key').value,
                 youtubeLiveId: document.getElementById('set-youtube-live-id').value,
+                youtubeChatMode: document.getElementById('set-youtube-chat-mode').value,
+                youtubePollInterval: parseInt(document.getElementById('set-youtube-poll-interval').value) || 1000,
                 crop: {
                     enabled: document.getElementById('set-crop-enabled').checked,
                     w: parseInt(document.getElementById('set-crop-w').value) || 1080,
@@ -1549,6 +1679,12 @@
                     if (cw.gameInstance && typeof cw.gameInstance.setSoundEnabled === 'function') {
                         cw.gameInstance.primeAudioOnGesture();
                         cw.gameInstance.setSoundEnabled(!cw.gameInstance.soundEnabled);
+                    }
+                } else if (action === 'pause' || action === 'toggle-pause' || action === 'resume') {
+                    if (cw.gameInstance) {
+                        if (action === 'pause' && typeof cw.gameInstance.pause === 'function') cw.gameInstance.pause();
+                        else if (action === 'resume' && typeof cw.gameInstance.resume === 'function') cw.gameInstance.resume();
+                        else if (typeof cw.gameInstance.togglePause === 'function') cw.gameInstance.togglePause();
                     }
                 }
             }
@@ -1674,18 +1810,25 @@
 
         function sendDirectorCmd(cmd) {
             const frame = document.getElementById('preview-frame');
+            let isPausedNow = false;
             if (frame && frame.contentWindow) {
                 try {
                     const win = frame.contentWindow;
                     if (win.__flagBattleInstance) {
                         const inst = win.__flagBattleInstance;
                         if (cmd === 'start') {
-                            if (inst.paused) inst.resume();
-                            else inst.start();
+                            if (inst.paused) inst.resume?.();
+                            else inst.start?.();
                         } else if (cmd === 'pause') {
-                            inst.pause();
+                            if (inst.paused) {
+                                inst.resume?.();
+                                isPausedNow = false;
+                            } else {
+                                inst.pause?.();
+                                isPausedNow = true;
+                            }
                         } else if (cmd === 'reset') {
-                            inst.reset();
+                            inst.reset?.();
                         } else if (cmd === 'mute') {
                             if (inst.audio) inst.audio.muted = !inst.audio.muted;
                         }
@@ -1693,20 +1836,59 @@
                     if (win.gameInstance) {
                         const inst = win.gameInstance;
                         if (cmd === 'start') {
-                            if (inst.paused) inst.resume();
-                            else inst.start();
+                            if (inst.paused) inst.resume?.();
+                            else inst.start?.();
                         } else if (cmd === 'pause') {
-                            if (inst.paused) inst.resume();
-                            else inst.pause();
+                            if (typeof inst.togglePause === 'function') {
+                                isPausedNow = inst.togglePause();
+                            } else if (inst.paused) {
+                                inst.resume?.();
+                                isPausedNow = false;
+                            } else {
+                                inst.pause?.();
+                                isPausedNow = true;
+                            }
                         } else if (cmd === 'reset') {
                             if (typeof inst.newRound === 'function') inst.newRound();
                             else if (typeof inst.reset === 'function') inst.reset();
                         } else if (cmd === 'mute') {
-                            if (inst.audio && typeof inst.audio.toggleMute === 'function') inst.audio.toggleMute();
+                            if (typeof inst.setSoundEnabled === 'function') {
+                                inst.primeAudioOnGesture?.();
+                                inst.setSoundEnabled(!inst.soundEnabled);
+                            } else if (inst.audio && typeof inst.audio.toggleMute === 'function') {
+                                inst.audio.toggleMute();
+                            }
                         }
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.error('[sendDirectorCmd] error:', e);
+                }
             }
+
+            // Sync Director Pause Button UI
+            const pauseBtn = document.getElementById('dir-btn-pause');
+            if (pauseBtn) {
+                if (cmd === 'pause') {
+                    pauseBtn.textContent = isPausedNow ? '▶ RESUME' : '⏸ PAUSE';
+                    pauseBtn.title = isPausedNow ? 'Resume Game' : 'Pause Game';
+                    if (isPausedNow) {
+                        pauseBtn.style.background = '#eab308';
+                        pauseBtn.style.color = '#000';
+                        pauseBtn.style.fontWeight = 'bold';
+                    } else {
+                        pauseBtn.style.background = '';
+                        pauseBtn.style.color = '';
+                        pauseBtn.style.fontWeight = '';
+                    }
+                } else if (cmd === 'start' || cmd === 'reset') {
+                    pauseBtn.textContent = '⏸ PAUSE';
+                    pauseBtn.title = 'Pause Game';
+                    pauseBtn.style.background = '';
+                    pauseBtn.style.color = '';
+                    pauseBtn.style.fontWeight = '';
+                }
+            }
+
             if (cmd === 'fullscreen') {
                 const frame = document.getElementById('preview-frame');
                 if (frame) {
@@ -1714,8 +1896,30 @@
                     else document.exitFullscreen?.().catch(()=>{});
                 }
             }
+
+            if (cmd === 'clear_supporters') {
+                try {
+                    localStorage.removeItem('fb_top_supporters_map');
+                    localStorage.removeItem('fb_top_supporters_vertical');
+                    const frame = document.getElementById('preview-frame');
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage({ type: 'RESET_SUPPORTERS' }, '*');
+                        const win = frame.contentWindow;
+                        if (win.gameInstance && win.gameInstance.ui && typeof win.gameInstance.ui.resetSupporters === 'function') {
+                            win.gameInstance.ui.resetSupporters(true);
+                        }
+                    }
+                } catch(e) {}
+                fetch('/api/supporters/reset', { method: 'POST' }).catch(() => {});
+                fetch('/api/control', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ action: 'clear-supporters' })
+                }).catch(() => {});
+            }
+
             if (isStreaming || isRecording) {
-                const apiAction = cmd === 'start' ? 'new-round' : (cmd === 'reset' ? 'new-round' : (cmd === 'mute' ? 'toggle-sound' : ''));
+                const apiAction = cmd === 'start' ? 'new-round' : (cmd === 'reset' ? 'new-round' : (cmd === 'mute' ? 'toggle-sound' : (cmd === 'pause' ? 'toggle-pause' : (cmd === 'clear_supporters' ? 'clear-supporters' : ''))));
                 if (apiAction) {
                     fetch('/api/control', {
                         method: 'POST',

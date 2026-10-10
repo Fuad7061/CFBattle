@@ -58,6 +58,9 @@ export default function VerticalApp() {
       const scale = Math.min(winW / 540, winH / 960);
       wrapper.style.transform = `translate(-50%, -50%) scale(${scale})`;
       wrapper.style.transformOrigin = 'center center';
+      if (window.gameInstance && window.gameInstance.updateCanvasSize) {
+        window.gameInstance.updateCanvasSize();
+      }
     };
     
     adjustScale();
@@ -69,7 +72,7 @@ export default function VerticalApp() {
     <div className="vertical-app-container">
       <div id="app">
         <div id="game-wrapper">
-          <canvas id="game-canvas" width="540" height="960"></canvas>
+          <canvas id="game-canvas" width="1080" height="1920"></canvas>
 
           <div id="countdown-overlay" className="hidden">
             <div id="countdown-num">3</div>

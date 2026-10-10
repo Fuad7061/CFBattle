@@ -25,8 +25,6 @@ export class FlagBattle {
   constructor() {
     /* ---- Canvas ----------------------------------------- */
     this.canvas = document.getElementById('game-canvas');
-    this.canvas.width  = 540;
-    this.canvas.height = 960;
 
     /* ---- Arena parameters (perfect vertical balance) ---- */
     this.CX = 270;   // center X
@@ -39,6 +37,11 @@ export class FlagBattle {
     this.ui       = new UIManager();
     this.audio    = new AudioManager();
     this.recorder = new Recorder(this.canvas);
+
+    this.updateCanvasSize();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', () => this.updateCanvasSize());
+    }
 
     /* ---- Game state ------------------------------------- */
     this.running    = false;   // physics loop active
@@ -247,6 +250,20 @@ export class FlagBattle {
     const flag = this._findFlag(code);
     const alive = flag && !flag.eliminated;
 
+    try { this.ui.recordSupporterVote(author, paid ? 5 : 3, code); } catch (e) {}
+
+    if (this.audio && this.audio.playPowerSFX) {
+      this.audio.playPowerSFX(p);
+    }
+    if (flag && flag.body && this.renderer) {
+      if (this.renderer.addChatFloater) {
+        this.renderer.addChatFloater(flag, author, p.toUpperCase() + '!', '#ffd700');
+      }
+      if (this.renderer.addShockwave) {
+        this.renderer.addShockwave(flag.body.position.x, flag.body.position.y, '#ffd700');
+      }
+    }
+
     switch (p) {
       case 'revive': {
         if (flag && flag.eliminated) {
@@ -364,12 +381,22 @@ export class FlagBattle {
   }
 
   _handleChatVote(vote, author) {
-    if (vote.weight) {
-      try { this.ui.recordSupporterVote(author, vote.weight); } catch (e) {}
-    }
+    try { this.ui.recordSupporterVote(author, vote.weight || 1, vote.code); } catch (e) {}
     const code = vote.code;
     const flag = this._findFlag(code);
     if (!flag) return;
+
+    if (this.audio && this.audio.playVoteChime) {
+      this.audio.playVoteChime();
+    }
+    if (flag.body && this.renderer) {
+      if (this.renderer.addChatFloater) {
+        this.renderer.addChatFloater(flag, author, '+1 ' + (flag.country?.code || '').toUpperCase(), '#4ade80');
+      }
+      if (this.renderer.addShockwave) {
+        this.renderer.addShockwave(flag.body.position.x, flag.body.position.y, 'rgba(74, 222, 128, 0.7)');
+      }
+    }
 
     if (flag.eliminated) {
       if (!this.reviveVotes) this.reviveVotes = {};
@@ -412,33 +439,28 @@ export class FlagBattle {
         if (this.ui.showReviveProgress) {
            this.ui.showReviveProgress(flag.country, getFlagUrl(code, 80), this.reviveVotes[code], targetVotes);
         }
+        if (this.renderer && this.renderer.addChatFloater) {
+          const rx = this.CX + (Math.random() * 40 - 20);
+          const ry = this.CY + (Math.random() * 40 - 20);
+          this.renderer.addChatFloater(rx, ry, author, `REVIVE ${this.reviveVotes[code]}/${targetVotes}`, '#38bdf8');
+        }
+        if (this.renderer && this.renderer.addShockwave) {
+          this.renderer.addShockwave(this.CX, this.CY, 'rgba(56, 189, 248, 0.7)');
+        }
       }
       return;
     }
 
-    // A plain country-name comment (or "!vote X") is a SAVE move: reverse the
-    // flag's momentum so viewers can yank it back from the elimination hole,
-    // and slow it briefly so the turnaround reads clearly on stream.
+    // A plain country-name comment (or "!vote X") is a powerful RESCUE move:
+    // steer the flag immediately toward the safe center of the arena, saving it
+    // from outer boundary pocket elimination!
     const body = flag.body;
     const weight = vote.weight || 1;
-    const vx = -body.velocity.x;
-    const vy = -body.velocity.y;
-
-    if (Math.abs(vx) + Math.abs(vy) < 0.6) {
-      // Nearly still: aim a firm nudge back toward the arena centre so the
-      // save still visibly moves the flag.
-      const dx = this.CX - body.position.x;
-      const dy = this.CY - body.position.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      Matter.Body.setVelocity(body, { x: (dx / d) * 3.2, y: (dy / d) * 3.2 });
-    } else {
-      // Reverse direction (to the opposite side) with an extra kick for big Supers.
-      const kick = 1.15 + Math.min(weight, 40) * 0.01;
-      Matter.Body.setVelocity(body, { x: vx * kick, y: vy * kick });
-    }
-
-    // Brief slow-motion so the turnaround is easy to see.
-    body.slowUntil = Date.now() + Math.min(3000, 1500 + weight * 25);
+    const dx = this.CX - body.position.x;
+    const dy = this.CY - body.position.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const rescueSpeed = 5.5 + Math.min(weight, 30) * 0.15;
+    Matter.Body.setVelocity(body, { x: (dx / d) * rescueSpeed, y: (dy / d) * rescueSpeed });
 
     if (this.renderer && this.renderer.addBurst) {
       this.renderer.addBurst(body.position.x, body.position.y, '#66ff99');
@@ -465,7 +487,33 @@ export class FlagBattle {
       const img       = new Image();
       img.crossOrigin = 'anonymous';
       img.src         = getFlagUrl(code, 80);
-      img.onload = img.onerror = () => {
+      img.onload = () => {
+        try {
+          const sw = 256;
+          const sh = 160;
+          const off = document.createElement('canvas');
+          off.width = sw;
+          off.height = sh;
+          const octx = off.getContext('2d');
+          octx.imageSmoothingEnabled = true;
+          try { octx.imageSmoothingQuality = 'high'; } catch (e) {}
+          const srcW = img.naturalWidth || img.width || 640;
+          const srcH = img.naturalHeight || img.height || 480;
+          const scale = Math.min(sw / srcW, sh / srcH);
+          const dw = srcW * scale;
+          const dh = srcH * scale;
+          octx.drawImage(img, (sw - dw) / 2, (sh - dh) / 2, dw, dh);
+          this.images[code] = off;
+        } catch (e) {
+          this.images[code] = img;
+        }
+        loaded++;
+        if (loaded % BATCH === 0 || loaded === codes.length) {
+          this.ui.updateLoading(`Loading flags… ${loaded}/${codes.length}`);
+        }
+        resolve();
+      };
+      img.onerror = () => {
         this.images[code] = img;
         loaded++;
         if (loaded % BATCH === 0 || loaded === codes.length) {
@@ -479,6 +527,26 @@ export class FlagBattle {
       await Promise.all(codes.slice(i, i + BATCH).map(loadOne));
     }
     this.ui.hideLoading();
+  }
+
+  updateCanvasSize() {
+    if (!this.canvas) return;
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const winW = typeof window !== 'undefined' ? window.innerWidth : 540;
+    const winH = typeof window !== 'undefined' ? window.innerHeight : 960;
+    const scale = Math.min(winW / 540, winH / 960);
+    // Guarantee minimum 1080x1920 (2x of 540x960) for crystal clear Super HD visuals
+    const effectiveScale = Math.max(2, (scale || 1) * dpr);
+    const targetW = Math.round(540 * effectiveScale);
+    const targetH = Math.round(960 * effectiveScale);
+
+    if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
+      this.canvas.width = targetW;
+      this.canvas.height = targetH;
+      if (this.renderer) {
+        this.renderer.updateScale(targetW / 540, targetH / 960);
+      }
+    }
   }
 
   // --- Exposed API Methods for Dashboard ---
@@ -946,6 +1014,7 @@ export class FlagBattle {
     this.standings = [];
     this.physics.reset();
     this.renderer.clearFallingFlags();
+    if (this.renderer.clearEffects) this.renderer.clearEffects();
     this.audio.stopHeartbeat();
     this.ui.hideCountdown();
     this.ui.stopTimer();
@@ -1002,6 +1071,18 @@ export class FlagBattle {
   /* Crown the campaign champion, celebrate, then loop a fresh campaign. */
   _crownChampion(c, team) {
     this.qualifiedList.push(c);
+
+    // Defending champion & streak tracking
+    if (!this._streakCount) this._streakCount = 0;
+    if (this._defendingChampion && this._defendingChampion.code === c.code) {
+      this._streakCount++;
+    } else {
+      this._defendingChampion = c;
+      this._streakCount = 1;
+    }
+    if (this.ui && this.ui.setChampionInfo) {
+      this.ui.setChampionInfo(c, this._streakCount);
+    }
 
     // Get 2nd and 3rd place (last ones eliminated)
     const second = this.standings.length > 0 ? this.standings[this.standings.length - 1] : null;
@@ -1063,12 +1144,22 @@ export class FlagBattle {
       if (dt > 100) dt = 100;
 
       if (this.running && !this.paused) {
-        accum += dt;
-
-        // Run fixed physics steps based on real time
-        while (accum >= FIXED_STEP_MS) {
+        // Natural 60 FPS frame normalization: prevent micro-stutters from fractional OS scheduler drift
+        if (dt >= 13 && dt <= 19 && accum < FIXED_STEP_MS) {
           this._physicsStep(FIXED_STEP_MS);
-          accum -= FIXED_STEP_MS;
+          accum = 0;
+        } else {
+          accum += dt;
+          let steps = 0;
+          const maxSteps = 3;
+          while (accum >= FIXED_STEP_MS && steps < maxSteps) {
+            this._physicsStep(FIXED_STEP_MS);
+            accum -= FIXED_STEP_MS;
+            steps++;
+          }
+          if (accum > FIXED_STEP_MS * 2) {
+            accum = 0; // prevent spiral of death
+          }
         }
       } else {
         accum = 0;
@@ -1191,6 +1282,10 @@ export class FlagBattle {
       }
 
       // Milestone: 8 flags — voice CTA
+      if (this.audio && this.audio.setMusicIntensity) {
+        this.audio.setMusicIntensity(this.aliveCount);
+      }
+
       if (this.aliveCount <= 8 && !this._ctaAudioTriggered) {
         this._ctaAudioTriggered = true;
         this._speakNatural('Comment your country to save your flag!');
@@ -1216,8 +1311,9 @@ export class FlagBattle {
       if (this.aliveCount === 2 && !this._top2Triggered) {
         this._top2Triggered = true;
         this.audio.playDramaticHit();
+        if (this.audio.playShowdownAlarm) this.audio.playShowdownAlarm();
         this.audio.startHeartbeat(true); // Fast heartbeat
-        this.ui.showSuspense('🔥 1V1 SUDDEN DEATH!');
+        this.ui.showSuspense('🔥 1V1 SUDDEN DEATH SHOWDOWN!');
       }
 
       // One flag left → qualifier finished, grand final, or campaign champion.

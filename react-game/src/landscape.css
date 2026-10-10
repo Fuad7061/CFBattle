@@ -142,7 +142,7 @@
   gap: 8px;
   min-height: 0;
 }
-.landscape-shell .rail-left { width: 224px; }
+.landscape-shell .rail-left { width: 256px; }
 .landscape-shell .rail-right { width: 256px; }
 .landscape-shell .rail-center { flex: 1; }
 

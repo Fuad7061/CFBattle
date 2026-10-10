@@ -5,7 +5,7 @@ const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const https = require('https');
 const { EventEmitter } = require('events');
-const { startYoutubeChatPolling, testYoutubeChatConnection } = require('./youtubeChat.js');
+const { startYoutubeChatPolling, testYoutubeChatConnection, parseYoutubeTarget } = require('./youtubeChat.js');
 const { StreamScheduler } = require('./streamScheduler.js');
 
 const app = express();
@@ -45,9 +45,12 @@ let liveViewerCount = null;
 let currentSettings = {
     streamUrl: '',
     streamKey: '',
-    bitrate: 6800,
+    bitrate: 8000, // 8000k standard for Super HD 1080p60
+    preset: 'veryfast', // broadcast grade compression
     crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
-    activeEngine: 'landscape' // 'landscape' for React, 'vertical' for original
+    activeEngine: 'vertical', // 'vertical' for Super HD Vertical, 'landscape' for React
+    youtubeChatMode: 'player', // 'player' (Zero-Quota Web Player, Unlimited 24/7) | 'hybrid' | 'api'
+    youtubePollInterval: 1000 // 800ms / 1000ms / 2000ms
 };
 
 // Load settings on boot
@@ -136,25 +139,29 @@ app.post('/api/settings', checkAuth, (req, res) => {
         
         if (oldSettings.youtubeApiKey !== currentSettings.youtubeApiKey ||
             oldSettings.youtubeLiveId !== currentSettings.youtubeLiveId ||
-            oldSettings.youtubeChannelId !== currentSettings.youtubeChannelId) {
+            oldSettings.youtubeChannelId !== currentSettings.youtubeChannelId ||
+            oldSettings.youtubeChatMode !== currentSettings.youtubeChatMode ||
+            oldSettings.youtubePollInterval !== currentSettings.youtubePollInterval) {
             restartYoutubeChat(currentSettings);
         }
         
         bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: currentSettings.gameSettings || currentSettings });
         
-        res.json({ success: true });
+        res.json({ success: true, settings: currentSettings });
     } catch (err) {
         logMsg("Failed to save settings: " + err.message, true);
         res.status(500).json({ error: 'Failed to save settings' });
     }
 });
 
-// Let the director verify the chat pipeline instead of guessing why it is dead.
+// Let the director verify the chat pipeline with precise mode testing
 app.post('/api/youtube-chat-test', checkAuth, async (req, res) => {
-    const apiKey = currentSettings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
-    const { liveVideoId, channelId } = youtubeTargets();
+    const chatMode = req.body.chatMode || currentSettings.youtubeChatMode || 'player';
+    const apiKey = (req.body.apiKey !== undefined && req.body.apiKey !== '') ? req.body.apiKey : (currentSettings.youtubeApiKey || process.env.YOUTUBE_API_KEY || '');
+    const rawTarget = (req.body.target !== undefined && req.body.target !== '') ? req.body.target : (currentSettings.youtubeLiveId || currentSettings.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '');
+    const { liveVideoId, channelId } = parseYoutubeTarget(rawTarget);
     try {
-        const result = await testYoutubeChatConnection({ apiKey, liveVideoId, channelId });
+        const result = await testYoutubeChatConnection({ apiKey, liveVideoId, channelId, chatMode });
         res.json(result);
     } catch (err) {
         res.status(500).json({ ok: false, state: 'error', message: err.message });
@@ -213,7 +220,6 @@ async function beginStream() {
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
@@ -221,8 +227,21 @@ async function beginStream() {
             '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required',
             '--kiosk',
-            '--js-flags="--max-old-space-size=512"'
+            '--js-flags="--max-old-space-size=1024"',
+            '--enable-features=CanvasOopRasterization',
+            '--enable-gpu-rasterization',
+            '--ignore-gpu-blocklist',
+            '--force-device-scale-factor=1',
+            '--force-color-profile=srgb',
+            '--disable-breakpad',
+            '--disable-component-update',
+            '--disable-ipc-flooding-protection',
+            '--disable-features=CalculateNativeWinOcclusion,TranslateUI'
         ];
+
+        if (process.platform !== 'darwin' && !process.env.USE_GPU) {
+            puppeteerArgs.push('--disable-gpu');
+        }
 
         if (process.env.DISPLAY) {
             puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
@@ -334,8 +353,10 @@ async function beginStream() {
             logMsg(`Applying crop filter: ${videoFilter}`);
         }
 
-        const bitrateStr = currentSettings.bitrate ? `${currentSettings.bitrate}k` : '6800k';
-        const bufsizeStr = currentSettings.bitrate ? `${currentSettings.bitrate * 2}k` : '13600k';
+        const bitrateVal = currentSettings.bitrate || 8000;
+        const bitrateStr = `${bitrateVal}k`;
+        const bufsizeStr = `${bitrateVal * 2}k`;
+        const presetVal = currentSettings.preset || 'veryfast';
         const rtmpUrl = (currentSettings.streamUrl.endsWith('/') ? currentSettings.streamUrl : currentSettings.streamUrl + '/') + currentSettings.streamKey;
 
         // Build FFmpeg Args conditionally based on OS
@@ -347,21 +368,20 @@ async function beginStream() {
                 '-framerate', '60',
                 '-i', '1:none', // Disable audio capture on Mac to avoid device errors
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
+                '-preset', presetVal,
                 '-threads', '2',
                 '-b:v', bitrateStr,
                 '-maxrate', bitrateStr,
                 '-bufsize', bufsizeStr,
+                '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
-                '-g', '48',
+                '-g', '120',
                 '-an', // Disable audio completely for local mac tests
-
                 '-f', 'flv',
                 rtmpUrl
             ];
         } else {
-            // Linux/VPS mode (Xvfb + Pulse)
+            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade 1080p60
             ffmpegArgs = [
                 '-thread_queue_size', '1024',
                 '-f', 'x11grab',
@@ -373,18 +393,18 @@ async function beginStream() {
                 '-f', 'pulse',
                 '-i', 'v1.monitor',
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
+                '-preset', presetVal,
                 '-threads', '0',
                 '-b:v', bitrateStr,
                 '-minrate', bitrateStr,
                 '-maxrate', bitrateStr,
                 '-bufsize', bufsizeStr,
                 '-nal-hrd', 'cbr',
+                '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
-                '-g', '60', 
+                '-g', '120', // Strict 2.0-second GOP for 60fps (YouTube Live specification)
                 '-c:a', 'aac',
-                '-b:a', '128k',
+                '-b:a', '160k',
                 '-ar', '44100',
                 '-f', 'flv',
                 rtmpUrl
@@ -488,12 +508,18 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
 
         const puppeteerArgs = [
             '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-            '--disable-gpu',
             '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
             '--window-size=1080,1920', '--window-position=0,0',
             '--autoplay-policy=no-user-gesture-required', '--kiosk',
-            '--js-flags="--max-old-space-size=512"'
+            '--js-flags="--max-old-space-size=1024"',
+            '--enable-features=CanvasOopRasterization',
+            '--enable-gpu-rasterization',
+            '--ignore-gpu-blocklist'
         ];
+
+        if (process.platform !== 'darwin' && !process.env.USE_GPU) {
+            puppeteerArgs.push('--disable-gpu');
+        }
 
         if (process.env.DISPLAY) puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
         else if (process.platform !== 'darwin') puppeteerArgs.push('--display=:99');
@@ -701,6 +727,43 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 }
             });
             logMsg("Game toggle-sound triggered remotely.");
+        } else if (action === 'pause' || action === 'toggle-pause' || action === 'resume') {
+            await currentPage.evaluate((act) => {
+                if (window.gameInstance) {
+                    const gi = window.gameInstance;
+                    if (act === 'pause') {
+                        if (typeof gi.pause === 'function') gi.pause();
+                        else gi.paused = true;
+                    } else if (act === 'resume') {
+                        if (typeof gi.resume === 'function') gi.resume();
+                        else gi.paused = false;
+                    } else {
+                        if (typeof gi.togglePause === 'function') gi.togglePause();
+                        else if (gi.paused && typeof gi.resume === 'function') gi.resume();
+                        else if (typeof gi.pause === 'function') gi.pause();
+                        else gi.paused = !gi.paused;
+                    }
+                } else {
+                    const btn = document.getElementById('btn-pause') || document.getElementById('dir-btn-pause');
+                    if (btn) btn.click();
+                }
+            }, action);
+            logMsg(`Game ${action} triggered remotely.`);
+        } else if (action === 'clear-supporters' || action === 'reset-supporters') {
+            bus.emit('chat', { type: 'RESET_SUPPORTERS' });
+            if (currentPage) {
+                await currentPage.evaluate(() => {
+                    try {
+                        localStorage.removeItem('fb_top_supporters_map');
+                        localStorage.removeItem('fb_top_supporters_vertical');
+                        if (window.gameInstance && window.gameInstance.ui && typeof window.gameInstance.ui.resetSupporters === 'function') {
+                            window.gameInstance.ui.resetSupporters(true);
+                        }
+                    } catch (e) {}
+                    window.postMessage({ type: 'RESET_SUPPORTERS' }, '*');
+                });
+            }
+            logMsg("Top supporters leaderboard reset remotely.");
         } else if (action === 'settings') {
             await currentPage.evaluate((s) => {
                 window.__liveSettings = s;
@@ -836,9 +899,11 @@ const sseClients = new Set();
 app.get('/api/chat-stream', (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
+  if (res.flushHeaders) res.flushHeaders();
   res.write('\n');
   sseClients.add(res);
 
@@ -850,7 +915,10 @@ app.get('/api/chat-stream', (req, res) => {
 function broadcastChat(msg) {
   const payload = `data: ${JSON.stringify(msg)}\n\n`;
   for (const client of sseClients) {
-    client.write(payload);
+    try {
+      client.write(payload);
+      if (typeof client.flush === 'function') client.flush();
+    } catch (e) {}
   }
 }
 bus.on('chat', broadcastChat);
@@ -864,6 +932,12 @@ setInterval(() => {
 app.get('/api/votes', (req, res) => res.json(voteTally));
 app.post('/api/votes/reset', (req, res) => {
   voteTally = {};
+  res.json({ ok: true });
+});
+
+app.post('/api/supporters/reset', (req, res) => {
+  bus.emit('chat', { type: 'RESET_SUPPORTERS' });
+  logMsg("Top supporters leaderboard reset via API.");
   res.json({ ok: true });
 });
 
@@ -972,6 +1046,13 @@ app.post('/api/test-chat', express.json(), (req, res) => {
     }
   }
 
+  if (!vote && req.body.vote) {
+    vote = req.body.vote;
+  }
+  if (!power && req.body.power) {
+    power = req.body.power;
+  }
+
   const msg = {
     id: `test-${Date.now()}`,
     author: author || 'Test User',
@@ -998,49 +1079,94 @@ app.post('/api/test-chat', express.json(), (req, res) => {
 });
 
 let chatPoller = null;
-let youtubeChatStatus = { state: 'idle', videoId: null, liveChatId: null, error: null, at: null };
-function restartYoutubeChat(settings) {
+let youtubeChatStatus = { state: 'idle', mode: 'player', videoId: null, channelId: null, liveChatId: null, error: null, at: null };
+function restartYoutubeChat(settings = currentSettings) {
     if (chatPoller) {
         chatPoller.stop();
         chatPoller = null;
     }
-    const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY;
-    let liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID;
-    let channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID;
+    const chatMode = settings.youtubeChatMode || 'player';
+    const pollInterval = Number(settings.youtubePollInterval) || 1000;
+    const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY || '';
+    const rawTarget = settings.youtubeLiveId || settings.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '';
+    const { liveVideoId, channelId } = parseYoutubeTarget(rawTarget);
 
-    if (liveVideoId && liveVideoId.startsWith('UC') && liveVideoId.length === 24) {
-        channelId = liveVideoId;
-        liveVideoId = null;
-    }
+    youtubeChatStatus = { state: 'starting', mode: chatMode, videoId: liveVideoId, channelId, liveChatId: null, error: null, at: Date.now() };
 
-    youtubeChatStatus = { state: 'starting', videoId: liveVideoId, liveChatId: null, error: null, at: Date.now() };
-
-    if (apiKey && (liveVideoId || channelId)) {
+    if (chatMode === 'player' || chatMode === 'hybrid') {
+        if (!liveVideoId && !channelId) {
+            youtubeChatStatus = {
+                state: 'no-target',
+                mode: chatMode,
+                videoId: null,
+                channelId: null,
+                liveChatId: null,
+                error: 'Please enter a Live Video ID, Video URL, or Channel ID in settings.',
+                at: Date.now()
+            };
+            return;
+        }
         chatPoller = startYoutubeChatPolling({
-            apiKey, liveVideoId, channelId, bus,
-            onStatus: (s) => { youtubeChatStatus = s; },
+            apiKey,
+            liveVideoId,
+            channelId,
+            chatMode,
+            pollInterval,
+            bus,
+            onStatus: (s) => { youtubeChatStatus = { ...s, mode: chatMode }; },
             log: {
                 info: msg => logMsg(msg),
                 warn: msg => logMsg(msg, true),
                 error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
             }
         });
-    } else if (!apiKey) {
-        youtubeChatStatus = { state: 'no-api-key', videoId: null, liveChatId: null, error: 'No YouTube API key configured.', at: Date.now() };
     } else {
-        youtubeChatStatus = { state: 'no-target', videoId: null, liveChatId: null, error: 'No Live Video ID or Channel ID configured.', at: Date.now() };
+        // 'api' mode
+        if (!apiKey) {
+            youtubeChatStatus = {
+                state: 'no-api-key',
+                mode: chatMode,
+                videoId: null,
+                channelId: null,
+                liveChatId: null,
+                error: 'No YouTube API key configured. Switch to Zero-Quota Web Player for free unlimited mode.',
+                at: Date.now()
+            };
+            return;
+        }
+        if (!liveVideoId && !channelId) {
+            youtubeChatStatus = {
+                state: 'no-target',
+                mode: chatMode,
+                videoId: null,
+                channelId: null,
+                liveChatId: null,
+                error: 'No Live Video ID or Channel ID configured.',
+                at: Date.now()
+            };
+            return;
+        }
+        chatPoller = startYoutubeChatPolling({
+            apiKey,
+            liveVideoId,
+            channelId,
+            chatMode,
+            pollInterval,
+            bus,
+            onStatus: (s) => { youtubeChatStatus = { ...s, mode: chatMode }; },
+            log: {
+                info: msg => logMsg(msg),
+                warn: msg => logMsg(msg, true),
+                error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
+            }
+        });
     }
 }
 
-// Normalise the ID fields the same way restartYoutubeChat does.
+// Normalise the ID fields using parseYoutubeTarget
 function youtubeTargets(settings = currentSettings) {
-    let liveVideoId = settings.youtubeLiveId || process.env.YOUTUBE_LIVE_VIDEO_ID || '';
-    let channelId = settings.youtubeChannelId || process.env.YOUTUBE_CHANNEL_ID || '';
-    if (liveVideoId && liveVideoId.startsWith('UC') && liveVideoId.length === 24) {
-        channelId = liveVideoId;
-        liveVideoId = '';
-    }
-    return { liveVideoId, channelId };
+    const rawTarget = settings.youtubeLiveId || settings.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '';
+    return parseYoutubeTarget(rawTarget);
 }
 
 

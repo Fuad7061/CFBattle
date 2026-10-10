@@ -19,6 +19,17 @@ export default function ControlsOverlay({ engineRef, isStream }) {
   const [particles, setParticles] = useState(true);
   const [mesh, setMesh] = useState(false);
   const [sfx, setSfx] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    setIsPaused(Boolean(engine.paused));
+    const unsub = engine.on('pauseChanged', ({ paused }) => {
+      setIsPaused(Boolean(paused));
+    });
+    return () => unsub?.();
+  }, [engineRef]);
 
   // Load existing settings on mount
   useEffect(() => {
@@ -126,9 +137,10 @@ export default function ControlsOverlay({ engineRef, isStream }) {
       if (!engine) return;
       if (e.code === 'Space') {
         e.preventDefault();
-        engine.start();
+        if (engine.paused) engine.resume();
+        else engine.start();
       } else if (e.key === 'p' || e.key === 'P') {
-        engine.running = !engine.running;
+        engine.togglePause();
       } else if (e.key === 'r' || e.key === 'R') {
         engine.newRound();
       } else if (e.key === 'm' || e.key === 'M') {
@@ -269,12 +281,14 @@ export default function ControlsOverlay({ engineRef, isStream }) {
           </button>
           <button 
             className="ctrl-btn" 
+            id="btn-pause"
             onClick={() => { 
-              if (engineRef.current) engineRef.current.running = !engineRef.current.running; 
+              if (engineRef.current) engineRef.current.togglePause(); 
             }} 
-            title="Pause (P)"
+            title="Pause / Resume (P)"
+            style={isPaused ? { background: '#eab308', color: '#000', fontWeight: 'bold' } : {}}
           >
-            ⏸ PAUSE
+            {isPaused ? '▶ RESUME' : '⏸ PAUSE'}
           </button>
           <button className="ctrl-btn" onClick={() => engineRef.current?.newRound()} title="Full Reset (R)">
             ↺ RESET

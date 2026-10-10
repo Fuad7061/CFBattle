@@ -5,21 +5,61 @@
 export class Renderer {
   constructor(canvas) {
     this.canvas       = canvas;
-    this.ctx          = canvas.getContext('2d');
-    this.W            = canvas.width;   // 540
-    this.H            = canvas.height;  // 960
+    this.ctx          = canvas ? canvas.getContext('2d') : null;
+    this.W            = 540;            // logical width
+    this.H            = 960;            // logical height
+    this.dprX         = canvas ? canvas.width / 540 : 1;
+    this.dprY         = canvas ? canvas.height / 960 : 1;
     this.FW           = 28;             // flag width (larger, royal-style scale)
     this.FH           = 18;             // flag height (3:2 ratio)
     this.particles    = [];
     this.fallingFlags = [];             // eliminated flags tumbling away
+    this.chatFloaters = [];             // floating viewer reaction badges
+    this.shockwaves   = [];             // expanding energetic impact shockwaves
     this._frame       = 0;
 
     // Suspense lighting state
     this.suspenseIntensity = 0; // 0 to 1
 
+    this._initShadowCache();
+
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
-      this.ctx.imageSmoothingQuality = 'high';
+      try { this.ctx.imageSmoothingQuality = 'high'; } catch (e) {}
+    }
+  }
+
+  updateScale(dprX, dprY) {
+    this.dprX = dprX || 1;
+    this.dprY = dprY || 1;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = true;
+      try { this.ctx.imageSmoothingQuality = 'high'; } catch (e) {}
+    }
+    this._initShadowCache();
+  }
+
+  _initShadowCache() {
+    try {
+      const fw = this.FW, fh = this.FH;
+      const pad = 12;
+      const canvas = document.createElement('canvas');
+      canvas.width = fw + pad * 2;
+      canvas.height = fh + pad * 2;
+      const ctx = canvas.getContext('2d');
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(pad, pad, fw, fh, 2);
+      else ctx.rect(pad, pad, fw, fh);
+      ctx.fill();
+      this._shadowCanvas = canvas;
+      this._shadowPad = pad;
+    } catch (e) {
+      this._shadowCanvas = null;
     }
   }
 
@@ -30,25 +70,36 @@ export class Renderer {
   frame(physics, flags, images) {
     this._frame++;
     const ctx = this.ctx;
+    if (!ctx) return;
     const aliveCount = flags.filter(f => !f.eliminated).length;
 
     // Smoothly transition suspense intensity based on alive count
     const targetIntensity = aliveCount <= 2 ? 1.0 : (aliveCount === 3 ? 0.8 : (aliveCount <= 5 ? 0.35 : 0.0));
     this.suspenseIntensity += (targetIntensity - this.suspenseIntensity) * 0.05;
 
-    this._drawBg(ctx, this.suspenseIntensity);
+    ctx.save();
+    ctx.setTransform(this.dprX, 0, 0, this.dprY, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = 'high'; } catch (e) {}
+
+    this._drawBg(ctx, this.suspenseIntensity, physics);
     this._drawArena(ctx, physics, this.suspenseIntensity);
+    this._drawShockwaves(ctx);
     this._drawFlags(ctx, flags, images, aliveCount);
     this._drawFallingFlags(ctx);
     this._drawParticles(ctx);
+    this._drawChatFloaters(ctx);
+    this._drawDramaticVignette(ctx, this.suspenseIntensity);
     this._drawBorderGlow(ctx, this.suspenseIntensity);
+
+    ctx.restore();
   }
 
   /* ------------------------------------------------------------------ */
   /*  BACKGROUND & SUSPENSE SPOTLIGHT                                    */
   /* ------------------------------------------------------------------ */
 
-  _drawBg(ctx, suspense) {
+  _drawBg(ctx, suspense, physics) {
     // Deep slate background
     ctx.fillStyle = '#0d1114';
     ctx.fillRect(0, 0, this.W, this.H);
@@ -90,7 +141,7 @@ export class Renderer {
     }
 
     const cx = this.W / 2;
-    const cy = 445;
+    const cy = (physics && physics.cy) ? physics.cy : 490;
 
     // Radial arena glow (shifts to dramatic amber/crimson spotlight during Top 3)
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 380);
@@ -180,28 +231,42 @@ export class Renderer {
       ctx.translate(p.x, p.y);
       ctx.rotate(angle);
 
-      // Soft grounded shadow beneath the flag (depth, royal-style)
-      ctx.save();
-      ctx.shadowBlur    = 6;
-      ctx.shadowColor   = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 3;
-      ctx.fillStyle     = 'rgba(0, 0, 0, 0.92)';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
-      else ctx.rect(-fw / 2, -fh / 2, fw, fh);
-      ctx.fill();
-      ctx.restore();
+      // Soft grounded shadow beneath the flag (high performance pre-rendered depth)
+      if (this._shadowCanvas) {
+        ctx.drawImage(this._shadowCanvas, -fw / 2 - this._shadowPad, -fh / 2 - this._shadowPad, fw + this._shadowPad * 2, fh + this._shadowPad * 2);
+      } else {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(-fw / 2, -fh / 2 + 2, fw, fh, 2);
+          ctx.fill();
+        } else {
+          ctx.fillRect(-fw / 2, -fh / 2 + 2, fw, fh);
+        }
+      }
 
       const img = images[f.country.code];
-      if (img && img.complete && img.naturalWidth > 0) {
-        ctx.save();
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
-        else ctx.rect(-fw / 2, -fh / 2, fw, fh);
-        ctx.clip();
-        this._drawWavingFlag(ctx, img, fw, fh, f);
-        ctx.restore();
+      const hasImg = img && (img.width > 0 || img.naturalWidth > 0);
+      if (hasImg) {
+        if (aliveCount <= 5) {
+          // Finalists: gentle flutter cloth wave effect
+          ctx.save();
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
+          else ctx.rect(-fw / 2, -fh / 2, fw, fh);
+          ctx.clip();
+          this._drawWavingFlag(ctx, img, fw, fh, f);
+          ctx.restore();
+        } else {
+          // Many active flags: draw razor-sharp high-definition flag directly
+          ctx.save();
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
+          else ctx.rect(-fw / 2, -fh / 2, fw, fh);
+          ctx.clip();
+          ctx.drawImage(img, -fw / 2, -fh / 2, fw, fh);
+          ctx.restore();
+        }
       } else {
         ctx.fillStyle = this._codeColor(f.country.code);
         ctx.fillRect(-fw / 2, -fh / 2, fw, fh);
@@ -261,21 +326,22 @@ export class Renderer {
     const iw = img.naturalWidth  || img.width;
     const ih = img.naturalHeight || img.height;
     if (!iw || !ih) return;
-    const S = fw >= 24 ? 6 : 3;
+    const S = fw >= 24 ? 6 : 4;
     const t = this._frame;
     const seed = (f.country.code.charCodeAt(0) * 0.37) % (Math.PI * 2);
-    const amp = Math.min(1.6, fw * 0.06);
+    const amp = Math.min(1.4, fw * 0.05);
+    const sliceW = fw / S;
     for (let i = 0; i < S; i++) {
       const u0 = i / S, u1 = (i + 1) / S;
       const wave = Math.sin(t * 0.11 + seed + u0 * 5.0);
       const dy = wave * amp * u0;
-      const dx = Math.sin(t * 0.09 + seed) * 0.5 * u0;
+      const dx = Math.sin(t * 0.09 + seed) * 0.4 * u0;
       ctx.drawImage(
         img,
         u0 * iw, 0, (u1 - u0) * iw, ih,
-        -fw / 2 + u0 * fw + dx,
+        -fw / 2 + i * sliceW + dx,
         -fh / 2 + dy,
-        (u1 - u0) * fw + 1, fh,
+        sliceW + 0.2, fh,
       );
     }
   }
@@ -567,6 +633,249 @@ export class Renderer {
     ctx.fillStyle   = 'rgba(255, 210, 0, 0.45)';
     ctx.fillRect(0, 0, this.W, this.H);
     ctx.restore();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  CHAT REACTION FLOATERS & SHOCKWAVES                                */
+  /* ------------------------------------------------------------------ */
+
+  addChatFloater(targetOrX, authorOrY, labelOrAuthor, colorOrLabel, maybeColor) {
+    if (this.chatFloaters.length > 30) this.chatFloaters.shift();
+
+    let target = null;
+    let x = this.W / 2;
+    let y = this.H / 2;
+    let author = 'CHAT';
+    let label = '+1';
+    let color = '#4ade80';
+
+    if (typeof targetOrX === 'object' && targetOrX !== null) {
+      target = targetOrX;
+      author = String(authorOrY || 'CHAT').trim();
+      label = String(labelOrAuthor || '+1').trim();
+      color = colorOrLabel || '#4ade80';
+      const b = target.body || target;
+      x = (b.position ? b.position.x : b.x) || (this.W / 2);
+      y = (b.position ? b.position.y : b.y) || (this.H / 2);
+    } else {
+      x = Number(targetOrX) || (this.W / 2);
+      y = Number(authorOrY) || (this.H / 2);
+      author = String(labelOrAuthor || 'CHAT').trim();
+      label = String(colorOrLabel || '+1').trim();
+      color = maybeColor || '#4ade80';
+    }
+
+    // Consistent vibrant avatar color generated from author's username
+    let hash = 0;
+    for (let i = 0; i < author.length; i++) hash = ((hash << 5) - hash) + author.charCodeAt(i);
+    const avatarColor = `hsl(${Math.abs(hash) % 360}, 80%, 48%)`;
+    const initial = (author.charAt(0) || '★').toUpperCase();
+
+    this.chatFloaters.push({
+      target,
+      x,
+      y,
+      author: author.slice(0, 16),
+      initial,
+      avatarColor,
+      label: label.slice(0, 14),
+      color,
+      frame: 0,
+      maxFrames: 170,    // ~2.8s total duration at 60fps
+      pinnedFrames: 110, // Locks/tethers directly to the ball for ~1.8s
+      floatY: 0,
+    });
+  }
+
+  _drawChatFloaters(ctx) {
+    if (!this.chatFloaters.length) return;
+    ctx.save();
+
+    for (let i = this.chatFloaters.length - 1; i >= 0; i--) {
+      const f = this.chatFloaters[i];
+      f.frame++;
+
+      if (f.frame >= f.maxFrames) {
+        this.chatFloaters.splice(i, 1);
+        continue;
+      }
+
+      // While in pinned duration, anchor position to the ball
+      if (f.target) {
+        const b = f.target.body || f.target;
+        const tx = b.position ? b.position.x : b.x;
+        const ty = b.position ? b.position.y : b.y;
+        if (typeof tx === 'number' && typeof ty === 'number') {
+          f.x = tx;
+          f.y = ty - (this.FH ? (this.FH / 2 + 16) : 24);
+        }
+      }
+
+      // Past pinned frames, gently drift upward while fading out
+      if (f.frame > f.pinnedFrames) {
+        f.floatY -= 0.65;
+      }
+
+      // Opacity calculation
+      let alpha = 1.0;
+      if (f.frame > f.pinnedFrames) {
+        alpha = Math.max(0, 1 - (f.frame - f.pinnedFrames) / (f.maxFrames - f.pinnedFrames));
+      } else if (f.frame < 10) {
+        alpha = f.frame / 10;
+      }
+
+      const drawX = Math.max(65, Math.min(this.W - 65, f.x));
+      const drawY = Math.max(22, Math.min(this.H - 22, f.y + f.floatY));
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      ctx.font = 'bold 9.5px "Outfit", "Inter", sans-serif';
+      const nameWidth = ctx.measureText(f.author).width;
+      ctx.font = 'bold 8.5px "Outfit", "Inter", sans-serif';
+      const labelWidth = ctx.measureText(f.label).width;
+
+      const avatarR = 6.5;
+      const avatarW = avatarR * 2;
+      const pillPad = 5;
+      const pillW = labelWidth + pillPad * 2;
+      const badgeH = 20;
+      const badgeW = avatarW + 6 + nameWidth + 8 + pillW + 8;
+      const bx = drawX - badgeW / 2;
+      const by = drawY - badgeH / 2;
+
+      // Downward pointer arrow connecting badge directly to flag ball
+      if (f.frame <= f.pinnedFrames + 20) {
+        ctx.beginPath();
+        ctx.moveTo(drawX - 4, by + badgeH);
+        ctx.lineTo(drawX + 4, by + badgeH);
+        ctx.lineTo(drawX, by + badgeH + 5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(12, 18, 30, 0.92)';
+        ctx.fill();
+        ctx.strokeStyle = f.color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Glassmorphic tag badge container
+      ctx.fillStyle = 'rgba(10, 16, 28, 0.92)';
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 1.2;
+      ctx.shadowColor = f.color;
+      ctx.shadowBlur = 8;
+
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx, by, badgeW, badgeH, 10);
+      else ctx.rect(bx, by, badgeW, badgeH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 1. Avatar circle with user's initial
+      const avCenterX = bx + 4 + avatarR;
+      const avCenterY = drawY;
+      ctx.beginPath();
+      ctx.arc(avCenterX, avCenterY, avatarR, 0, Math.PI * 2);
+      ctx.fillStyle = f.avatarColor;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.font = 'bold 8px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(f.initial, avCenterX, avCenterY + 0.5);
+
+      // 2. Author username
+      ctx.font = 'bold 9.5px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f8fafc';
+      const nameX = avCenterX + avatarR + 5;
+      ctx.fillText(f.author, nameX, drawY);
+
+      // 3. Action pill badge
+      const pillX = nameX + nameWidth + 5;
+      const pillY = drawY - 7;
+      const pillH = 14;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillW, pillH, 7);
+      else ctx.rect(pillX, pillY, pillW, pillH);
+      ctx.fill();
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.font = 'bold 8.5px "Outfit", "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.label, pillX + pillW / 2, drawY + 0.5);
+
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  addShockwave(x, y, color = 'rgba(255, 215, 0, 0.8)') {
+    if (this.shockwaves.length > 15) this.shockwaves.shift();
+    this.shockwaves.push({
+      x, y,
+      r: 12,
+      maxR: 45,
+      color,
+      life: 1.0,
+      decay: 0.035
+    });
+  }
+
+  _drawShockwaves(ctx) {
+    if (!this.shockwaves.length) return;
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const sw = this.shockwaves[i];
+      sw.r += (sw.maxR - sw.r) * 0.15 + 1.2;
+      sw.life -= sw.decay;
+      if (sw.life <= 0 || sw.r >= sw.maxR) {
+        this.shockwaves.splice(i, 1);
+        continue;
+      }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, sw.life * 0.7);
+      ctx.strokeStyle = sw.color;
+      ctx.lineWidth = 2.5 * sw.life;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = sw.color;
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  _drawDramaticVignette(ctx, suspense) {
+    if (suspense < 0.2) return;
+    ctx.save();
+    const cx = this.W / 2;
+    const cy = this.H / 2;
+    const grad = ctx.createRadialGradient(cx, cy, 140, cx, cy, this.W * 0.75);
+    const pulse = 0.5 + Math.sin(this._frame * 0.1) * 0.2;
+    const alpha = (suspense * 0.65) * pulse;
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    grad.addColorStop(1, `rgba(180, 20, 20, ${alpha.toFixed(3)})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.W, this.H);
+    ctx.restore();
+  }
+
+  clearEffects() {
+    this.particles = [];
+    this.fallingFlags = [];
+    this.chatFloaters = [];
+    this.shockwaves = [];
   }
 
   /* ------------------------------------------------------------------ */

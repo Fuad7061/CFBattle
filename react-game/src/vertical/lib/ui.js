@@ -17,15 +17,13 @@ export class UIManager {
     this._engageIndex    = 0;
     this._nextTournamentTimer = null;
 
-    // Top supporters pool (persisted across rounds/gameplay)
+    // Top supporters pool (fresh stream session, purge legacy stale data)
     this._supporters = [];
+    this._latestShoutout = null;
     try {
       if (typeof localStorage !== 'undefined') {
-        const cached = localStorage.getItem('fb_top_supporters_vertical');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) this._supporters = parsed;
-        }
+        localStorage.removeItem('fb_top_supporters_vertical');
+        localStorage.removeItem('fb_top_supporters_map');
       }
     } catch (e) {}
   }
@@ -56,6 +54,23 @@ export class UIManager {
     const label = totalRounds ? `CAMPAIGN ${campaign} \u00b7 ROUND ${round}/${totalRounds}` : `CAMPAIGN ${campaign}`;
     const phase = target <= 1 ? 'GRAND FINAL' : `QUALIFY TOP ${target}`;
     this.setRoundHeader(label, phase);
+  }
+
+  setChampionInfo(championCountry, streak = 1) {
+    let el = this.$('champion-banner');
+    if (!el) {
+      const topBar = this.$('round-header') || this.$('header-area') || this.$('top-bar');
+      el = document.createElement('div');
+      el.id = 'champion-banner';
+      el.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(217,119,6,0.22);border:1px solid rgba(245,158,11,0.5);border-radius:12px;padding:3px 12px;font-size:10px;font-weight:700;color:#fef3c7;margin:3px auto;width:fit-content;box-shadow:0 2px 10px rgba(0,0,0,0.6);letter-spacing:0.5px;';
+      if (topBar && topBar.parentNode) {
+        topBar.parentNode.insertBefore(el, topBar.nextSibling);
+      }
+    }
+    if (el && championCountry) {
+      el.innerHTML = `👑 DEFENDING: <img src="${getFlagUrl(championCountry.code, 40)}" style="width:16px;height:11px;border-radius:2px;display:inline-block;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,0.5);" /> <b>${championCountry.name}</b> ${streak > 1 ? `· 🔥 ${streak} STREAK` : ''}`;
+      el.style.display = 'flex';
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -92,23 +107,33 @@ export class UIManager {
     // No longer an interval
   }
 
-  recordSupporterVote(author, weight) {
-    const name = author || 'Viewer';
-    const w = Math.max(0, Number(weight) || 0);
-    if (w === 0) return;
+  recordSupporterVote(author, weight, countryCode) {
+    const name = String(author || 'Viewer').trim();
+    const w = Math.max(1, Number(weight) || 1);
     const existing = this._supporters.find(s => s.name === name);
     if (existing) {
       existing.gifts += w;
+      if (countryCode) existing.countryCode = countryCode;
+      existing.lastActive = Date.now();
     } else {
-      this._supporters.push({ name, gifts: w });
+      this._supporters.push({
+        name,
+        gifts: w,
+        countryCode: countryCode || null,
+        initial: (name.charAt(0) || '★').toUpperCase(),
+        lastActive: Date.now()
+      });
     }
-    this._supporters.sort((a, b) => b.gifts - a.gifts);
-    this._supporters = this._supporters.slice(0, 20);
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('fb_top_supporters_vertical', JSON.stringify(this._supporters));
-      }
-    } catch (e) {}
+    this._supporters.sort((a, b) => b.gifts - a.gifts || b.lastActive - a.lastActive);
+    this._supporters = this._supporters.slice(0, 15);
+
+    this._latestShoutout = {
+      name,
+      countryCode: countryCode || existing?.countryCode,
+      action: countryCode ? `Voted ${countryCode.toUpperCase()}!` : 'Cheered in chat! 💬',
+      initial: (name.charAt(0) || '★').toUpperCase()
+    };
+
     this._updateSupportersUI();
   }
 
@@ -116,21 +141,50 @@ export class UIManager {
     const list = this.$('supporters-list');
     if (!list) return;
     if (this._supporters.length === 0) {
-      list.innerHTML = '<div class="sup-empty">No supporters yet</div>';
+      list.innerHTML = '<div class="sup-empty" style="text-align:center;padding:6px 2px;color:#fcd34d;font-size:9.5px;font-weight:700;">💬 Comment flag for shoutout!</div>';
       return;
     }
-    list.innerHTML = this._supporters.slice(0, 5).map((s, i) => `
-      <div class="sup-row">
-        <span class="sup-rank">${i + 1}</span>
-        <span class="sup-name">${s.name}</span>
-        <span class="sup-gifts">\u2605 ${Math.round(s.gifts)}</span>
-      </div>
-    `).join('');
+
+    const medals = ['🥇', '🥈', '🥉'];
+    let html = this._supporters.slice(0, 4).map((s, i) => {
+      const medal = medals[i] || `#${i + 1}`;
+      const flagImg = s.countryCode ? `<img src="/flags/${s.countryCode.toLowerCase()}.svg" style="width:13px;height:9px;border-radius:2px;object-fit:cover;display:inline-block;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,0.5);" />` : '';
+      return `
+        <div class="sup-row" style="display:flex;align-items:center;gap:4px;padding:2px 0;">
+          <span class="sup-rank" style="font-size:9px;width:14px;color:#f59e0b;font-weight:900;">${medal}</span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#3b82f6;color:#fff;font-size:8px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${s.initial || '★'}</span>
+          <span class="sup-name" style="font-size:9.5px;font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}</span>
+          ${flagImg}
+          <span class="sup-gifts" style="font-size:8.5px;font-weight:800;color:#fcd34d;">⭐ ${Math.round(s.gifts)}</span>
+        </div>
+      `;
+    }).join('');
+
+    if (this._latestShoutout) {
+      const flagImg = this._latestShoutout.countryCode ? `<img src="/flags/${this._latestShoutout.countryCode.toLowerCase()}.svg" style="width:12px;height:8px;border-radius:1px;object-fit:cover;display:inline-block;vertical-align:middle;" />` : '';
+      html += `
+        <div style="margin-top:3px;padding:2px 4px;background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.4);border-radius:4px;display:flex;align-items:center;gap:3px;font-size:8.5px;color:#67e8f9;font-weight:700;">
+          <span style="color:#22d3ee;">⚡</span>
+          <span style="color:#fff;max-width:55px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._latestShoutout.name}</span>
+          ${flagImg}
+          <span style="opacity:0.8;font-size:7.5px;">${this._latestShoutout.action}</span>
+        </div>
+      `;
+    }
+
+    list.innerHTML = html;
   }
 
-  resetSupporters() {
-    // User requested that Top Supporters should not be erased for each new round or gameplay.
-    // Preserving supporters list across resets.
+  resetSupporters(forceClear = false) {
+    if (forceClear) {
+      this._supporters = [];
+      this._latestShoutout = null;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('fb_top_supporters_vertical');
+        }
+      } catch (e) {}
+    }
     this._updateSupportersUI();
   }
 

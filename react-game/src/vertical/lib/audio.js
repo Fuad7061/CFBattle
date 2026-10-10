@@ -233,6 +233,99 @@ export class AudioManager {
     } catch (_) {}
   }
 
+  /** Pleasant harmonic high chime when a chat vote / boost lands */
+  playVoteChime() {
+    if (!this.sfxEnabled || this._muted) return;
+    try {
+      const ctx = this._ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(987.77, ctx.currentTime); // B5
+      osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.08); // E6
+      gain.gain.setValueAtTime(0.14 * (this.sfxVolume / 0.5), ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.13);
+    } catch (_) {}
+  }
+
+  /** Dedicated futuristic SFX for powers (shield, freeze, boost, quake, nuke) */
+  playPowerSFX(powerName) {
+    if (!this.sfxEnabled || this._muted) return;
+    try {
+      const ctx = this._ctx();
+      const p = String(powerName || '').toLowerCase();
+      const t = ctx.currentTime;
+
+      if (p === 'freeze') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1800, t);
+        osc.frequency.exponentialRampToValueAtTime(400, t + 0.35);
+        gain.gain.setValueAtTime(0.25 * (this.sfxVolume / 0.5), t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.start(t); osc.stop(t + 0.36);
+      } else if (p === 'shield') {
+        [523.25, 1046.5].forEach((freq) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.18 * (this.sfxVolume / 0.5), t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+          osc.start(t); osc.stop(t + 0.46);
+        });
+      } else if (p === 'boost') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, t);
+        osc.frequency.exponentialRampToValueAtTime(880, t + 0.28);
+        gain.gain.setValueAtTime(0.18 * (this.sfxVolume / 0.5), t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+        osc.start(t); osc.stop(t + 0.29);
+      } else if (p === 'quake') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(65, t);
+        osc.frequency.linearRampToValueAtTime(30, t + 0.6);
+        gain.gain.setValueAtTime(0.4 * (this.sfxVolume / 0.5), t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+        osc.start(t); osc.stop(t + 0.61);
+      } else if (p === 'nuke') {
+        this.playDramaticHit();
+      }
+    } catch (_) {}
+  }
+
+  /** Urgent dual-horn siren when 1v1 Sudden Death begins */
+  playShowdownAlarm() {
+    if (!this.sfxEnabled || this._muted) return;
+    try {
+      const ctx = this._ctx();
+      const t = ctx.currentTime;
+      [0, 0.22, 0.44].forEach((delay, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(idx % 2 === 0 ? 587.33 : 880, t + delay);
+        gain.gain.setValueAtTime(0.2 * (this.sfxVolume / 0.5), t + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.18);
+        osc.start(t + delay);
+        osc.stop(t + delay + 0.19);
+      });
+    } catch (_) {}
+  }
+
   /* ------------------------------------------------------------------ */
   /*  BACKGROUND MUSIC                                                   */
   /* ------------------------------------------------------------------ */
@@ -258,95 +351,231 @@ export class AudioManager {
     this._stopProceduralBg();
   }
 
+  setMusicIntensity(stageOrCount) {
+    if (typeof stageOrCount === 'number') {
+      if (stageOrCount <= 2) this._musicStage = 'showdown';
+      else if (stageOrCount <= 5) this._musicStage = 'top5';
+      else this._musicStage = 'normal';
+    } else if (typeof stageOrCount === 'string') {
+      this._musicStage = stageOrCount;
+    }
+  }
+
   _startProceduralBg() {
     if (this._proceduralActive) return;
     try {
       const ctx = this._ctx();
       this._proceduralActive = true;
-      
-      const bpm = 125;
-      const stepTime = (60 / bpm) / 4; // 16th notes
-      
-      // Catchy Arcade / Synthwave Bassline (C Minor)
-      const bassNotes = [36, 36, 36, 36, 39, 39, 41, 43]; 
-      // Catchy Lead Melody
-      const leadNotes = [60, null, 63, 65, 67, null, 65, 63, 60, null, 60, 63, 67, 72, null, 70];
-      
-      const m2f = m => m ? 440 * Math.pow(2, (m - 69) / 12) : 0;
-      
+      this._musicStage = this._musicStage || 'normal';
+
+      // Reusable noise buffer for crisp studio-quality percussion (hats, snares)
+      if (!this._noiseBuffer) {
+        const sampleRate = ctx.sampleRate || 44100;
+        const b = ctx.createBuffer(1, sampleRate, sampleRate);
+        const data = b.getChannelData(0);
+        for (let i = 0; i < sampleRate; i++) data[i] = Math.random() * 2 - 1;
+        this._noiseBuffer = b;
+      }
+
+      // Euphoric Dopamine Chord Progression (Am - F - C - G) in 4 bars (64 16th steps)
+      // Bass midi notes: A1 (33), F1 (29), C2 (36), G1 (31)
+      const bassRoots = [
+        33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 43, // Am
+        29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 40, // F
+        36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 47, // C
+        31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 41  // G
+      ];
+
+      // Uplifting Arpeggio Lead (Pentatonic/Dorian euphoria)
+      const arpLead = [
+        69, 72, 76, 81,  76, 72, 81, 76,  69, 72, 76, 81,  84, 81, 76, 72, // Bar 1 (Am)
+        65, 69, 72, 77,  72, 69, 77, 72,  65, 69, 72, 77,  81, 77, 72, 69, // Bar 2 (F)
+        60, 64, 67, 72,  67, 64, 72, 67,  60, 64, 67, 72,  76, 72, 67, 64, // Bar 3 (C)
+        67, 71, 74, 79,  74, 71, 79, 74,  67, 71, 74, 79,  83, 79, 74, 71  // Bar 4 (G)
+      ];
+
+      const m2f = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
       let step = 0;
-      let nextNoteTime = ctx.currentTime + 0.1;
+      let nextNoteTime = ctx.currentTime + 0.08;
 
       this._scheduler = () => {
         if (!this._proceduralActive || this._muted || !this.musicEnabled) return;
-        
-        // Schedule ahead
-        while (nextNoteTime < ctx.currentTime + 0.15) {
-          
-          // Kick Drum (every quarter note / beat 0, 4, 8, 12)
-          if (step % 4 === 0) {
+
+        // Dynamic BPM & energy based on battle stage
+        let bpm = 126;
+        let filterCutoff = 1500;
+        let isShowdown = this._musicStage === 'showdown';
+        let isTop5 = this._musicStage === 'top5' || isShowdown;
+
+        if (isShowdown) {
+          bpm = 138;
+          filterCutoff = 4200;
+        } else if (isTop5) {
+          bpm = 132;
+          filterCutoff = 2600;
+        }
+
+        const stepTime = (60 / bpm) / 4; // 16th note duration
+
+        while (nextNoteTime < ctx.currentTime + 0.16) {
+          const t = nextNoteTime;
+          const barStep = step % 64;
+          const beat16 = step % 16;
+          const isQuarter = beat16 % 4 === 0;
+
+          // 1. PUNCHY 4-ON-THE-FLOOR KICK (Every beat: 0, 4, 8, 12)
+          if (isQuarter) {
             const kOsc = ctx.createOscillator();
             const kGain = ctx.createGain();
-            kOsc.connect(kGain); kGain.connect(ctx.destination);
-            kOsc.frequency.setValueAtTime(120, nextNoteTime);
-            kOsc.frequency.exponentialRampToValueAtTime(0.01, nextNoteTime + 0.1);
-            kGain.gain.setValueAtTime(this.bgVolume * 0.4, nextNoteTime);
-            kGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 0.1);
-            kOsc.start(nextNoteTime); kOsc.stop(nextNoteTime + 0.1);
+            kOsc.connect(kGain);
+            kGain.connect(ctx.destination);
+            kOsc.frequency.setValueAtTime(isShowdown ? 150 : 135, t);
+            kOsc.frequency.exponentialRampToValueAtTime(36, t + 0.085);
+            kGain.gain.setValueAtTime(this.bgVolume * (isShowdown ? 0.48 : 0.40), t);
+            kGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+            kOsc.start(t);
+            kOsc.stop(t + 0.095);
           }
-          
-          // Pseudo Hi-hat (8th notes / beat 0, 2, 4, 6...)
-          if (step % 2 === 0) {
-            const hOsc = ctx.createOscillator();
-            const hGain = ctx.createGain();
-            hOsc.type = 'square';
-            hOsc.connect(hGain); hGain.connect(ctx.destination);
-            hOsc.frequency.value = 6000; // high pitch noise fake
-            hGain.gain.setValueAtTime(this.bgVolume * 0.03, nextNoteTime);
-            hGain.gain.exponentialRampToValueAtTime(0.001, nextNoteTime + 0.05);
-            hOsc.start(nextNoteTime); hOsc.stop(nextNoteTime + 0.05);
+
+          // 2. SNAPPY SNARE / CLAP (Beats 2 & 4: 4, 12)
+          if (beat16 === 4 || beat16 === 12) {
+            // Noise snap
+            if (this._noiseBuffer) {
+              const snNode = ctx.createBufferSource();
+              snNode.buffer = this._noiseBuffer;
+              const snFilter = ctx.createBiquadFilter();
+              snFilter.type = 'bandpass';
+              snFilter.frequency.value = 1900;
+              snFilter.Q.value = 1.2;
+              const snGain = ctx.createGain();
+              snNode.connect(snFilter);
+              snFilter.connect(snGain);
+              snGain.connect(ctx.destination);
+              snGain.gain.setValueAtTime(this.bgVolume * 0.22, t);
+              snGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+              snNode.start(t);
+              snNode.stop(t + 0.125);
+            }
+            // Tonal snap
+            const snOsc = ctx.createOscillator();
+            const snToneGain = ctx.createGain();
+            snOsc.connect(snToneGain);
+            snToneGain.connect(ctx.destination);
+            snOsc.frequency.setValueAtTime(220, t);
+            snOsc.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+            snToneGain.gain.setValueAtTime(this.bgVolume * 0.14, t);
+            snToneGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+            snOsc.start(t);
+            snOsc.stop(t + 0.085);
           }
-          
-          // Bassline (8th notes)
-          if (step % 2 === 0) {
+
+          // 3. CRISP 909 HI-HATS
+          if (this._noiseBuffer) {
+            const isOffbeat = beat16 % 4 === 2; // Steps 2, 6, 10, 14 (Open Hat Sizzle)
+            const isClosed = (beat16 % 2 === 1) || (isTop5 && beat16 % 2 === 0);
+
+            if (isOffbeat) {
+              const ohNode = ctx.createBufferSource();
+              ohNode.buffer = this._noiseBuffer;
+              const ohFilter = ctx.createBiquadFilter();
+              ohFilter.type = 'highpass';
+              ohFilter.frequency.value = 7500;
+              const ohGain = ctx.createGain();
+              ohNode.connect(ohFilter);
+              ohFilter.connect(ohGain);
+              ohGain.connect(ctx.destination);
+              ohGain.gain.setValueAtTime(this.bgVolume * 0.09, t);
+              ohGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+              ohNode.start(t);
+              ohNode.stop(t + 0.115);
+            } else if (isClosed && !isQuarter) {
+              const chNode = ctx.createBufferSource();
+              chNode.buffer = this._noiseBuffer;
+              const chFilter = ctx.createBiquadFilter();
+              chFilter.type = 'highpass';
+              chFilter.frequency.value = 9000;
+              const chGain = ctx.createGain();
+              chNode.connect(chFilter);
+              chFilter.connect(chGain);
+              chGain.connect(ctx.destination);
+              chGain.gain.setValueAtTime(this.bgVolume * 0.05, t);
+              chGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+              chNode.start(t);
+              chNode.stop(t + 0.045);
+            }
+          }
+
+          // 4. ROLLING 16TH SYNTHWAVE BASSLINE
+          const bassMidi = bassRoots[barStep];
+          if (bassMidi) {
             const bOsc = ctx.createOscillator();
+            const bFilter = ctx.createBiquadFilter();
             const bGain = ctx.createGain();
+
             bOsc.type = 'sawtooth';
-            bOsc.connect(bGain); bGain.connect(ctx.destination);
-            const mNote = bassNotes[(step / 2) % bassNotes.length];
-            bOsc.frequency.value = m2f(mNote - 12);
-            bGain.gain.setValueAtTime(this.bgVolume * 0.15, nextNoteTime);
-            bGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 0.2);
-            bOsc.start(nextNoteTime); bOsc.stop(nextNoteTime + 0.2);
+            bOsc.frequency.setValueAtTime(m2f(bassMidi), t);
+
+            bFilter.type = 'lowpass';
+            bFilter.frequency.setValueAtTime(isQuarter ? 450 : 850, t);
+            bFilter.Q.value = 3.0;
+
+            bOsc.connect(bFilter);
+            bFilter.connect(bGain);
+            bGain.connect(ctx.destination);
+
+            // Sidechain dip on the kick
+            const bassVol = isQuarter ? this.bgVolume * 0.10 : this.bgVolume * 0.20;
+            bGain.gain.setValueAtTime(bassVol, t);
+            bGain.gain.exponentialRampToValueAtTime(0.005, t + stepTime * 0.88);
+
+            bOsc.start(t);
+            bOsc.stop(t + stepTime * 0.9);
           }
-          
-          // Lead Melody
-          const lNote = leadNotes[step % leadNotes.length];
-          if (lNote) {
+
+          // 5. EUPHORIC ARPEGGIATOR CHORD LEAD (Dopamine trigger)
+          const arpMidi = arpLead[barStep];
+          if (arpMidi) {
             const lOsc = ctx.createOscillator();
+            const lFilter = ctx.createBiquadFilter();
             const lGain = ctx.createGain();
+
             lOsc.type = 'square';
-            lOsc.connect(lGain); lGain.connect(ctx.destination);
-            lOsc.frequency.value = m2f(lNote);
-            lGain.gain.setValueAtTime(this.bgVolume * 0.06, nextNoteTime);
-            lGain.gain.linearRampToValueAtTime(0, nextNoteTime + stepTime * 1.2);
-            lOsc.start(nextNoteTime); lOsc.stop(nextNoteTime + stepTime * 1.2);
+            lOsc.frequency.setValueAtTime(m2f(arpMidi), t);
+
+            lFilter.type = 'lowpass';
+            lFilter.frequency.setValueAtTime(filterCutoff, t);
+            lFilter.Q.value = 2.5;
+
+            lOsc.connect(lFilter);
+            lFilter.connect(lGain);
+            lGain.connect(ctx.destination);
+
+            const arpVol = isShowdown ? this.bgVolume * 0.11 : this.bgVolume * 0.075;
+            lGain.gain.setValueAtTime(arpVol, t);
+            lGain.gain.linearRampToValueAtTime(0.001, t + stepTime * 0.85);
+
+            lOsc.start(t);
+            lOsc.stop(t + stepTime * 0.9);
           }
 
           step++;
           nextNoteTime += stepTime;
         }
-        
+
         this._seqTimer = setTimeout(this._scheduler, 30);
       };
-      
+
       this._scheduler();
     } catch (e) {}
   }
 
   _stopProceduralBg() {
     this._proceduralActive = false;
-    if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+    if (this._seqTimer) {
+      clearTimeout(this._seqTimer);
+      this._seqTimer = null;
+    }
   }
 
   setBgVolume(v) {

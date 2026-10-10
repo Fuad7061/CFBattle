@@ -23,12 +23,12 @@ export class PhysicsEngine {
     this.R_wall        = this.R_inner + this.wallThickness / 2; // ~214px
     this.R_kill        = this.R + 20;   // ~225px
 
-    // Matter.js engine with high-fidelity solver iterations
+    // Matter.js engine with high-performance 60 FPS solver iterations
     this.engine = Matter.Engine.create({
       gravity: { x: 0, y: 0.0 },
-      positionIterations: 12,
-      velocityIterations: 10,
-      constraintIterations: 4,
+      positionIterations: 6,
+      velocityIterations: 4,
+      constraintIterations: 2,
       enableSleeping: false,
     });
     this.world = this.engine.world;
@@ -287,9 +287,10 @@ export class PhysicsEngine {
     for (const b of this.flagBodies) {
       if (b.eliminated) continue;
 
-      // 1. Velocity Clamping
-      const spd = Math.sqrt(b.velocity.x * b.velocity.x + b.velocity.y * b.velocity.y);
-      if (spd > maxSpeed) {
+      // 1. Velocity Clamping (avoid Math.sqrt unless overspeeding)
+      const speedSq = b.velocity.x * b.velocity.x + b.velocity.y * b.velocity.y;
+      if (speedSq > maxSpeed * maxSpeed) {
+        const spd = Math.sqrt(speedSq) || 1;
         const factor = maxSpeed / spd;
         Matter.Body.setVelocity(b, {
           x: b.velocity.x * factor,
@@ -299,11 +300,12 @@ export class PhysicsEngine {
 
       const dx   = b.position.x - this.cx;
       const dy   = b.position.y - this.cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
 
-      // 2. Check boundary approach
+      // 2. Check boundary approach (avoid Math.sqrt for safe interior flags)
       const safeRadius = this.R_inner - 13;
-      if (dist > safeRadius) {
+      if (distSq > safeRadius * safeRadius) {
+        const dist = Math.sqrt(distSq) || 1;
         // Active Revival Shield: safely bounce inward towards arena center!
         if (b.immunityUntil && b.immunityUntil > Date.now()) {
           const nx = dx / (dist || 1);
@@ -357,17 +359,8 @@ export class PhysicsEngine {
              }
           }
 
-          // Eliminate only once the flag's OUTER EDGE actually crosses the
-          // drawn wire (radius R) — a corner grazing the wire counts.
-          const halfW = (b.fw ?? 20) * 0.5;
-          const halfH = (b.fh ?? 18) * 0.5;
-          const cA = Math.cos(b.angle || 0);
-          const sA = Math.sin(b.angle || 0);
-          const ux = Math.cos(angle);
-          const uy = Math.sin(angle);
-          const edgeReach = Math.abs(halfW * (cA * ux + sA * uy))
-                          + Math.abs(halfH * (-sA * ux + cA * uy));
-          if (dist + edgeReach >= this.R - 0.5) {
+          // Eliminate fairly only once the flag physically passes through the hole outside the circle
+          if (dist >= this.R) {
             b.eliminated = true;
             eliminated.push(b);
             Matter.World.remove(this.world, b);
@@ -408,10 +401,7 @@ export class PhysicsEngine {
       this._rotateArena();
       this._applyPingPongAgitation();
 
-      // 2 sub-steps per frame for ultra-accurate rigid body physics
-      const subDelta = effDelta / 2;
-      Matter.Engine.update(this.engine, subDelta);
-      Matter.Engine.update(this.engine, subDelta);
+      Matter.Engine.update(this.engine, effDelta);
 
       const elim = this._enforceContainment();
       if (elim.length) allEliminated.push(...elim);

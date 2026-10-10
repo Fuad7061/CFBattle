@@ -45,6 +45,33 @@ for (const [alias, code] of Object.entries(ALIASES)) {
   SCAN_TO_CODE.set(alias, code);
 }
 
+let LiveChat = null;
+try {
+  LiveChat = require('youtube-chat').LiveChat;
+} catch (e) {
+  LiveChat = null;
+}
+
+// Extract all Unicode flag emojis (Regional Indicator Symbol pairs \u{1F1E6}-\u{1F1FF})
+function extractFlagEmojiCodes(text) {
+  if (!text) return [];
+  const matches = String(text).match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu);
+  if (!matches) return [];
+  const codes = [];
+  for (const m of matches) {
+    const chars = [...m];
+    if (chars.length === 2) {
+      const c1 = chars[0].codePointAt(0) - 0x1F1E6 + 65;
+      const c2 = chars[1].codePointAt(0) - 0x1F1E6 + 65;
+      if (c1 >= 65 && c1 <= 90 && c2 >= 65 && c2 <= 90) {
+        const code = (String.fromCharCode(c1) + String.fromCharCode(c2)).toLowerCase();
+        if (NAME_TO_CODE.has(code)) codes.push(code);
+      }
+    }
+  }
+  return codes;
+}
+
 // Normalise a token: lowercase and strip punctuation (keeps letters/spaces).
 function normalizeToken(s) {
   return String(s || '').toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -109,6 +136,26 @@ function resolveCountry(candidate) {
 function parseCommand(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
+
+  // 1. Check for Unicode Flag Emojis anywhere in the message!
+  const emojiCodes = extractFlagEmojiCodes(raw);
+  if (emojiCodes.length > 0) {
+    const primaryCode = emojiCodes[0];
+    const countryName = findCountryName(primaryCode);
+
+    // Check if accompanied by a power word, e.g. "freeze 🇺🇸", "!boost 🇧🇷"
+    const normalized = normalizeToken(raw);
+    const nlRe = new RegExp(`\\b(${NL_POWER_WORDS.join('|')})\\b`);
+    const powerMatch = normalized.match(nlRe);
+    if (powerMatch) {
+      const power = POWER_ALIASES[powerMatch[1]];
+      if (power && !GLOBAL_POWERS.has(power)) {
+        return { kind: 'power', power, code: primaryCode, countryName };
+      }
+    }
+    // Otherwise count each flag emoji as a vote
+    return { kind: 'vote', code: primaryCode, countryName, count: emojiCodes.length };
+  }
 
   if (raw[0] === '!') {
     const m = raw.match(/^!([A-Za-z-]+)(?:\s+([\s\S]+))?$/);
@@ -204,7 +251,7 @@ function parseCommand(text) {
     for (const w of words) {
       if (AMBIGUOUS_WORDS.has(w)) continue;
       const code = NAME_TO_CODE.get(w);
-      if (code && words.every(other => other === w || /^\d+$/.test(other) || ['pls', 'please', 'vote', 'v', 'c', 'go', 'save', 'win', 'revive', 'flag'].includes(other))) {
+      if (code && words.every(other => other === w || /^\d+$/.test(other) || ['pls', 'please', 'vote', 'v', 'c', 'go', 'save', 'win', 'revive', 'flag', 'support', 'team', 'come', 'on', 'love', 'for'].includes(other))) {
         const count = words.filter(other => other === w).length;
         return { kind: 'vote', code, countryName: findCountryName(code), count };
       }
@@ -300,25 +347,312 @@ async function resolveLiveChatId({ apiKey, liveVideoId, channelId }) {
   return { videoId: null, liveChatId: null };
 }
 
-function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = console, onStatus = () => {} }) {
+// Parse raw input (video ID, channel ID, or full YouTube URL) into clean identifiers
+function parseYoutubeTarget(input) {
+  if (!input || typeof input !== 'string') return { liveVideoId: null, channelId: null };
+  const str = input.trim();
+  if (!str) return { liveVideoId: null, channelId: null };
+
+  // Direct channel ID (starts with UC, 24 chars)
+  if (/^UC[a-zA-Z0-9_-]{22}$/.test(str)) {
+    return { liveVideoId: null, channelId: str };
+  }
+  // URL matching channel ID
+  const chanMatch = str.match(/(?:youtube\.com\/(?:channel\/|c\/|user\/))(UC[a-zA-Z0-9_-]{22})/i);
+  if (chanMatch) {
+    return { liveVideoId: null, channelId: chanMatch[1] };
+  }
+  // URL matching live/
+  const liveMatch = str.match(/(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/i);
+  if (liveMatch) {
+    return { liveVideoId: liveMatch[1], channelId: null };
+  }
+  // URL matching watch?v= or youtu.be/
+  const watchMatch = str.match(/(?:youtube\.com\/watch\?.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+  if (watchMatch) {
+    return { liveVideoId: watchMatch[1], channelId: null };
+  }
+  // Bare 11-char video ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(str)) {
+    return { liveVideoId: str, channelId: null };
+  }
+  // Fallback: starts with UC
+  if (str.startsWith('UC')) {
+    return { liveVideoId: null, channelId: str };
+  }
+  return { liveVideoId: str, channelId: null };
+}
+
+/**
+ * Zero-Quota High-Speed Live Chat engine powered by youtube-chat (Innertube web player API).
+ * Never consumes Google Cloud API quota (0 Units) and provides sub-second live reaction tracking.
+ */
+function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onStatus = () => {} }) {
+  let stopped = false;
+  let liveChat = null;
+
+  const report = (state, extra = {}) => {
+    try {
+      onStatus({
+        state,
+        mode: 'player',
+        quotaUsed: 0,
+        quotaLimit: 'Unlimited (0 Quota Units)',
+        videoId: extra.videoId ?? liveVideoId ?? null,
+        channelId: extra.channelId ?? channelId ?? null,
+        liveChatId: 'zero-quota-innertube',
+        error: extra.error ?? null,
+        at: Date.now()
+      });
+    } catch (e) {}
+  };
+
+  async function start() {
+    if (stopped) return;
+    if (!LiveChat) {
+      log.warn('[youtubeChat] youtube-chat package not available for zero-quota mode.');
+      report('scraper-missing', { error: 'youtube-chat module not installed.' });
+      return;
+    }
+
+    try {
+      const opts = liveVideoId ? { liveId: liveVideoId } : { channelId };
+      liveChat = new LiveChat(opts);
+
+      liveChat.on('start', (liveId) => {
+        log.info(`[youtubeChat] ⚡ Connected to stream ${liveId} via Zero-Quota High-Speed LiveChat engine (0 Quota Units, Unlimited 24/7).`);
+        report('connected', { videoId: liveId });
+      });
+
+      liveChat.on('chat', (item) => {
+        if (stopped) return;
+        const author = item.author?.name || 'unknown';
+        const avatar = item.author?.thumbnail?.url || null;
+        const msgParts = (item.message || []).map(m => m.text || m.emojiText || '');
+        const text = msgParts.join(' ').trim();
+        const command = parseCommand(text);
+
+        const isSuper = Boolean(item.superchat);
+        let amountMicros = 0;
+        let amountDisplayString = '';
+        if (isSuper && item.superchat?.amount) {
+          amountDisplayString = item.superchat.amount;
+          const num = parseFloat(item.superchat.amount.replace(/[^0-9.]/g, '')) || 5;
+          amountMicros = Math.round(num * 1_000_000);
+        }
+
+        const superChat = isSuper ? {
+          amountMicros,
+          currency: 'USD',
+          amountDisplayString,
+          tier: superChatTier(amountMicros),
+        } : null;
+
+        const superWeight = superChat ? superChatWeight(superChat.amountMicros) : 1;
+        const tier = superChat ? superChatTier(superChat.amountMicros) : 0;
+
+        let vote = null;
+        let power = null;
+        if (command && command.kind === 'vote') {
+          vote = {
+            code: command.code,
+            countryName: command.countryName,
+            weight: superWeight * (command.count || 1),
+            superChat: Boolean(superChat),
+            tier,
+          };
+        } else if (command && command.kind === 'power') {
+          const isNuke = command.power === 'nuke';
+          const isInstantRevive = command.power === 'revive';
+          const isSave = command.power === 'shield';
+          if (superChat || (!isNuke && !isInstantRevive)) {
+            power = {
+              power: command.power,
+              code: command.code,
+              countryName: command.countryName,
+              weight: superWeight,
+              tier,
+              superChat: Boolean(superChat),
+            };
+            if (isSave && command.code) {
+              vote = {
+                code: command.code,
+                countryName: command.countryName,
+                weight: superWeight * (command.count || 1),
+                superChat: Boolean(superChat),
+                tier,
+              };
+            }
+          } else if (isInstantRevive && command.code) {
+            vote = {
+              code: command.code,
+              countryName: command.countryName,
+              weight: 1,
+              superChat: false,
+              tier: 0,
+            };
+          }
+        }
+
+        const chatMessage = {
+          id: `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          author,
+          avatar,
+          text,
+          timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+          vote,
+          power,
+          superChat,
+          tier,
+        };
+        bus.emit('chat', chatMessage);
+        if (vote) bus.emit('vote', vote);
+        if (power) bus.emit('power', power);
+      });
+
+      liveChat.on('error', (err) => {
+        log.warn(`[youtubeChat] LiveChat warning: ${err.message}`);
+        report('poll-error', { error: err.message });
+      });
+
+      liveChat.on('end', (reason) => {
+        log.info(`[youtubeChat] LiveChat stream rotation/end: ${reason}`);
+        report('ended', { error: reason });
+        if (!stopped) setTimeout(start, 15000);
+      });
+
+      const ok = await liveChat.start();
+      if (!ok) {
+        log.info('[youtubeChat] Target broadcast is not active right now. Polling for live status every 15s...');
+        report('waiting', { error: 'Broadcast offline or starting soon. Zero-Quota engine is armed and ready!' });
+        if (!stopped) setTimeout(start, 15000);
+      }
+    } catch (e) {
+      log.error(`[youtubeChat] LiveChat engine error: ${e.message}`);
+      report('resolve-error', { error: e.message });
+      if (!stopped) setTimeout(start, 15000);
+    }
+  }
+
+  start();
+
+  return {
+    stop() {
+      stopped = true;
+      if (liveChat) {
+        try { liveChat.stop(); } catch (e) {}
+        liveChat = null;
+      }
+    }
+  };
+}
+
+/**
+ * Universal YouTube Chat Engine with Multi-Tier Fallback:
+ * Modes:
+ *   - 'player': Zero-Quota Innertube Web Player Engine (100% Free, 0 Quota Units, Unlimited 24/7, Sub-Second)
+ *   - 'hybrid': Smart Hybrid (Zero-Quota Player for live chat + Google API for viewer count/metadata)
+ *   - 'api': Official Google YouTube Data API v3 with automatic graceful fallback to Zero-Quota Player upon 403 quotaExceeded
+ */
+function startYoutubeChatPolling({
+  apiKey,
+  liveVideoId,
+  channelId,
+  chatMode = 'player',
+  pollInterval = 1000,
+  bus,
+  log = console,
+  onStatus = () => {}
+}) {
   let stopped = false;
   let pageToken;
   let lastViewerFetch = 0;
   let viewerTimer = null;
+  let scraperFallback = null;
 
-  // Surface exactly where the chat pipeline is, so a silent failure in the
-  // dashboard can be told apart from "nobody has typed anything yet".
   const report = (state, extra = {}) => {
     try {
-      onStatus({ state, videoId: extra.videoId ?? null, liveChatId: extra.liveChatId ?? null, error: extra.error ?? null, at: Date.now() });
-    } catch (e) { /* never let status reporting break polling */ }
+      onStatus({
+        state,
+        mode: chatMode,
+        videoId: extra.videoId ?? liveVideoId ?? null,
+        channelId: extra.channelId ?? channelId ?? null,
+        liveChatId: extra.liveChatId ?? null,
+        quotaUsed: extra.quotaUsed ?? (chatMode === 'player' ? 0 : 'API Quota Active'),
+        error: extra.error ?? null,
+        at: Date.now()
+      });
+    } catch (e) {}
   };
 
+  // 1. ZERO-QUOTA WEB PLAYER MODE (Recommended)
+  if (chatMode === 'player') {
+    if (!LiveChat) {
+      log.warn('[youtubeChat] youtube-chat package missing for player mode.');
+      report('scraper-missing', { error: 'youtube-chat package is not available.' });
+      return { stop: () => {} };
+    }
+    if (!liveVideoId && !channelId) {
+      log.warn('[youtubeChat] No YouTube target ID/URL provided for player mode.');
+      report('no-target', { error: 'Please enter a Live Video ID, URL, or Channel ID.' });
+      return { stop: () => {} };
+    }
+    log.info(`[youtubeChat] 🚀 Starting Zero-Quota Live Player Engine for target (${liveVideoId || channelId}) — 0 Google API quota consumed.`);
+    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+    return {
+      stop() {
+        stopped = true;
+        if (scraperFallback) {
+          try { scraperFallback.stop(); } catch (e) {}
+          scraperFallback = null;
+        }
+      }
+    };
+  }
+
+  // 2. SMART HYBRID MODE
+  if (chatMode === 'hybrid') {
+    log.info(`[youtubeChat] 🔄 Starting Smart Hybrid Mode: Zero-Quota Player for sub-second chat + API for stream telemetry.`);
+    scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+
+    // Optional background viewer count fetch using API if key provided (only once per 30s = ~120 units/hour)
+    if (apiKey && liveVideoId) {
+      const fetchTelemetry = async () => {
+        if (stopped) return;
+        try {
+          const v = await ytFetch('videos', { key: apiKey, id: liveVideoId, part: 'liveStreamingDetails' });
+          const c = v.items?.[0]?.liveStreamingDetails?.concurrentViewers;
+          if (c != null) bus.emit('viewers', { count: Number(c) });
+        } catch (err) {
+          // Graceful: never let viewer telemetry disrupt chat
+        }
+      };
+      viewerTimer = setInterval(fetchTelemetry, 30000);
+      fetchTelemetry();
+    }
+
+    return {
+      stop() {
+        stopped = true;
+        if (viewerTimer) { clearInterval(viewerTimer); viewerTimer = null; }
+        if (scraperFallback) {
+          try { scraperFallback.stop(); } catch (e) {}
+          scraperFallback = null;
+        }
+      }
+    };
+  }
+
+  // 3. OFFICIAL GOOGLE YOUTUBE DATA API V3 MODE (with automatic Zero-Quota fallback on 403 quotaExceeded)
   async function pollLoop() {
     if (stopped) return;
 
     if (!apiKey) {
-      log.warn('[youtubeChat] YOUTUBE_API_KEY is not set — chat polling is disabled.');
+      log.warn('[youtubeChat] API mode requested but no API key provided — falling back to Zero-Quota Player engine.');
+      if (LiveChat && (liveVideoId || channelId)) {
+        scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+        return;
+      }
       report('no-api-key', { error: 'No YouTube API key configured.' });
       return;
     }
@@ -333,15 +667,20 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
         bus.emit('viewers', { count: Number(resolved.concurrentViewers) });
       }
     } catch (err) {
+      if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
+        log.warn(`[youtubeChat] ⚠️ Google Data API quota exceeded during target resolution: ${err.message}. Engaging Zero-Quota Web Player fallback!`);
+        if (LiveChat && (liveVideoId || channelId)) {
+          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+          return;
+        }
+      }
       log.error('[youtubeChat] Failed to resolve live chat id:', err.message);
       liveChatId = null;
       report('resolve-error', { error: err.message });
     }
 
     if (!liveChatId) {
-      log.info('[youtubeChat] No active live video/chat found yet — retrying in 30s.');
-      // Distinguish "not live yet" from "you configured the wrong kind of ID",
-      // which is by far the most common cause of dead chat.
+      log.info('[youtubeChat] No active live video/chat found yet via API — retrying in 30s.');
       const hint = !channelId
         ? 'No channel ID set. Use a Channel ID (starts with UC, 24 chars) so chat attaches to whatever is live.'
         : 'Channel has no active live broadcast right now. Chat will attach when you go live.';
@@ -350,9 +689,9 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
       return;
     }
 
-    log.info(`[youtubeChat] Connected to live chat ${liveChatId}. Polling for messages...`);
+    log.info(`[youtubeChat] Connected to Google API live chat ${liveChatId}. Polling every ${pollInterval}ms...`);
     report('connected', { videoId, liveChatId });
-    // Refresh the live viewer count every ~15s while polling.
+
     if (viewerTimer) clearInterval(viewerTimer);
     const fetchViewers = async () => {
       if (stopped || !videoId) return;
@@ -384,6 +723,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
 
       for (const item of data.items || []) {
         const author = item.authorDetails?.displayName || 'unknown';
+        const avatar = item.authorDetails?.profileImageUrl || null;
         const isSuperChat = item.snippet?.type === 'superChatEvent';
         const scDetails = item.snippet?.superChatDetails;
 
@@ -415,10 +755,6 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
             tier,
           };
         } else if (command && command.kind === 'power') {
-          // User-friendly: free comments can trigger utility powers too
-          // (slow/freeze/shield/quake/boost). Only the destructive NUKE and
-          // the instant REVIVE are reserved for Super Chats; a free "revive X"
-          // simply counts as a normal vote toward the regular revive threshold.
           const isNuke = command.power === 'nuke';
           const isInstantRevive = command.power === 'revive';
           const isSave = command.power === 'shield';
@@ -431,7 +767,6 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
               tier,
               superChat: Boolean(superChat),
             };
-            // When viewers type "save <country>", also credit it as a vote toward reviving/saving
             if (isSave && command.code) {
               vote = {
                 code: command.code,
@@ -455,6 +790,7 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
         const chatMessage = {
           id: item.id,
           author,
+          avatar,
           text,
           timestamp: item.snippet?.publishedAt || new Date().toISOString(),
           vote,
@@ -467,15 +803,21 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
         if (power) bus.emit('power', power);
       }
 
-      // YouTube API default pollingIntervalMillis is typically 10000ms (10s), which makes live interaction feel sluggish.
-      // Capping to ~2500ms (customizable via YOUTUBE_POLL_INTERVAL_MS) drastically reduces latency.
-      const maxInterval = Number(process.env.YOUTUBE_POLL_INTERVAL_MS) || 2500;
-      const interval = Math.min(maxInterval, Math.max(1500, data.pollingIntervalMillis || 5000));
+      // Respect user's chosen poll interval (e.g. 800ms / 1000ms / 2000ms)
+      const requestedInterval = Number(pollInterval) || 1000;
+      const interval = Math.max(800, requestedInterval);
       if (!stopped) {
         report('polling', { videoId, liveChatId });
         setTimeout(() => pollMessages(liveChatId, videoId), interval);
       }
     } catch (err) {
+      if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
+        log.warn(`[youtubeChat] ⚠️ Google Data API Daily Quota Exceeded (10,000 unit limit reached). Automatically switching to Zero-Quota Web Player engine fallback!`);
+        if (LiveChat && (liveVideoId || channelId)) {
+          scraperFallback = startLiveChatScraper({ liveVideoId, channelId, bus, log, onStatus });
+          return;
+        }
+      }
       log.error('[youtubeChat] Polling error, retrying in 10s:', err.message);
       report('poll-error', { error: err.message });
       if (viewerTimer) { clearInterval(viewerTimer); viewerTimer = null; }
@@ -489,58 +831,174 @@ function startYoutubeChatPolling({ apiKey, liveVideoId, channelId, bus, log = co
     stop() {
       stopped = true;
       if (viewerTimer) { clearInterval(viewerTimer); viewerTimer = null; }
+      if (scraperFallback) {
+        try { scraperFallback.stop(); } catch (e) {}
+        scraperFallback = null;
+      }
     },
   };
 }
 
 /**
- * One-shot diagnostic used by the dashboard "Test connection" button. Never
- * starts a polling loop and never emits to the bus.
+ * Diagnostic test used by the dashboard "Test connection" button.
+ * Supports 'player', 'hybrid', and 'api' modes with precise health status.
  */
-async function testYoutubeChatConnection({ apiKey, liveVideoId, channelId }) {
-  if (!apiKey) {
-    return { ok: false, state: 'no-api-key', message: 'No YouTube API key saved. Add one in Stream Config first.' };
-  }
-  if (!liveVideoId && !channelId) {
-    return { ok: false, state: 'no-target', message: 'No Live Video ID or Channel ID saved.' };
-  }
+async function testYoutubeChatConnection({ apiKey, liveVideoId, channelId, chatMode = 'player' }) {
+  // Normalize target using parser
+  const parsed = parseYoutubeTarget(liveVideoId || channelId || '');
+  const targetVideoId = parsed.liveVideoId || (liveVideoId && !liveVideoId.startsWith('UC') ? liveVideoId : null);
+  const targetChannelId = parsed.channelId || channelId || (liveVideoId && liveVideoId.startsWith('UC') ? liveVideoId : null);
 
-  // Quota is precious: probe `videos` with the explicit id first, then search.
-  if (liveVideoId) {
+  // 1. ZERO-QUOTA WEB PLAYER DIAGNOSTIC
+  if (chatMode === 'player') {
+    if (!LiveChat) {
+      return { ok: false, state: 'scraper-missing', message: 'The youtube-chat module is not installed on this server.' };
+    }
+    if (!targetVideoId && !targetChannelId) {
+      return { ok: false, state: 'no-target', message: 'Please enter a Live Video ID, Video URL, or Channel ID.' };
+    }
+
     try {
-      const v = await ytFetch('videos', { key: apiKey, id: liveVideoId, part: 'liveStreamingDetails' });
-      const details = v.items?.[0]?.liveStreamingDetails;
-      if (details?.activeLiveChatId) {
-        return { ok: true, state: 'connected', videoId: liveVideoId, liveChatId: details.activeLiveChatId, message: 'Connected to this video\'s live chat.' };
-      }
-      const exists = !!v.items?.[0];
-      if (!exists) {
-        return { ok: false, state: 'bad-video', message: 'That video ID was not found. Check for typos.' };
+      const opts = targetVideoId ? { liveId: targetVideoId } : { channelId: targetChannelId };
+      const probe = new LiveChat(opts);
+      let errorMsg = null;
+      probe.on('error', err => { errorMsg = err.message; });
+
+      const isLive = await Promise.race([
+        probe.start(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timed out after 6s')), 6000))
+      ]);
+      try { probe.stop(); } catch (e) {}
+
+      if (isLive) {
+        return {
+          ok: true,
+          state: 'connected',
+          mode: 'player',
+          quotaCost: 0,
+          message: `⚡ Zero-Quota Web Player LIVE & CONNECTED! Attached to broadcast (${targetVideoId || targetChannelId}) with 0 Google Quota consumed.`
+        };
+      } else {
+        return {
+          ok: true,
+          state: 'waiting',
+          mode: 'player',
+          quotaCost: 0,
+          message: `⚡ Zero-Quota Engine ready for ${targetVideoId || targetChannelId}. Stream is offline or not live yet; engine will auto-connect the moment you go live!`
+        };
       }
     } catch (err) {
-      return { ok: false, state: 'api-error', message: err.message };
+      return {
+        ok: false,
+        state: 'probe-error',
+        mode: 'player',
+        message: `Zero-Quota Player probe: ${err.message || 'Stream not found'}. Double check your Video ID or URL.`
+      };
     }
   }
 
-  if (channelId) {
+  // 2. SMART HYBRID DIAGNOSTIC
+  if (chatMode === 'hybrid') {
+    if (!targetVideoId && !targetChannelId) {
+      return { ok: false, state: 'no-target', message: 'Please enter a Live Video ID, Video URL, or Channel ID.' };
+    }
+    const playerResult = await testYoutubeChatConnection({ apiKey, liveVideoId: targetVideoId, channelId: targetChannelId, chatMode: 'player' });
+    if (!apiKey) {
+      return {
+        ok: playerResult.ok,
+        state: playerResult.state,
+        mode: 'hybrid',
+        message: `${playerResult.message} (Note: No API key provided for metadata, operating 100% on Zero-Quota Player).`
+      };
+    }
+    return {
+      ok: playerResult.ok,
+      state: playerResult.state,
+      mode: 'hybrid',
+      message: `${playerResult.message} · Google API key loaded for metadata.`
+    };
+  }
+
+  // 3. OFFICIAL GOOGLE DATA API V3 DIAGNOSTIC
+  if (!apiKey) {
+    return {
+      ok: false,
+      state: 'no-api-key',
+      mode: 'api',
+      message: 'No YouTube API key provided. Add an API key, or switch Chat Engine to "Zero-Quota Web Player" for 100% free mode.'
+    };
+  }
+  if (!targetVideoId && !targetChannelId) {
+    return { ok: false, state: 'no-target', mode: 'api', message: 'No Live Video ID or Channel ID saved.' };
+  }
+
+  if (targetVideoId) {
     try {
-      const search = await ytFetch('search', { key: apiKey, channelId, eventType: 'live', type: 'video', part: 'id', maxResults: 1 });
+      const v = await ytFetch('videos', { key: apiKey, id: targetVideoId, part: 'liveStreamingDetails' });
+      const details = v.items?.[0]?.liveStreamingDetails;
+      if (details?.activeLiveChatId) {
+        return {
+          ok: true,
+          state: 'connected',
+          mode: 'api',
+          videoId: targetVideoId,
+          liveChatId: details.activeLiveChatId,
+          message: `Connected via Google Data API v3 (Live Chat ID: ${details.activeLiveChatId}). Quota notice: 10,000 units/day (~33 mins at 1s polling). Auto-fallback shield is armed.`
+        };
+      }
+      const exists = !!v.items?.[0];
+      if (!exists) {
+        return { ok: false, state: 'bad-video', mode: 'api', message: 'That video ID was not found on YouTube. Check for typos.' };
+      }
+      return { ok: false, state: 'not-live', mode: 'api', message: 'Video exists on YouTube, but activeLiveChatId is not active right now.' };
+    } catch (err) {
+      if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
+        return {
+          ok: false,
+          state: 'quota-exceeded',
+          mode: 'api',
+          message: '⚠️ Google API Daily Quota Exceeded (403)! Switch Chat Engine to "Zero-Quota Web Player" for unlimited free chat.'
+        };
+      }
+      return { ok: false, state: 'api-error', mode: 'api', message: err.message };
+    }
+  }
+
+  if (targetChannelId) {
+    try {
+      const search = await ytFetch('search', { key: apiKey, channelId: targetChannelId, eventType: 'live', type: 'video', part: 'id', maxResults: 1 });
       const vid = search.items?.[0]?.id?.videoId;
       if (!vid) {
-        return { ok: false, state: 'not-live', message: 'API key works, but this channel has no live broadcast right now. Chat will attach automatically when you go live.' };
+        return { ok: false, state: 'not-live', mode: 'api', message: 'API key works, but this channel has no live broadcast right now. Chat will attach automatically when you go live.' };
       }
       const v = await ytFetch('videos', { key: apiKey, id: vid, part: 'liveStreamingDetails' });
       const details = v.items?.[0]?.liveStreamingDetails;
       if (details?.activeLiveChatId) {
-        return { ok: true, state: 'connected', videoId: vid, liveChatId: details.activeLiveChatId, message: 'Found your current live broadcast and its chat.' };
+        return { ok: true, state: 'connected', mode: 'api', videoId: vid, liveChatId: details.activeLiveChatId, message: 'Found current live broadcast and connected chat via Google API.' };
       }
-      return { ok: false, state: 'no-chat-id', message: 'A live video was found but YouTube returned no activeLiveChatId yet. Try again in a few seconds.' };
+      return { ok: false, state: 'no-chat-id', mode: 'api', message: 'A live video was found but activeLiveChatId is not ready yet.' };
     } catch (err) {
-      return { ok: false, state: 'api-error', message: err.message };
+      if (err.message && (err.message.includes('quotaExceeded') || err.message.includes('403'))) {
+        return {
+          ok: false,
+          state: 'quota-exceeded',
+          mode: 'api',
+          message: '⚠️ Google API Daily Quota Exceeded (403)! Switch Chat Engine to "Zero-Quota Web Player" for unlimited free chat.'
+        };
+      }
+      return { ok: false, state: 'api-error', mode: 'api', message: err.message };
     }
   }
 
-  return { ok: false, state: 'unknown', message: 'Could not determine chat status.' };
+  return { ok: false, state: 'unknown', mode: 'api', message: 'Could not determine chat status.' };
 }
 
-module.exports = { startYoutubeChatPolling, parseVote, parseCommand, superChatWeight, superChatTier, testYoutubeChatConnection };
+module.exports = {
+  startYoutubeChatPolling,
+  parseVote,
+  parseCommand,
+  superChatWeight,
+  superChatTier,
+  testYoutubeChatConnection,
+  parseYoutubeTarget
+};

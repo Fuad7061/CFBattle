@@ -71,6 +71,9 @@ export default function App() {
   );
 
   const [topSupporters, setTopSupporters] = useState([]);
+  const [latestShoutout, setLatestShoutout] = useState(null);
+
+  const processedPowerIds = React.useRef(new Set());
 
   useYoutubeChat({
     onMessage: (msg) => {
@@ -91,8 +94,17 @@ export default function App() {
         }
         if (msg.type === 'SETTINGS_UPDATE') return;
       }
-      if (msg.type === 'POWER' && engineRef.current?.applyPower) {
-        engineRef.current.applyPower({ ...msg.power, ...msg, author: msg.author });
+      if ((msg.type === 'POWER' || msg.power) && engineRef.current?.applyPower) {
+        const pKey = msg.id || `${msg.author || ''}_${msg.power?.power || msg.power || ''}_${msg.power?.code || msg.code || ''}_${msg.timestamp || ''}`;
+        if (!processedPowerIds.current.has(pKey)) {
+          processedPowerIds.current.add(pKey);
+          if (processedPowerIds.current.size > 200) {
+            const first = processedPowerIds.current.values().next().value;
+            processedPowerIds.current.delete(first);
+          }
+          const p = msg.power ? { ...msg.power, author: msg.author } : { ...msg, author: msg.author };
+          engineRef.current.applyPower(p);
+        }
       }
       // The stream already shows raw YouTube chat, so this panel is an
       // interaction feed: only votes, paid powers and Super Chats earn a row.
@@ -104,12 +116,19 @@ export default function App() {
       }
     },
     onVoteTally: handleVoteTally,
-    onTopSupporters: (supporters) => {
-      const sorted = Object.entries(supporters)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([name, weight]) => ({ name, weight }));
-      setTopSupporters(sorted);
+    onTopSupporters: (supporters, shoutout) => {
+      if (Array.isArray(supporters)) {
+        setTopSupporters(supporters);
+      } else if (supporters && typeof supporters === 'object') {
+        const sorted = Object.entries(supporters)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, weight]) => ({ name, points: weight, weight }));
+        setTopSupporters(sorted);
+      }
+      if (shoutout) {
+        setLatestShoutout(shoutout);
+      }
     },
   });
 
@@ -172,7 +191,7 @@ export default function App() {
               engineRef={engineRef}
             />
             <TeamsPanel teams={teamStats} />
-            <TopSupportersPanel supporters={topSupporters} />
+            <TopSupportersPanel supporters={topSupporters} latestShoutout={latestShoutout} />
 
             <div className="elim-feed">
               {feedRows.map((f, i) => (

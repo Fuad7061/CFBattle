@@ -28,6 +28,7 @@ export function useEngine() {
   const [targetReviveVotes, setTargetReviveVotes] = useState(4);
   const [teamStats, setTeamStats] = useState(null);
   const [top5, setTop5] = useState({ show: false, rows: [] });
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return undefined;
@@ -47,6 +48,7 @@ export function useEngine() {
       engine.on('qualifiedListChanged', setQualifiedPanel),
       engine.on('timer', setTimer),
       engine.on('soundChanged', ({ enabled }) => setSoundEnabledState(enabled)),
+      engine.on('pauseChanged', ({ paused }) => setIsPaused(Boolean(paused))),
       engine.on('commentVotes', setCommentVotes),
       engine.on('teams', setTeamStats),
       engine.on('top5', setTop5),
@@ -75,9 +77,12 @@ export function useEngine() {
   const applyVoteBoost = useCallback((code, factor, durationMs) => {
     engineRef.current?.applyVoteBoost(code, factor, durationMs);
   }, []);
-  const instantPush = useCallback((code, weight, author) => {
-    engineRef.current?.instantPush(code, weight, author);
+  const instantPush = useCallback((code, weight, author, superChat) => {
+    engineRef.current?.instantPush(code, weight, author, superChat);
   }, []);
+  const pause = useCallback(() => engineRef.current?.pause(), []);
+  const resume = useCallback(() => engineRef.current?.resume(), []);
+  const togglePause = useCallback(() => engineRef.current?.togglePause(), []);
 
   return {
     canvasRef,
@@ -92,6 +97,7 @@ export function useEngine() {
     targetReviveVotes,
     teamStats,
     top5,
-    controls: { newRound, shrinkArena, toggleSound, soundEnabled, applyVoteBoost, instantPush },
+    isPaused,
+    controls: { newRound, shrinkArena, toggleSound, soundEnabled, applyVoteBoost, instantPush, pause, resume, togglePause, isPaused },
   };
 }

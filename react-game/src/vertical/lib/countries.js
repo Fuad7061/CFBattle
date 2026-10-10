@@ -203,9 +203,13 @@ export const COUNTRIES = [
   { name: "Zimbabwe", code: "zw", weight: 1.0 }, 
 ];
 
-// Get flag image URL for a country code
+// Get flag image URL for a country code (uses high-definition local vector SVGs)
 export function getFlagUrl(code, size = 80) {
-  return `https://flagcdn.com/w${size}/${code}.png`;
+  if (!code) return '';
+  return `/flags/${String(code).toLowerCase()}.svg`;
 }
 
-if (typeof module !== 'undefined') { module.exports = COUNTRIES; }
+if (typeof module !== 'undefined') {
+  COUNTRIES.getFlagUrl = getFlagUrl;
+  module.exports = COUNTRIES;
+}
