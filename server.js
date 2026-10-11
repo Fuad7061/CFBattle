@@ -938,6 +938,7 @@ app.get('/', (req, res) => {
 });
 app.use('/assets', express.static(path.join(__dirname, 'react-game', 'dist', 'assets')));
 app.use('/flags', express.static(path.join(__dirname, 'react-game', 'dist', 'flags')));
+app.use('/flags', express.static(path.join(__dirname, 'react-game', 'public', 'flags')));
 
 app.use(express.static(path.join(__dirname, '.'), {
     setHeaders: (res, reqPath) => {

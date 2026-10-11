@@ -232,17 +232,11 @@ export class Renderer {
       ctx.rotate(angle);
 
       // Soft grounded shadow beneath the flag (high performance pre-rendered depth)
-      if (this._shadowCanvas) {
+      if (aliveCount <= 48 && this._shadowCanvas) {
         ctx.drawImage(this._shadowCanvas, -fw / 2 - this._shadowPad, -fh / 2 - this._shadowPad, fw + this._shadowPad * 2, fh + this._shadowPad * 2);
       } else {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(-fw / 2, -fh / 2 + 2, fw, fh, 2);
-          ctx.fill();
-        } else {
-          ctx.fillRect(-fw / 2, -fh / 2 + 2, fw, fh);
-        }
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.fillRect(-fw / 2, -fh / 2 + 1, fw, fh);
       }
 
       const img = images[f.country.code];
@@ -258,14 +252,8 @@ export class Renderer {
           this._drawWavingFlag(ctx, img, fw, fh, f);
           ctx.restore();
         } else {
-          // Many active flags: draw razor-sharp high-definition flag directly
-          ctx.save();
-          ctx.beginPath();
-          if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 2);
-          else ctx.rect(-fw / 2, -fh / 2, fw, fh);
-          ctx.clip();
+          // Ultra-fast direct draw: flag texture has pre-baked rounded corners in offscreen cache!
           ctx.drawImage(img, -fw / 2, -fh / 2, fw, fh);
-          ctx.restore();
         }
       } else {
         ctx.fillStyle = this._codeColor(f.country.code);

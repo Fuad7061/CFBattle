@@ -489,20 +489,21 @@ export class FlagBattle {
       img.src         = getFlagUrl(code, 80);
       img.onload = () => {
         try {
-          const sw = 256;
-          const sh = 160;
+          // Pre-cache at high-density 2x scale (56x36 for 28x18 flag) with pre-baked rounded corners:
+          // Completely eliminates expensive runtime ctx.clip() and huge texture downscaling in the loop!
+          const sw = 56;
+          const sh = 36;
           const off = document.createElement('canvas');
           off.width = sw;
           off.height = sh;
           const octx = off.getContext('2d');
           octx.imageSmoothingEnabled = true;
-          try { octx.imageSmoothingQuality = 'high'; } catch (e) {}
-          const srcW = img.naturalWidth || img.width || 640;
-          const srcH = img.naturalHeight || img.height || 480;
-          const scale = Math.min(sw / srcW, sh / srcH);
-          const dw = srcW * scale;
-          const dh = srcH * scale;
-          octx.drawImage(img, (sw - dw) / 2, (sh - dh) / 2, dw, dh);
+          try { octx.imageSmoothingQuality = 'medium'; } catch (e) {}
+          octx.beginPath();
+          if (octx.roundRect) octx.roundRect(0, 0, sw, sh, 3);
+          else octx.rect(0, 0, sw, sh);
+          octx.clip();
+          octx.drawImage(img, 0, 0, sw, sh);
           this.images[code] = off;
         } catch (e) {
           this.images[code] = img;

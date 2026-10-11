@@ -52,23 +52,58 @@ try {
   LiveChat = null;
 }
 
-// Extract all Unicode flag emojis (Regional Indicator Symbol pairs \u{1F1E6}-\u{1F1FF})
+// Extract all flag emojis (Unicode Regional Indicator pairs \u{1F1E6}-\u{1F1FF} + YouTube shortcodes like :flag_bd:, :flag-bd:, :bd:, :bangladesh:)
 function extractFlagEmojiCodes(text) {
   if (!text) return [];
-  const matches = String(text).match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu);
-  if (!matches) return [];
   const codes = [];
-  for (const m of matches) {
-    const chars = [...m];
-    if (chars.length === 2) {
-      const c1 = chars[0].codePointAt(0) - 0x1F1E6 + 65;
-      const c2 = chars[1].codePointAt(0) - 0x1F1E6 + 65;
-      if (c1 >= 65 && c1 <= 90 && c2 >= 65 && c2 <= 90) {
-        const code = (String.fromCharCode(c1) + String.fromCharCode(c2)).toLowerCase();
-        if (NAME_TO_CODE.has(code)) codes.push(code);
+  const str = String(text);
+
+  // 1. Unicode flag emojis (Regional Indicator Symbol pairs \u{1F1E6}-\u{1F1FF})
+  const matches = str.match(/[\u{1F1E6}-\u{1F1FF}]{2}/gu);
+  if (matches) {
+    for (const m of matches) {
+      const chars = [...m];
+      if (chars.length === 2) {
+        const c1 = chars[0].codePointAt(0) - 0x1F1E6 + 65;
+        const c2 = chars[1].codePointAt(0) - 0x1F1E6 + 65;
+        if (c1 >= 65 && c1 <= 90 && c2 >= 65 && c2 <= 90) {
+          const code = (String.fromCharCode(c1) + String.fromCharCode(c2)).toLowerCase();
+          if (NAME_TO_CODE.has(code) && !codes.includes(code)) codes.push(code);
+        }
       }
     }
   }
+
+  // 2. YouTube Innertube / standard flag shortcodes, e.g. :flag_bd:, :flag-bd:, :flag-us:
+  const shortcodeMatches = str.matchAll(/:flag[-_]([a-zA-Z]{2}):/gi);
+  for (const sm of shortcodeMatches) {
+    const code = sm[1].toLowerCase();
+    if (NAME_TO_CODE.has(code) && !codes.includes(code)) codes.push(code);
+  }
+
+  // 3. Direct 2-letter emoji shortcodes, e.g. :bd:, :us:, :in:, :br:
+  const directShortcodes = str.matchAll(/:([a-zA-Z]{2}):/gi);
+  for (const d of directShortcodes) {
+    const code = d[1].toLowerCase();
+    if (NAME_TO_CODE.has(code) && !codes.includes(code)) codes.push(code);
+  }
+
+  // 4. Full name emoji shortcodes, e.g. :bangladesh:, :united_states:
+  const nameShortcodes = str.matchAll(/:([a-zA-Z_]{3,30}):/gi);
+  for (const nm of nameShortcodes) {
+    const cleanName = nm[1].toLowerCase().replace(/_/g, ' ');
+    const code = NAME_TO_CODE.get(cleanName);
+    if (code && !codes.includes(code)) codes.push(code);
+  }
+
+  // 5. Accessibility labels e.g. "flag: Bangladesh"
+  const labelMatch = str.match(/flag:\s*([a-zA-Z\s]+)/i);
+  if (labelMatch) {
+    const cleanName = labelMatch[1].trim().toLowerCase();
+    const code = NAME_TO_CODE.get(cleanName);
+    if (code && !codes.includes(code)) codes.push(code);
+  }
+
   return codes;
 }
 
@@ -531,8 +566,14 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
 
         const author = item.authorName?.simpleText || 'unknown';
         const avatar = item.authorPhoto?.thumbnails?.slice(-1)[0]?.url || null;
-        const msgParts = (item.message?.runs || []).map(r => r.text || r.emoji?.shortcuts?.[0] || '');
-        const text = msgParts.join('').trim();
+        const msgParts = (item.message?.runs || []).map(r => {
+          if (r.text) return r.text;
+          if (r.emoji) {
+            return r.emoji.shortcuts?.[0] || r.emoji.emojiId || (r.emoji.image?.accessibility?.accessibilityData?.label ? ` flag: ${r.emoji.image.accessibility.accessibilityData.label} ` : '') || '';
+          }
+          return '';
+        });
+        const text = msgParts.join(' ').trim();
         const command = parseCommand(text);
 
         const isSuper = Boolean(item.purchaseAmountText);
@@ -718,7 +759,7 @@ function startLiveChatScraper({ liveVideoId, channelId, bus, log = console, onSt
         if (stopped) return;
         const author = item.author?.name || 'unknown';
         const avatar = item.author?.thumbnail?.url || null;
-        const msgParts = (item.message || []).map(m => m.text || m.emojiText || '');
+        const msgParts = (item.message || []).map(m => m.text || m.alt || m.emojiText || '');
         const text = msgParts.join(' ').trim();
         const command = parseCommand(text);
 
