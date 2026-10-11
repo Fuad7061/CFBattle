@@ -463,7 +463,7 @@
                 <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white; cursor: pointer;" onchange="updatePreviewSrc()">
                     <option value="landscape">Landscape (React V2)</option>
                     <option value="vertical">Vertical (Original)</option>
-                    <option value="points-race">Points Race: First to 1,000 (Viral Chat War)</option>
+                    <option value="points-race">Points Race: Teamup Tournament (First to 50)</option>
                 </select>
 
                 <!-- Stream Schedule & Auto-Stop Settings Group -->
@@ -577,6 +577,9 @@
                                         </button>
                                         <button class="btn" id="dir-btn-reset" onclick="sendDirectorCmd('reset')" title="Reset Tournament" style="padding: 6px 12px; font-size: 12px;">
                                             ↺ RESET
+                                        </button>
+                                        <button class="btn" id="dir-btn-stage" onclick="sendDirectorCmd('next_stage')" title="Advance to next tournament stage (Qualifiers -> Playoff -> Final)" style="padding: 6px 11px; font-size: 12px; background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; color: #fef08a; font-weight: 600;">
+                                            ⏩ NEXT STAGE
                                         </button>
                                         <button class="btn" id="dir-btn-clear-sup" onclick="sendDirectorCmd('clear_supporters')" title="Clear Top Supporters & Shoutouts for fresh stream" style="padding: 6px 10px; font-size: 12px; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;">
                                             👑 RESET SUPPORTERS
@@ -1173,13 +1176,20 @@
                     <hr class="sp-hr">
                     <div class="sp-section-label">Points Race Rules &amp; Viral Chat Hype</div>
                     <div class="sg">
-                        <label>Target Points to Win Match</label>
+                        <label>Target Points to Qualify &amp; Win Match</label>
                         <select id="pr-target-points">
-                            <option value="500">500 Points (Quick Sprint Match)</option>
-                            <option value="1000" selected>1,000 Points (Standard Esports Battle)</option>
-                            <option value="1500">1,500 Points (Extended Hype Match)</option>
-                            <option value="2000">2,000 Points (Grand Marathon Championship)</option>
+                            <option value="50" selected>50 Points (Fast Live Viral Match — Recommended)</option>
+                            <option value="30">30 Points (Hyper Sprint Showdown)</option>
+                            <option value="100">100 Points (Standard Esports Battle)</option>
+                            <option value="250">250 Points (Championship Cup)</option>
+                            <option value="500">500 Points (Extended Marathon)</option>
                         </select>
+                    </div>
+                    <div class="sg">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="pr-teamup" checked>
+                            <label for="pr-teamup"><b>Teamup Tournament System</b> <small style="color: rgba(255,255,255,0.5);">(Stage 1: Continental Qualifiers ➔ Stage 2: 4-Way Contenders ➔ Stage 3: Grand Final Duel)</small></label>
+                        </div>
                     </div>
                     <div class="sg">
                         <div class="toggle-row">
@@ -1446,7 +1456,7 @@
             if (modal) modal.dataset.engine = engine;
             if (title) {
                 if (engine === 'points-race') {
-                    title.textContent = '⚙ Points Race: First to 1,000 Chat War Settings';
+                    title.textContent = '⚙ Points Race: Teamup Tournament (First to 50) Settings';
                 } else if (engine === 'vertical') {
                     title.textContent = '⚙ Vertical Game & Watermark Settings';
                 } else {
@@ -2379,7 +2389,8 @@
                 wmCount: parseInt(document.getElementById('live-wm-count').value) || 3,
                 wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15,
                 // Points Race fields
-                targetPoints: parseInt(document.getElementById('pr-target-points')?.value) || 1000,
+                targetPoints: parseInt(document.getElementById('pr-target-points')?.value) || 50,
+                teamup: document.getElementById('pr-teamup')?.checked ?? true,
                 fairPlay: document.getElementById('pr-fair-play')?.checked ?? true,
                 hypeEnabled: document.getElementById('pr-hype-enabled')?.checked ?? true,
                 musicSource: document.getElementById('pr-music-source')?.value || 'procedural',
@@ -2791,6 +2802,8 @@
                             isPausedNow = win.pointsRace.togglePause?.();
                         } else if (cmd === 'reset') {
                             win.pointsRace.reset?.();
+                        } else if (cmd === 'next_stage') {
+                            win.pointsRace.nextStage?.();
                         } else if (cmd === 'clear_supporters') {
                             win.pointsRace.resetSupporters?.();
                         }

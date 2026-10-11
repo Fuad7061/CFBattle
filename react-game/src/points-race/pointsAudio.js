@@ -121,6 +121,31 @@ class PointsAudioManager {
     } catch (e) {}
   }
 
+  // 3b. Triumphant fanfare when a Team/Country QUALIFIES
+  playQualifierChime() {
+    if (this.muted) return;
+    try {
+      this._initContext();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+
+        gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.35);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.38);
+      });
+    } catch (e) {}
+  }
+
   // 4. Golden register chord for Super Chat
   playSuperChatFanfare() {
     if (this.muted) return;

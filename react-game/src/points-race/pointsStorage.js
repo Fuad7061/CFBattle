@@ -9,7 +9,7 @@ const STORAGE_KEY = 'fb_points_race_state_v1';
 
 const DEFAULT_STATE = {
   round: 1,
-  targetPoints: 1000,
+  targetPoints: 50,
   champions: [
     { code: 'ID', winCount: 8 },
     { code: 'BR', winCount: 7 },
@@ -36,9 +36,11 @@ export function loadPointsRaceState() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const target = (parsed.targetPoints && parsed.targetPoints <= 100) ? parsed.targetPoints : 50;
         return {
           ...DEFAULT_STATE,
           ...parsed,
+          targetPoints: target,
           champions: parsed.champions || DEFAULT_STATE.champions,
           allTimeScores: parsed.allTimeScores || DEFAULT_STATE.allTimeScores
         };

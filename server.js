@@ -1080,10 +1080,12 @@ app.get('/api/points-race/state', (req, res) => {
   try {
     if (fs.existsSync(POINTS_RACE_FILE)) {
       const data = fs.readFileSync(POINTS_RACE_FILE, 'utf8');
-      return res.json(JSON.parse(data));
+      const parsed = JSON.parse(data);
+      if (!parsed.targetPoints || parsed.targetPoints > 100) parsed.targetPoints = 50;
+      return res.json(parsed);
     }
   } catch (e) {}
-  res.json({ round: 1, targetPoints: 1000, champions: [], allTimeScores: {}, topFans: [] });
+  res.json({ round: 1, targetPoints: 50, champions: [], allTimeScores: {}, topFans: [] });
 });
 
 app.post('/api/points-race/state', (req, res) => {
