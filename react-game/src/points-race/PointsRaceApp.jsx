@@ -32,15 +32,157 @@ const TrophySvg = () => (
 );
 
 const FlameSvg = () => (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="#f97316" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '3px' }}>
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="#f97316" style={{ display: 'inline-block', verticalAlign: '-1.5px', marginRight: '4px' }}>
     <path d="M12 23c-4.97 0-9-4.03-9-9 0-3.66 2.22-6.84 5.39-8.23.47-.2.77.34.46.72C7.75 7.84 7.5 9.38 8 10.74c.26.7.99 1.15 1.74.97.87-.21 1.46-.99 1.46-1.89V3.5c0-.46.52-.72.87-.43C15.86 6.06 21 10.97 21 14c0 4.97-4.03 9-9 9z" />
   </svg>
 );
 
+const SwordsSvg = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ef4444" style={{ display: 'inline-block', verticalAlign: '-2px', marginRight: '4px' }}>
+    <path d="M19.7 4.3c-.4-.4-1-.4-1.4 0L14 8.6 11.4 6 10 7.4l2.6 2.6-7.3 7.3V20h2.7l7.3-7.3 2.6 2.6 1.4-1.4-2.6-2.6 4.3-4.3c.4-.4.4-1 0-1.4l-1.3-1.3z" />
+  </svg>
+);
+
+// High-Engagement YouTube Stream Countries (Audience Priority List)
+// Ensures top streaming audience countries are near the top even at 0 points
+const POPULAR_COUNTRIES_PRIORITY = [
+  'ID', // Indonesia (Huge live audience)
+  'BR', // Brazil (Huge live audience)
+  'US', // United States
+  'BD', // Bangladesh (Top viewer base)
+  'IN', // India
+  'MX', // Mexico
+  'PH', // Philippines
+  'PK', // Pakistan
+  'TR', // Turkey
+  'VN', // Vietnam
+  'EG', // Egypt
+  'NG', // Nigeria
+  'AR', // Argentina
+  'CO', // Colombia
+  'TH', // Thailand
+  'MA', // Morocco
+  'IQ', // Iraq
+  'RU', // Russia
+  'DE', // Germany
+  'GB', // United Kingdom
+  'FR', // France
+  'IT', // Italy
+  'ES', // Spain
+  'CA', // Canada
+  'SA', // Saudi Arabia
+  'JP', // Japan
+  'KR', // South Korea
+  'DZ', // Algeria
+  'PE', // Peru
+  'MY', // Malaysia
+  'PL', // Poland
+  'UA', // Ukraine
+  'CL', // Chile
+  'RO', // Romania
+  'NL', // Netherlands
+  'AU', // Australia
+  'PT', // Portugal
+  'ZA', // South Africa
+  'SE', // Sweden
+  'NP', // Nepal
+  'UZ', // Uzbekistan
+  'KZ', // Kazakhstan
+  'AZ', // Azerbaijan
+  'BA', // Bosnia and Herzegovina
+  'AL', // Albania
+  'IR', // Iran
+  'PS', // Palestine
+  'EC', // Ecuador
+  'CU', // Cuba
+  'SV', // El Salvador
+  'ET', // Ethiopia
+  'GH', // Ghana
+  'KE', // Kenya
+  'AE', // United Arab Emirates
+  'NO', // Norway
+  'CH', // Switzerland
+  'AT', // Austria
+  'BE', // Belgium
+  'NZ', // New Zealand
+  'IL', // Israel
+  'HR', // Croatia
+  'RS', // Serbia
+  'GR', // Greece
+  'CR', // Costa Rica
+  'GT', // Guatemala
+  'PA', // Panama
+  'HN', // Honduras
+  'VE', // Venezuela
+  'BG', // Bulgaria
+  'TN', // Tunisia
+  'CZ', // Czechia
+  'UY', // Uruguay
+  'AM', // Armenia
+  'DK', // Denmark
+  'IE', // Ireland
+  'FI', // Finland
+  'SK', // Slovakia
+  'BY', // Belarus
+  'QA', // Qatar
+  'KW', // Kuwait
+  'OM', // Oman
+  'JO', // Jordan
+  'LB', // Lebanon
+  'LK', // Sri Lanka
+  'MM', // Myanmar
+  'KH', // Cambodia
+  'MN', // Mongolia
+  'BO', // Bolivia
+  'PY', // Paraguay
+  'GE', // Georgia
+  'MD', // Moldova
+  'CY', // Cyprus
+  'SI', // Slovenia
+  'ME', // Montenegro
+  'MK', // North Macedonia
+  'JM', // Jamaica
+  'UG', // Uganda
+  'SN', // Senegal
+  'CI', // Ivory Coast
+  'CM', // Cameroon
+  'AO', // Angola
+  'MZ', // Mozambique
+  'ZW', // Zimbabwe
+  'ZM', // Zambia
+  'BW', // Botswana
+  'SO', // Somalia
+  'SD', // Sudan
+  'LY', // Libya
+  'SY', // Syria
+  'YE', // Yemen
+  'AF'  // Afghanistan
+];
+
+const POPULARITY_INDEX = {};
+POPULAR_COUNTRIES_PRIORITY.forEach((code, i) => {
+  POPULARITY_INDEX[code] = i;
+});
+
+// Default active supporters when starting fresh
+const DEFAULT_TOP_FANS = [
+  { name: '@AlphaFan', points: 4240, flagCode: 'BD' },
+  { name: '@StreamKing', points: 3480, flagCode: 'US' },
+  { name: '@FlagMaster', points: 2500, flagCode: 'BR' },
+  { name: '@MegaViewer', points: 2320, flagCode: 'ID' },
+  { name: '@LiveBooster', points: 2210, flagCode: 'IN' }
+];
+
 export default function PointsRaceApp() {
-  const [persistentState, setPersistentState] = useState(loadPointsRaceState);
+  const [persistentState, setPersistentState] = useState(() => {
+    const loaded = loadPointsRaceState();
+    if (!loaded.topFans || loaded.topFans.length === 0) {
+      loaded.topFans = DEFAULT_TOP_FANS;
+    }
+    return loaded;
+  });
+
   const [roundScores, setRoundScores] = useState(() => {
-    // Initialize initial scores (clean slate for current round)
     const initial = {};
     COUNTRIES.forEach(c => {
       initial[c.code] = 0;
@@ -57,34 +199,59 @@ export default function PointsRaceApp() {
   const prevLeaderRef = useRef(null);
   const userStreakRef = useRef({});
   const confettiCanvasRef = useRef(null);
+  const hasTriggeredShowdownRef = useRef(false);
 
   const targetPoints = persistentState.targetPoints || 1000;
 
-  // Build sorted country leaderboard
+  // Build sorted country leaderboard with audience popularity tiebreaker
   const sortedCountries = useMemo(() => {
     return [...COUNTRIES].sort((a, b) => {
       const ptsA = roundScores[a.code] || 0;
       const ptsB = roundScores[b.code] || 0;
       if (ptsB !== ptsA) return ptsB - ptsA;
+      // High-engagement countries stay near the top for viewers
+      const popA = POPULARITY_INDEX[a.code] ?? 999;
+      const popB = POPULARITY_INDEX[b.code] ?? 999;
+      if (popA !== popB) return popA - popB;
       return a.name.localeCompare(b.name);
     });
   }, [roundScores]);
 
   const top1 = sortedCountries[0];
   const top2 = sortedCountries[1];
-  const top3 = sortedCountries[2];
-  const top4 = sortedCountries[3];
-  const restCountries = useMemo(() => sortedCountries.slice(4), [sortedCountries]);
+  const top1Points = top1 ? (roundScores[top1.code] || 0) : 0;
+  const top2Points = top2 ? (roundScores[top2.code] || 0) : 0;
+
+  // Roundup Match condition: Leader >= 750 (75%) or close top-2 duel >= 600
+  const isRoundupShowdown = top1Points >= (targetPoints * 0.75) || (top1Points >= 600 && (top1Points - top2Points <= 50));
+  const isClimax = top1Points >= (targetPoints * 0.90);
+
+  // Trigger showdown audio alert once
+  useEffect(() => {
+    if (isRoundupShowdown && !hasTriggeredShowdownRef.current) {
+      hasTriggeredShowdownRef.current = true;
+      pointsAudio.playShowdownAlarm();
+    } else if (!isRoundupShowdown) {
+      hasTriggeredShowdownRef.current = false;
+    }
+  }, [isRoundupShowdown]);
+
+  // Podium (Top 12): #1 Leader + Ranks 2-12
+  const top12 = useMemo(() => sortedCountries.slice(0, 12), [sortedCountries]);
+  // Mid Tier Grid: Ranks 13-108 (96 flags = 8 rows × 12 columns)
+  const midTierGrid = useMemo(() => sortedCountries.slice(12, 108), [sortedCountries]);
+  // Lower Tier Grid: Ranks 109-180 (72 flags = 6 rows × 12 columns)
+  const lowerTierGrid = useMemo(() => sortedCountries.slice(108, 180), [sortedCountries]);
 
   // Check overtake for sound effects
   useEffect(() => {
     if (top1 && top1.code !== prevLeaderRef.current) {
-      if (prevLeaderRef.current !== null && (roundScores[top1.code] || 0) > 0) {
+      if (prevLeaderRef.current !== null && top1Points > 0) {
         pointsAudio.playOvertakeChime();
       }
       prevLeaderRef.current = top1.code;
     }
-  }, [top1, roundScores]);
+  }, [top1, top1Points]);
 
   // Handle Score Addition Core Logic
   const handleScoreVote = (countryCode, pointsToAdd, authorName = 'Chatter', isSuperChat = false) => {
@@ -114,20 +281,21 @@ export default function PointsRaceApp() {
       pointsAudio.playVoteChime();
     }
 
-    // Add floating tag
+    // Add floating tag reaction pill
     const tagId = `${Date.now()}_${Math.random()}`;
     const newTag = {
       id: tagId,
       code,
+      countryName: country.name,
       author: authorName,
       points: finalPoints,
       isSuperChat,
       isStreak
     };
-    setFloatingTags(prev => [...prev.slice(-12), newTag]);
+    setFloatingTags(prev => [...prev.slice(-8), newTag]);
     setTimeout(() => {
       setFloatingTags(prev => prev.filter(t => t.id !== tagId));
-    }, 1300);
+    }, 1400);
 
     // Update Round Scores
     setRoundScores(prev => {
@@ -174,7 +342,7 @@ export default function PointsRaceApp() {
       country: winningCountry,
       mvp: mvpUser,
       points: finalPoints,
-      round: persistentState.round
+      round: persistentState.round || 1
     });
     pointsAudio.playVictoryFanfare();
 
@@ -281,7 +449,6 @@ export default function PointsRaceApp() {
         const msg = JSON.parse(event.data);
         if (!msg) return;
 
-        // Check if vote code exists
         let code = msg.vote?.code;
         let points = msg.vote?.weight || 1;
         let isSuperChat = false;
@@ -316,137 +483,142 @@ export default function PointsRaceApp() {
     };
   }, [gameState, targetPoints, roundScores]);
 
-  const leaderPoints = top1 ? (roundScores[top1.code] || 0) : 0;
-  const isClimax = leaderPoints >= targetPoints * 0.85;
-
   return (
     <div className="pr-root">
-      {/* ── Top Header ────────────────────────────────────── */}
+      {/* ── 1. Top Header ────────────────────────────────────── */}
       <header className="pr-header">
         <h1 className={`pr-title ${isClimax ? 'climax' : ''}`}>
-          {leaderPoints > 0
-            ? `${top1.name} ${leaderPoints} / ${targetPoints}`
+          {top1Points > 0
+            ? `${top1.name} ${top1Points} / ${targetPoints}`
             : `FIRST TO ${targetPoints} POINTS`}
         </h1>
       </header>
 
-      {/* ── Round & Champions Past Strip ──────────────────── */}
-      <div className="pr-subbar">
-        <span className="pr-round-badge">ROUND {persistentState.round || 1}</span>
-        <span className="pr-champions-label">CHAMPIONS</span>
-        <div className="pr-champions-strip">
-          {(persistentState.champions || []).map((champ, idx) => (
-            <div key={`${champ.code}-${idx}`} className="pr-champ-item" title={`${champ.code}: ${champ.winCount || 1} Wins`}>
-              <img className="pr-champ-flag" src={`/flags/${champ.code.toLowerCase()}.svg`} alt="" />
-              {(champ.winCount || 1) > 1 && (
-                <span className="pr-champ-count">x{champ.winCount}</span>
-              )}
-            </div>
-          ))}
+      {/* ── 2. Top Fans & Round Info Row ────────────────────── */}
+      <div className="pr-top-bar">
+        <div className="pr-round-col">
+          <div className="pr-round-text">ROUND {persistentState.round || 1}</div>
+          <div className="pr-topfans-text">TOP FANS</div>
         </div>
-      </div>
 
-      {/* ── All-Time Hall of Fame Ticker ──────────────────── */}
-      <div className="pr-alltime-bar">
-        <span className="pr-alltime-label">ALL TIME:</span>
-        <div className="pr-alltime-list">
-          {Object.entries(persistentState.allTimeScores || {})
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([code, pts]) => (
-              <span key={code} className="pr-alltime-item">
-                <img src={`/flags/${code.toLowerCase()}.svg`} alt="" />
-                <span>{pts.toLocaleString()}</span>
-              </span>
-            ))}
-        </div>
-      </div>
-
-      {/* ── Top Fans MVP Strip ────────────────────────────── */}
-      {(persistentState.topFans || []).length > 0 && (
-        <div className="pr-topfans-bar">
-          {persistentState.topFans.slice(0, 5).map((fan, i) => (
-            <div key={i} className="pr-topfan-card" title={fan.name}>
+        <div className="pr-topfans-row">
+          {(persistentState.topFans || DEFAULT_TOP_FANS).slice(0, 5).map((fan, i) => (
+            <div key={i} className="pr-topfan-card" title={`${fan.name}: ${fan.points} PTS`}>
               <div
                 className="pr-topfan-avatar"
                 style={{
-                  background: `linear-gradient(135deg, hsl(${(i * 70) % 360}, 80%, 45%), hsl(${((i * 70) + 40) % 360}, 85%, 60%))`
+                  background: `linear-gradient(135deg, hsl(${(i * 68 + 20) % 360}, 80%, 48%), hsl(${(i * 68 + 70) % 360}, 85%, 62%))`
                 }}
               >
-                {(fan.name.charAt(0) || '★').toUpperCase()}
+                {(fan.name.replace(/^@/, '').charAt(0) || '★').toUpperCase()}
               </div>
               <span className="pr-topfan-name">{fan.name}</span>
               <span className="pr-topfan-pts">{fan.points.toLocaleString()} PTS</span>
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── 3. Roundup Match Showdown Tug-of-War Bar ────────── */}
+      {isRoundupShowdown ? (
+        <div className="pr-showdown-bar">
+          <div className="pr-showdown-header">
+            <SwordsSvg />
+            <span>ROUNDUP SHOWDOWN • DUEL TO {targetPoints}</span>
+            <SwordsSvg />
+          </div>
+          <div className="pr-showdown-duel">
+            <div className="pr-duel-team team-1">
+              <img src={`/flags/${top1.code.toLowerCase()}.svg`} alt="" />
+              <span className="pr-duel-name">{top1.name}</span>
+              <span className="pr-duel-pts">{top1Points}</span>
+            </div>
+            <div className="pr-duel-bar-wrap">
+              <div
+                className="pr-duel-bar-fill"
+                style={{
+                  width: `${Math.min(95, Math.max(5, (top1Points / (top1Points + top2Points || 1)) * 100))}%`
+                }}
+              />
+              <span className="pr-duel-vs">VS</span>
+            </div>
+            <div className="pr-duel-team team-2">
+              <span className="pr-duel-pts">{top2Points}</span>
+              <span className="pr-duel-name">{top2?.name || 'Contender'}</span>
+              <img src={`/flags/${(top2?.code || 'US').toLowerCase()}.svg`} alt="" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Past Champions Mini Ribbon when not in showdown */
+        persistentState.champions && persistentState.champions.length > 0 && (
+          <div className="pr-champs-ribbon">
+            <span className="pr-champs-title">CHAMPIONS:</span>
+            <div className="pr-champs-list">
+              {persistentState.champions.slice(0, 8).map((champ, idx) => (
+                <div key={idx} className="pr-champ-item" title={`${champ.code}: ${champ.winCount || 1} wins`}>
+                  <img src={`/flags/${champ.code.toLowerCase()}.svg`} alt="" />
+                  {(champ.winCount || 1) > 1 && (
+                    <span className="pr-champ-badge">x{champ.winCount}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       )}
 
-      {/* ── Main Content Leaderboard ──────────────────────── */}
+      {/* ── 4. Main Battle Arena ────────────────────────────── */}
       <main className="pr-body">
-        {/* Top 4 Podium Showcase */}
-        <section className="pr-podium-showcase">
-          {/* #2 Sub-Flag */}
-          {top2 && (
-            <div className="pr-sub-flag rank-2">
-              <div className="pr-flag-box">
-                <img src={`/flags/${top2.code.toLowerCase()}.svg`} alt={top2.name} />
-              </div>
-              <span className="pr-sub-points">{roundScores[top2.code] || 0}</span>
-              <span className="pr-sub-name">{top2.name}</span>
-            </div>
-          )}
-
-          {/* #1 Leader Hero Flag */}
+        {/* Top 10 Row (Podium Row) */}
+        <section className="pr-podium-row">
+          {/* #1 Leader with Crown */}
           {top1 && (
-            <div className="pr-hero-flag">
+            <div className="pr-podium-leader" title={`#1 ${top1.name} (${top1Points} PTS)`}>
               <CrownSvg />
-              <div className="pr-flag-box">
+              <div className="pr-leader-flag-box">
                 <img src={`/flags/${top1.code.toLowerCase()}.svg`} alt={top1.name} />
               </div>
-              <span className="pr-hero-points">{roundScores[top1.code] || 0}</span>
-              <span className="pr-hero-name">{top1.name}</span>
+              <span className="pr-leader-pts">{top1Points}</span>
+              <span className="pr-leader-name">{top1.name}</span>
             </div>
           )}
 
-          {/* #3 Sub-Flag */}
-          {top3 && (
-            <div className="pr-sub-flag rank-3">
-              <div className="pr-flag-box">
-                <img src={`/flags/${top3.code.toLowerCase()}.svg`} alt={top3.name} />
-              </div>
-              <span className="pr-sub-points">{roundScores[top3.code] || 0}</span>
-              <span className="pr-sub-name">{top3.name}</span>
-            </div>
-          )}
-
-          {/* #4 Sub-Flag */}
-          {top4 && (
-            <div className="pr-sub-flag rank-4">
-              <div className="pr-flag-box">
-                <img src={`/flags/${top4.code.toLowerCase()}.svg`} alt={top4.name} />
-              </div>
-              <span className="pr-sub-points">{roundScores[top4.code] || 0}</span>
-              <span className="pr-sub-name">{top4.name}</span>
-            </div>
-          )}
+          {/* Ranks 2 to 12 */}
+          <div className="pr-podium-rest">
+            {top12.slice(1).map(c => {
+              const pts = roundScores[c.code] || 0;
+              return (
+                <div key={c.code} className="pr-flag-item rank-top" title={`${c.name}: ${pts} PTS`}>
+                  <div className="pr-flag-box">
+                    <img src={`/flags/${c.code.toLowerCase()}.svg`} alt={c.name} />
+                  </div>
+                  <span className="pr-flag-pts">{pts}</span>
+                  <span className="pr-flag-name">{c.name}</span>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
-        {/* Mid-Tier Grid (Rows 1 & 2) */}
-        <section className="pr-grid-tier">
-          {restCountries.slice(0, 18).map(c => (
-            <div key={c.code} className="pr-card">
-              <div className="pr-card-flag">
-                <img src={`/flags/${c.code.toLowerCase()}.svg`} alt={c.name} />
+        {/* Upper Grid (96 Flags = 8 Rows × 12 Columns) */}
+        <section className="pr-grid-tier grid-upper">
+          {midTierGrid.map(c => {
+            const pts = roundScores[c.code] || 0;
+            return (
+              <div key={c.code} className="pr-flag-item" title={`${c.name}: ${pts} PTS`}>
+                <div className="pr-flag-box">
+                  <img src={`/flags/${c.code.toLowerCase()}.svg`} alt={c.name} />
+                </div>
+                <span className="pr-flag-pts">{pts}</span>
+                <span className="pr-flag-name">{c.name}</span>
               </div>
-              <span className="pr-card-pts">{roundScores[c.code] || 0}</span>
-              <span className="pr-card-name">{c.name}</span>
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         {/* Central Spotlight / CTA Bar */}
-        <div className={`pr-shoutout-bar ${spotlightUser ? '' : 'cta-idle'}`}>
+        <div className={`pr-shoutout-bar ${spotlightUser ? 'active-vote' : 'cta-idle'}`}>
           {spotlightUser ? (
             <>
               <img
@@ -455,54 +627,59 @@ export default function PointsRaceApp() {
                 alt=""
               />
               <span className="pr-shoutout-user">@{spotlightUser.name}</span>
-              <span>·</span>
+              <span className="pr-shoutout-dot">•</span>
               <span className="pr-shoutout-pts">+{spotlightUser.points} PTS</span>
             </>
           ) : (
             <>
               <FlameSvg />
-              <span>TYPE YOUR COUNTRY OR 🇩🇴 ➔ +1 POINT</span>
+              <span>
+                TYPE YOUR COUNTRY OR <img src="/flags/bd.svg" className="pr-cta-inline-flag" alt="BD" /> ➔ +1 POINT
+              </span>
             </>
           )}
         </div>
 
-        {/* Lower Tier Grid (Underdog flags) */}
-        <section className="pr-grid-tier">
-          {restCountries.slice(18, 36).map(c => (
-            <div key={c.code} className="pr-card">
-              <div className="pr-card-flag">
-                <img src={`/flags/${c.code.toLowerCase()}.svg`} alt={c.name} />
+        {/* Lower Grid (72 Flags = 6 Rows × 12 Columns) */}
+        <section className="pr-grid-tier grid-lower">
+          {lowerTierGrid.map(c => {
+            const pts = roundScores[c.code] || 0;
+            return (
+              <div key={c.code} className="pr-flag-item" title={`${c.name}: ${pts} PTS`}>
+                <div className="pr-flag-box">
+                  <img src={`/flags/${c.code.toLowerCase()}.svg`} alt={c.name} />
+                </div>
+                <span className="pr-flag-pts">{pts}</span>
+                <span className="pr-flag-name">{c.name}</span>
               </div>
-              <span className="pr-card-pts">{roundScores[c.code] || 0}</span>
-              <span className="pr-card-name">{c.name}</span>
-            </div>
-          ))}
+            );
+          })}
         </section>
       </main>
 
-      {/* ── Floating Live Chat Tags Overlay ───────────────── */}
+      {/* ── 5. Floating Live Chat Tags Overlay ───────────────── */}
       <div className="pr-floating-container">
         {floatingTags.map(tag => (
           <div
             key={tag.id}
             className={`pr-float-tag ${tag.isSuperChat ? 'superchat' : ''}`}
             style={{
-              top: `${35 + Math.random() * 40}%`,
-              left: `${20 + Math.random() * 55}%`
+              top: `${26 + Math.random() * 45}%`,
+              left: `${15 + Math.random() * 60}%`
             }}
           >
             <img
               src={`/flags/${tag.code.toLowerCase()}.svg`}
               alt=""
-              style={{ width: '12px', height: '8px', borderRadius: '1px' }}
+              style={{ width: '13px', height: '9px', borderRadius: '1.5px', objectFit: 'cover' }}
             />
             <span>@{tag.author}</span>
-            <span style={{ color: tag.isSuperChat ? '#fef08a' : '#38bdf8' }}>+{tag.points}</span>
+            <span style={{ color: tag.isSuperChat ? '#fef08a' : '#38bdf8', fontWeight: 800 }}>+{tag.points}</span>
           </div>
         ))}
       </div>
 
-      {/* ── Victory Celebration Overlay ───────────────────── */}
+      {/* ── 6. Victory Celebration Overlay ───────────────────── */}
       {gameState === 'celebrating' && winnerInfo && (
         <div className="pr-victory-overlay">
           <h2 className="pr-victory-title">ROUND {winnerInfo.round} CHAMPION!</h2>

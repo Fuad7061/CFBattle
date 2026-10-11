@@ -1,4 +1,4 @@
-/* pointsRace.css — Ultra-HD Portrait Live Chat Points Race Styling */
+/* pointsRace.css — Professional Esports YouTube Live Chat Flag Race Styling */
 
 .pr-root {
   position: relative;
@@ -7,31 +7,32 @@
   max-width: 540px;
   max-height: 960px;
   margin: 0 auto;
-  background: radial-gradient(circle at 50% 20%, #1c0e05 0%, #0c0806 60%, #040303 100%);
+  background: radial-gradient(ellipse at 50% 12%, #221206 0%, #0d0806 50%, #030202 100%);
   color: #fff;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow: hidden;
   user-select: none;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+  padding: 4px 6px 6px;
+  box-sizing: border-box;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.95);
 }
 
-/* ── Top Header ────────────────────────────────────────── */
+/* ── 1. Top Header ────────────────────────────────────────── */
 .pr-header {
   flex-shrink: 0;
   text-align: center;
-  padding: 10px 12px 6px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+  padding: 2px 4px;
 }
 
 .pr-title {
-  font-size: 26px;
+  font-size: 23px;
   font-weight: 900;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
   color: #ffffff;
-  text-shadow: 0 0 20px rgba(245, 158, 11, 0.6), 0 2px 8px rgba(0,0,0,0.8);
+  text-shadow: 0 0 16px rgba(245, 158, 11, 0.7), 0 2px 8px rgba(0,0,0,0.9);
   margin: 0;
   line-height: 1.1;
   transition: all 0.3s ease;
@@ -39,490 +40,535 @@
 
 .pr-title.climax {
   color: #fef08a;
-  text-shadow: 0 0 25px rgba(239, 68, 68, 0.8), 0 0 12px rgba(245, 158, 11, 0.9);
-  animation: pulseClimax 1s infinite alternate;
+  text-shadow: 0 0 25px rgba(239, 68, 68, 0.9), 0 0 12px rgba(245, 158, 11, 0.9);
+  animation: pulseClimax 0.9s infinite alternate;
 }
 
 @keyframes pulseClimax {
   from { transform: scale(1); }
-  to { transform: scale(1.03); }
+  to { transform: scale(1.025); }
 }
 
-/* ── Round & Past Champions Strip ──────────────────────── */
-.pr-subbar {
+/* ── 2. Top Fans & Round Info Row ────────────────────────── */
+.pr-top-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 14px;
-  font-size: 11px;
-  font-weight: 800;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 4px 3px;
+  flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.pr-round-badge {
-  color: #f59e0b;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.pr-champions-label {
-  font-size: 9px;
-  letter-spacing: 1.2px;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.pr-champions-strip {
+.pr-round-col {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.pr-champions-strip::-webkit-scrollbar { display: none; }
-
-.pr-champ-item {
-  position: relative;
+  flex-direction: column;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  overflow: visible;
+  text-align: left;
 }
 
-.pr-champ-flag {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid rgba(245, 158, 11, 0.6);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
-}
-
-.pr-champ-count {
-  position: absolute;
-  bottom: -4px;
-  right: -5px;
-  background: #f59e0b;
-  color: #000;
-  font-size: 7.5px;
+.pr-round-text {
+  font-size: 11px;
   font-weight: 900;
-  padding: 0 3px;
-  border-radius: 6px;
-  border: 1px solid #fff;
+  color: #f59e0b;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
   line-height: 1.1;
 }
 
-/* ── All Time Ticker ───────────────────────────────────── */
-.pr-alltime-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 14px 4px;
+.pr-topfans-text {
   font-size: 9.5px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.25);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  overflow: hidden;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  margin-top: 1px;
 }
 
-.pr-alltime-label {
-  font-weight: 900;
-  letter-spacing: 1.2px;
-  color: #fbbf24;
-  flex-shrink: 0;
-  font-size: 8.5px;
-}
-
-.pr-alltime-list {
+.pr-topfans-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  white-space: nowrap;
-  animation: tickerSlide 25s linear infinite;
-}
-
-@keyframes tickerSlide {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.pr-alltime-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 700;
-  font-size: 9px;
-}
-
-.pr-alltime-item img {
-  width: 13px;
-  height: 9px;
-  border-radius: 1px;
-}
-
-/* ── Top Fans MVP Strip ────────────────────────────────── */
-.pr-topfans-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 4px 8px;
-  background: rgba(245, 158, 11, 0.05);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+  gap: 5px;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .pr-topfan-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  max-width: 80px;
+  width: 44px;
+  text-align: center;
 }
 
 .pr-topfan-avatar {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 9px;
+  font-weight: 900;
+  color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.6);
 }
 
 .pr-topfan-name {
-  font-size: 7.5px;
+  font-size: 7px;
   font-weight: 700;
-  color: #cbd5e1;
-  max-width: 75px;
+  color: #94a3b8;
+  max-width: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+.pr-topfan-pts {
+  font-size: 7.5px;
+  font-weight: 800;
+  color: #fef08a;
+  white-space: nowrap;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+/* ── 3. Roundup Match Showdown Tug-of-War Bar ────────────── */
+.pr-showdown-bar {
+  flex-shrink: 0;
+  margin: 2px 0 3px;
+  padding: 3px 8px 4px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.28) 0%, rgba(245, 158, 11, 0.35) 50%, rgba(239, 68, 68, 0.28) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.65);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
+  text-align: center;
+  animation: glowShowdown 1.5s infinite alternate;
+}
+
+@keyframes glowShowdown {
+  from { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+  to { border-color: rgba(245, 158, 11, 0.9); box-shadow: 0 0 16px rgba(245, 158, 11, 0.5); }
+}
+
+.pr-showdown-header {
+  font-size: 9px;
+  font-weight: 900;
+  color: #fef08a;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.pr-showdown-duel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pr-duel-team {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.pr-duel-team img {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pr-duel-name {
+  font-size: 7.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #ffffff;
+  max-width: 58px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pr-topfan-pts {
+.pr-duel-pts {
+  font-size: 8.5px;
+  font-weight: 900;
+  color: #fbbf24;
+}
+
+.pr-duel-bar-wrap {
+  flex: 1;
+  height: 7px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.pr-duel-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444 0%, #f59e0b 100%);
+  transition: width 0.3s ease;
+}
+
+.pr-duel-vs {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 6px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 2px #000;
+}
+
+/* Past Champions Mini Ribbon when not in showdown */
+.pr-champs-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 4px 2px;
+  flex-shrink: 0;
+}
+
+.pr-champs-title {
   font-size: 8px;
   font-weight: 900;
-  color: #facc15;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.8px;
 }
 
-/* ── Content Area & Leaderboard ────────────────────────── */
+.pr-champs-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+}
+
+.pr-champ-item {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.pr-champ-item img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(245, 158, 11, 0.6);
+}
+
+.pr-champ-badge {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  background: #f59e0b;
+  color: #000;
+  font-size: 6.5px;
+  font-weight: 900;
+  padding: 0 2px;
+  border-radius: 4px;
+  border: 0.5px solid #fff;
+  line-height: 1;
+}
+
+/* ── 4. Main Arena ────────────────────────────────────────── */
 .pr-body {
   flex: 1;
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  padding: 8px 10px 14px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  justify-content: space-evenly;
+  gap: 2px;
+  overflow: hidden;
 }
-.pr-body::-webkit-scrollbar { display: none; }
 
-/* ── Top 4 Podium Showcase ─────────────────────────────── */
-.pr-podium-showcase {
+/* Top 12 Row (Podium Row) */
+.pr-podium-row {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 4px;
-  padding-bottom: 6px;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 0;
+  flex-shrink: 0;
 }
 
-/* #1 Flag Hero */
-.pr-hero-flag {
+.pr-podium-leader {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 128px;
-  order: 2;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.pr-hero-flag .pr-flag-box {
-  position: relative;
-  width: 124px;
-  height: 78px;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 2px solid #facc15;
-  box-shadow: 0 0 24px rgba(245, 158, 11, 0.65), 0 4px 14px rgba(0, 0, 0, 0.8);
+  width: 48px;
+  flex-shrink: 0;
 }
 
 .pr-crown-svg {
   position: absolute;
-  top: -16px;
-  left: -12px;
-  width: 38px;
-  height: 38px;
-  filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.8));
-  z-index: 10;
-  animation: crownBob 2s ease-in-out infinite alternate;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 17px;
+  height: 17px;
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.95));
+  z-index: 5;
 }
 
-@keyframes crownBob {
-  from { transform: translateY(0) rotate(-4deg); }
-  to { transform: translateY(-3px) rotate(2deg); }
-}
-
-.pr-hero-flag img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.pr-hero-points {
-  font-size: 24px;
-  font-weight: 900;
-  color: #facc15;
-  margin-top: 4px;
-  line-height: 1;
-  text-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
-}
-
-.pr-hero-name {
-  font-size: 11px;
-  font-weight: 800;
-  color: #ffffff;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Sub-Contenders (#2, #3, #4) */
-.pr-sub-flag {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 82px;
-}
-
-.pr-sub-flag.rank-2 { order: 1; }
-.pr-sub-flag.rank-3 { order: 3; }
-.pr-sub-flag.rank-4 { order: 4; }
-
-.pr-sub-flag .pr-flag-box {
-  width: 78px;
-  height: 50px;
+.pr-leader-flag-box {
+  width: 44px;
+  height: 29px;
   border-radius: 4px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.75), inset 0 0 4px rgba(254, 240, 138, 0.5);
+  background: #000;
 }
 
-.pr-sub-flag img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.pr-sub-points {
-  font-size: 15px;
-  font-weight: 800;
-  color: #fef08a;
-  margin-top: 3px;
-  line-height: 1;
-}
-
-.pr-sub-name {
-  font-size: 9px;
-  font-weight: 700;
-  color: #cbd5e1;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Mid-Tier Flag Grid (6 Columns) ────────────────────── */
-.pr-grid-tier {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px 6px;
-  margin: 0;
-}
-
-.pr-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  transition: transform 0.15s ease;
-}
-
-.pr-card-flag {
-  position: relative;
-  width: 48px;
-  height: 32px;
-  border-radius: 3px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-
-.pr-card-flag img {
+.pr-leader-flag-box img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.pr-card-pts {
-  font-size: 11px;
-  font-weight: 800;
-  color: #fbbf24;
-  margin-top: 2px;
+.pr-leader-pts {
+  font-size: 12px;
+  font-weight: 900;
+  color: #fef08a;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+  margin-top: 1px;
   line-height: 1.1;
 }
 
-.pr-card-name {
+.pr-leader-name {
   font-size: 7px;
-  font-weight: 700;
-  color: #94a3b8;
-  letter-spacing: 0.3px;
+  font-weight: 800;
+  color: #fff;
   text-transform: uppercase;
   max-width: 48px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
+  line-height: 1;
 }
 
-/* ── Central Engagement & Shoutout Banner ──────────────── */
-.pr-shoutout-bar {
-  flex-shrink: 0;
-  margin: 4px 10px;
-  padding: 7px 14px;
-  border-radius: 24px;
-  background: linear-gradient(90deg, rgba(6, 182, 212, 0.2) 0%, rgba(30, 58, 138, 0.4) 50%, rgba(6, 182, 212, 0.2) 100%);
-  border: 1px solid rgba(34, 211, 238, 0.5);
-  box-shadow: 0 0 16px rgba(6, 182, 212, 0.3), inset 0 0 10px rgba(6, 182, 212, 0.2);
+.pr-podium-rest {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #e0f2fe;
+  justify-content: space-between;
+  flex: 1;
+  gap: 1.5px;
 }
 
-.pr-shoutout-bar.cta-idle {
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.15) 0%, rgba(180, 83, 9, 0.3) 50%, rgba(245, 158, 11, 0.15) 100%);
-  border-color: rgba(245, 158, 11, 0.5);
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.25);
-  color: #fef08a;
+/* General Flag Item Card */
+.pr-flag-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
 }
 
-.pr-shoutout-flag {
-  width: 18px;
-  height: 12px;
-  border-radius: 2px;
+.pr-flag-box {
+  width: 33px;
+  height: 22px;
+  border-radius: 2.5px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pr-flag-box img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  display: block;
 }
 
-.pr-shoutout-user {
-  color: #ffffff;
-  font-weight: 900;
-  max-width: 130px;
+.pr-flag-pts {
+  font-size: 9px;
+  font-weight: 800;
+  color: #fbbf24;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.pr-flag-name {
+  font-size: 6.2px;
+  font-weight: 700;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  max-width: 36px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 1px;
+  line-height: 1;
 }
 
-.pr-shoutout-pts {
+/* 12-Column Dense Grids */
+.pr-grid-tier {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2.5px 1.5px;
+  align-items: center;
+  justify-items: center;
+  flex-shrink: 0;
+}
+
+/* Central Spotlight / CTA Bar */
+.pr-shoutout-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(14, 23, 42, 0.94);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  margin: 1px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pr-shoutout-bar.active-vote {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(56, 189, 248, 0.8);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.5);
+  animation: pulseVote 0.4s ease-out;
+}
+
+@keyframes pulseVote {
+  0% { transform: scale(0.97); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.pr-shoutout-bar.cta-idle {
+  background: rgba(20, 10, 4, 0.9);
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+  color: #fed7aa;
+  font-size: 9.5px;
+}
+
+.pr-cta-inline-flag {
+  width: 17px;
+  height: 12px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  margin: 0 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  display: inline-block;
+}
+
+.pr-shoutout-flag {
+  width: 17px;
+  height: 11px;
+  border-radius: 2px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.pr-shoutout-user {
   color: #38bdf8;
   font-weight: 900;
 }
 
-/* ── Floating Live Chat Tags ───────────────────────────── */
+.pr-shoutout-dot {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.pr-shoutout-pts {
+  color: #fef08a;
+  font-weight: 900;
+  text-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+
+/* ── 5. Floating Live Chat Tags Overlay ───────────────────── */
 .pr-floating-container {
   position: absolute;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
-  z-index: 50;
+  z-index: 40;
 }
 
 .pr-float-tag {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
+  gap: 4px;
+  padding: 2.5px 7px;
   border-radius: 12px;
-  font-size: 8px;
-  font-weight: 900;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  font-size: 8.5px;
+  font-weight: 800;
   color: #fff;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(245, 158, 11, 0.8);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.8);
-  animation: floatUpFade 1.25s ease-out forwards;
+  animation: floatUpFade 1.4s ease-out forwards;
 }
 
 .pr-float-tag.superchat {
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(245, 158, 11, 0.95));
   border-color: #fef08a;
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.9);
-  font-size: 9px;
-  padding: 3px 8px;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.8);
 }
 
 @keyframes floatUpFade {
-  0% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.8);
-  }
-  20% {
-    opacity: 1;
-    transform: translateY(0) scale(1.08);
-  }
-  40% {
-    transform: translateY(-8px) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-42px) scale(0.9);
-  }
+  0% { opacity: 0; transform: translateY(12px) scale(0.85); }
+  15% { opacity: 1; transform: translateY(0) scale(1.05); }
+  30% { transform: translateY(-4px) scale(1); }
+  80% { opacity: 1; transform: translateY(-18px); }
+  100% { opacity: 0; transform: translateY(-28px); }
 }
 
-/* ── Victory Celebration Overlay ───────────────────────── */
+/* ── 6. Victory Celebration Overlay ───────────────────────── */
 .pr-victory-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(8, 5, 4, 0.92);
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(8px);
+  z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  animation: fadeIn 0.4s ease;
   text-align: center;
   padding: 20px;
+  animation: victoryFadeIn 0.5s ease-out;
+}
+
+@keyframes victoryFadeIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .pr-victory-title {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 900;
-  color: #facc15;
   letter-spacing: 2px;
-  text-transform: uppercase;
-  text-shadow: 0 0 24px rgba(245, 158, 11, 0.8);
+  color: #fef08a;
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.9);
   margin-bottom: 8px;
 }
 
@@ -530,60 +576,51 @@
   width: 72px;
   height: 72px;
   margin-bottom: 12px;
-  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.9));
-  animation: trophySpin 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.8));
+  animation: trophyBob 1.5s infinite alternate ease-in-out;
 }
 
-@keyframes trophySpin {
-  0% { transform: scale(0.2) rotate(-30deg); opacity: 0; }
-  100% { transform: scale(1) rotate(0); opacity: 1; }
+@keyframes trophyBob {
+  from { transform: translateY(0) rotate(-2deg); }
+  to { transform: translateY(-8px) rotate(2deg); }
 }
 
 .pr-victory-flag {
   width: 140px;
-  height: 90px;
+  height: 94px;
   border-radius: 8px;
-  border: 3px solid #facc15;
-  box-shadow: 0 0 35px rgba(245, 158, 11, 0.8), 0 8px 24px rgba(0,0,0,0.9);
   object-fit: cover;
-  margin-bottom: 10px;
+  border: 3px solid #f59e0b;
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.8);
+  margin-bottom: 12px;
 }
 
 .pr-victory-name {
   font-size: 24px;
   font-weight: 900;
   color: #fff;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
 }
 
 .pr-victory-mvp {
-  font-size: 12px;
-  color: #67e8f9;
-  font-weight: 800;
-  margin-top: 4px;
-  margin-bottom: 16px;
+  font-size: 13px;
+  color: #38bdf8;
+  margin-bottom: 14px;
+}
+
+.pr-victory-mvp b {
+  color: #fff;
 }
 
 .pr-victory-next {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
-  color: #94a3b8;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  padding: 6px 16px;
-  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 1px;
 }
 
 .pr-victory-next span {
-  color: #facc15;
-  font-size: 16px;
-  font-weight: 900;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  color: #f59e0b;
+  font-size: 15px;
 }
