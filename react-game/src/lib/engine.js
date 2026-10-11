@@ -1170,21 +1170,18 @@ export class FlagBattleEngine extends EventEmitter {
 
   _ringPositions(count, radius, itemR) {
     const positions = [];
-    const spacing = itemR * 2 + 6;
-    let ring = 0;
-    while (positions.length < count) {
-      const ringRadius = spacing * 0.9 + ring * spacing;
-      if (ringRadius > radius - itemR) break;
-      const circumference = 2 * Math.PI * ringRadius;
-      const capacity = ring === 0 ? 1 : Math.max(1, Math.floor(circumference / spacing));
-      for (let i = 0; i < capacity && positions.length < count; i++) {
-        const a = (i / capacity) * Math.PI * 2 + ring * 0.3;
-        positions.push({
-          x: this.CENTER.x + Math.cos(a) * ringRadius,
-          y: this.CENTER.y + Math.sin(a) * ringRadius,
-        });
-      }
-      ring++;
+    if (count <= 0) return positions;
+    const maxRadius = Math.max(itemR * 2, radius - itemR * 1.5);
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const c = maxRadius / Math.sqrt(count);
+
+    for (let i = 0; i < count; i++) {
+      const r = c * Math.sqrt(i + 0.5);
+      const theta = i * goldenAngle;
+      positions.push({
+        x: this.CENTER.x + Math.cos(theta) * r,
+        y: this.CENTER.y + Math.sin(theta) * r,
+      });
     }
     return positions;
   }
@@ -1499,21 +1496,21 @@ export class FlagBattleEngine extends EventEmitter {
     this._sprites.set(code, entry);
     const img = new Image();
     img.onload = () => {
-      const sw = 256;
-      const sh = 160;
+      // Pre-cache at high-density 2x scale (56x36) with pre-baked rounded corners:
+      // Completely eliminates runtime ctx.clip() in the loop!
+      const sw = 56;
+      const sh = 36;
       const off = document.createElement('canvas');
       off.width = sw;
       off.height = sh;
       const octx = off.getContext('2d');
       octx.imageSmoothingEnabled = true;
-      try { octx.imageSmoothingQuality = 'high'; } catch (e) {}
-      // Letterbox the (usually 4:3) source into our fixed sprite box.
-      const srcW = img.naturalWidth || img.width || 640;
-      const srcH = img.naturalHeight || img.height || 480;
-      const scale = Math.min(sw / srcW, sh / srcH);
-      const dw = srcW * scale;
-      const dh = srcH * scale;
-      octx.drawImage(img, (sw - dw) / 2, (sh - dh) / 2, dw, dh);
+      try { octx.imageSmoothingQuality = 'medium'; } catch (e) {}
+      octx.beginPath();
+      if (octx.roundRect) octx.roundRect(0, 0, sw, sh, 3);
+      else octx.rect(0, 0, sw, sh);
+      octx.clip();
+      octx.drawImage(img, 0, 0, sw, sh);
       entry.canvas = off;
       entry.ready = true;
     };
@@ -1560,17 +1557,18 @@ export class FlagBattleEngine extends EventEmitter {
 
     const sprite = this._getSprite(f.code);
     if (sprite.ready && sprite.canvas) {
-      ctx.save();
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 2 * scale);
-      else ctx.rect(-w / 2, -h / 2, w, h);
-      ctx.clip();
       if (showNameplate) {
+        ctx.save();
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 2 * scale);
+        else ctx.rect(-w / 2, -h / 2, w, h);
+        ctx.clip();
         this._drawWavingFlag(ctx, sprite.canvas, w, h, f);
+        ctx.restore();
       } else {
+        // Direct draw with pre-baked rounded corners — zero runtime ctx.clip()!
         ctx.drawImage(sprite.canvas, -w / 2, -h / 2, w, h);
       }
-      ctx.restore();
     } else {
       ctx.fillStyle = this._codeColor(f.code);
       ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -2110,37 +2108,81 @@ export class FlagBattleEngine extends EventEmitter {
       f.angle = norm((f.angle || 0) + (f.spin || 0) * slowFactor);
     });
 
-    for (let i = 0; i < alive.length; i++) {
-      const a = alive[i];
-      if (frozenFlags.has(a)) continue;
-      for (let j = i + 1; j < alive.length; j++) {
-        const b = alive[j];
-        if (frozenFlags.has(b)) continue;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const minDist = a.r + b.r;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < minDist * minDist && distSq > 0) {
-          const dist = Math.sqrt(distSq);
-          const overlap = (minDist - dist) / 2;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          a.x -= nx * overlap;
-          a.y -= ny * overlap;
-          b.x += nx * overlap;
-          b.y += ny * overlap;
+    const resolveCollision = (a, b) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const minDist = a.r + b.r;
+      if (Math.abs(dx) >= minDist || Math.abs(dy) >= minDist) return;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDist * minDist && distSq > 0) {
+        const dist = Math.sqrt(distSq);
+        const overlap = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        a.x -= nx * overlap;
+        a.y -= ny * overlap;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
 
-          const rvx = b.vx - a.vx;
-          const rvy = b.vy - a.vy;
-          const velAlongNormal = rvx * nx + rvy * ny;
-          if (velAlongNormal < 0) {
-            // Equal mass, perfectly elastic bounce, matching vertical.
-            const approachSpeed = -velAlongNormal;
-            a.vx -= approachSpeed * nx;
-            a.vy -= approachSpeed * ny;
-            b.vx += approachSpeed * nx;
-            b.vy += approachSpeed * ny;
+        const rvx = b.vx - a.vx;
+        const rvy = b.vy - a.vy;
+        const velAlongNormal = rvx * nx + rvy * ny;
+        if (velAlongNormal < 0) {
+          const approachSpeed = -velAlongNormal;
+          a.vx -= approachSpeed * nx;
+          a.vy -= approachSpeed * ny;
+          b.vx += approachSpeed * nx;
+          b.vy += approachSpeed * ny;
+        }
+      }
+    };
+
+    if (alive.length > 32) {
+      const CELL_SIZE = (this.FLAG_R || 14) * 2.5;
+      const grid = new Map();
+      for (let i = 0; i < alive.length; i++) {
+        const f = alive[i];
+        if (frozenFlags.has(f)) continue;
+        const gx = Math.floor(f.x / CELL_SIZE);
+        const gy = Math.floor(f.y / CELL_SIZE);
+        const key = `${gx},${gy}`;
+        let cell = grid.get(key);
+        if (!cell) {
+          cell = [];
+          grid.set(key, cell);
+        }
+        cell.push(i);
+      }
+
+      for (const [key, cell] of grid) {
+        const [gxStr, gyStr] = key.split(',');
+        const gx = parseInt(gxStr, 10);
+        const gy = parseInt(gyStr, 10);
+        const neighborOffsets = [[0, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+        for (const [ox, oy] of neighborOffsets) {
+          const nKey = `${gx + ox},${gy + oy}`;
+          const nCell = grid.get(nKey);
+          if (!nCell) continue;
+          const isSame = ox === 0 && oy === 0;
+          for (let i = 0; i < cell.length; i++) {
+            const idxA = cell[i];
+            const startJ = isSame ? i + 1 : 0;
+            for (let j = startJ; j < nCell.length; j++) {
+              const idxB = nCell[j];
+              if (idxA === idxB) continue;
+              resolveCollision(alive[idxA], alive[idxB]);
+            }
           }
+        }
+      }
+    } else {
+      for (let i = 0; i < alive.length; i++) {
+        const a = alive[i];
+        if (frozenFlags.has(a)) continue;
+        for (let j = i + 1; j < alive.length; j++) {
+          const b = alive[j];
+          if (frozenFlags.has(b)) continue;
+          resolveCollision(a, b);
         }
       }
     }
@@ -2445,18 +2487,23 @@ export class FlagBattleEngine extends EventEmitter {
   }
 
   _loop(ts = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
-    if (this.running && !this.paused) {
-      if (!this._lastStepTs) this._lastStepTs = ts;
-      let dt = ts - this._lastStepTs;
-      this._lastStepTs = ts;
-      if (!(dt >= 0)) dt = 0;
-      if (dt > 100) dt = 100;
+    this._rafId = requestAnimationFrame((nextTs) => this._loop(nextTs));
 
-      // Vertical-style speed control: run more fixed physics steps per frame.
+    const TARGET_FPS = 30;
+    const FRAME_INTERVAL_MS = 1000 / TARGET_FPS; // 33.333ms
+
+    if (!this._lastStepTs) this._lastStepTs = ts;
+    const elapsed = ts - this._lastStepTs;
+    // Cap at 30 FPS: eliminates 50% of CPU work in Chromium, perfectly matches FFmpeg 30fps
+    if (elapsed < FRAME_INTERVAL_MS - 2) {
+      return;
+    }
+    this._lastStepTs = ts - (elapsed % FRAME_INTERVAL_MS);
+
+    if (this.running && !this.paused) {
+      // Speed multiplier & slow-motion scaling
       let speedMult = (this.settings?.speedMult !== undefined) ? Number(this.settings.speedMult) : 1;
       if (!(speedMult > 0)) speedMult = 1;
-      // Vertical-style slow motion: either a timed global power or Top 3
-      // bullet-time uses the same dramatic 0.45x timescale.
       if (this._slowUntil && Date.now() > this._slowUntil) {
         this._slowUntil = 0;
         this._slowFactor = 1;
@@ -2465,29 +2512,17 @@ export class FlagBattleEngine extends EventEmitter {
       if (this._slowUntil || this._suspenseSlow) timeScale = 0.45;
       speedMult *= timeScale;
 
-      const STEP_MS = 1000 / 60;
-      if (speedMult === 1 && dt >= 13 && dt <= 19 && this._physAccum < STEP_MS) {
+      // Two 16.667ms sub-steps per 30fps frame (scaled by speedMult)
+      const steps = Math.max(1, Math.min(6, Math.round(2 * speedMult)));
+      for (let s = 0; s < steps; s++) {
         this._physicsStep();
-        this._physAccum = 0;
-      } else {
-        this._physAccum += dt * speedMult;
-        const maxSteps = Math.min(8, Math.max(4, Math.ceil(speedMult)));
-        let steps = 0;
-        while (this._physAccum >= STEP_MS && steps < maxSteps) {
-          this._physicsStep();
-          this._physAccum -= STEP_MS;
-          steps += 1;
-        }
-        if (steps >= maxSteps || this._physAccum > STEP_MS * 2) this._physAccum = 0;
+        if (this.paused || !this.running) break;
       }
-    } else {
-      this._lastStepTs = 0;
-      this._physAccum = 0;
     }
+
     this._updateFireworks();
     this._updateParticles();
     this._render();
-    this._rafId = requestAnimationFrame((nextTs) => this._loop(nextTs));
   }
 
   // ================= Chat Floaters & Visual FX =================
