@@ -8,7 +8,10 @@ export default function TeamsPanel({ teams }) {
 
   return (
     <div className="flex-none px-3.5 pt-1.5 pb-2 bg-bg-deep/70 border border-accent-gold/30 rounded-md">
-      <div className="text-[10px] tracking-[1.3px] uppercase text-accent-gold text-center mb-1">🛡 TEAM UP MODE</div>
+      <div className="text-[10px] tracking-[1.3px] uppercase text-accent-gold text-center mb-1 flex items-center justify-center gap-1">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+        <span>TEAM UP MODE</span>
+      </div>
       <div>
         {ranked.map((t, i) => (
           <div

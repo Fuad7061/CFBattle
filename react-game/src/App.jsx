@@ -169,7 +169,11 @@ export default function App() {
         <div className="hud-top">
           <div className="rh-left">
             <span className="rh-label">ROUND {String(hudState.campaignNum || 1).padStart(2, '0')}</span>
-            <span className="rh-sep">🔥</span>
+            <span className="rh-sep inline-flex items-center">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="#f97316">
+                <path d="M12 23c-4.97 0-9-4.03-9-9 0-3.66 2.22-6.84 5.39-8.23.47-.2.77.34.46.72C7.75 7.84 7.5 9.38 8 10.74c.26.7.99 1.15 1.74.97.87-.21 1.46-.99 1.46-1.89V3.5c0-.46.52-.72.87-.43C15.86 6.06 21 10.97 21 14c0 4.97-4.03 9-9 9z"/>
+              </svg>
+            </span>
             <span className="rh-timer">{hudState.alive || 0} IN ARENA</span>
             <span className="rh-sep">·</span>
             <span className="rh-phase">{isFinal ? 'GRAND FINAL' : 'QUALIFYING'}</span>

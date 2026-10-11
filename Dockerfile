@@ -1,12 +1,17 @@
 FROM node:18-bookworm-slim
 
-# Install OS dependencies for Headless Chrome, Xvfb, FFmpeg and PulseAudio
+# Install OS dependencies for Headless Chrome, Xvfb, FFmpeg and PulseAudio, plus fonts for emoji and Unicode
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     xvfb \
     chromium \
     pulseaudio \
     curl \
+    fonts-noto-color-emoji \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    fontconfig \
+    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directory

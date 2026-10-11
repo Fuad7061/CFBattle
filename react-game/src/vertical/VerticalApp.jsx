@@ -81,7 +81,11 @@ export default function VerticalApp() {
           <div id="hud">
             <div id="round-header">
               <span id="round-label">ROUND 1</span>
-              <span className="hdr-sep">🔥</span>
+              <span className="hdr-sep">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="#f97316" style={{ display: 'inline-block', verticalAlign: '-1.5px' }}>
+                  <path d="M12 23c-4.97 0-9-4.03-9-9 0-3.66 2.22-6.84 5.39-8.23.47-.2.77.34.46.72C7.75 7.84 7.5 9.38 8 10.74c.26.7.99 1.15 1.74.97.87-.21 1.46-.99 1.46-1.89V3.5c0-.46.52-.72.87-.43C15.86 6.06 21 10.97 21 14c0 4.97-4.03 9-9 9z"/>
+                </svg>
+              </span>
               <span id="timer-display">00:00</span>
               <span className="hdr-sep">·</span>
               <span id="phase-label">READY</span>
@@ -89,11 +93,21 @@ export default function VerticalApp() {
 
             <div id="panels-row">
               <div id="qualified-panel">
-                <div id="qualified-title">🏆 CAMPAIGN WINNERS</div>
-                <div id="qualified-list"><div class="q-empty">Awaiting first champion…</div></div>
+                <div id="qualified-title" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="#f59e0b">
+                    <path d="M19 4h-3V2H8v2H5c-1.1 0-2 .9-2 2v2c0 2.5 1.9 4.6 4.3 4.9.7 1.4 1.9 2.5 3.4 2.9V18H8v2h8v-2h-2.7v-2.2c1.5-.4 2.7-1.5 3.4-2.9 2.4-.3 4.3-2.4 4.3-4.9V6c0-1.1-.9-2-2-2zM5 8V6h3v4.8C6.3 10.4 5 9.4 5 8zm14 0c0 1.4-1.3 2.4-3 2.8V6h3v2z" />
+                  </svg>
+                  <span>CAMPAIGN WINNERS</span>
+                </div>
+                <div id="qualified-list"><div className="q-empty">Awaiting first champion…</div></div>
               </div>
               <div id="supporters-panel">
-                <div id="supporters-title">💎 TOP SUPPORTERS ·</div>
+                <div id="supporters-title" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="#38bdf8">
+                    <path d="M12 2L4 8l8 14 8-14-8-6zm0 2.5l5.2 3.9H6.8L12 4.5zM6 9.8h4.5L12 18 6 9.8zm7.5 0H18l-6 8.2 1.5-8.2z"/>
+                  </svg>
+                  <span>TOP SUPPORTERS ·</span>
+                </div>
                 <div id="supporters-list">
                   <div className="sup-empty">No supporters yet</div>
                 </div>
@@ -101,7 +115,12 @@ export default function VerticalApp() {
             </div>
 
             <div id="team-panel" className="hidden">
-              <div id="team-title">🛡 TEAM UP MODE</div>
+              <div id="team-title" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="#38bdf8">
+                  <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                </svg>
+                <span>TEAM UP MODE</span>
+              </div>
               <div id="team-list"></div>
             </div>
 
@@ -123,7 +142,19 @@ export default function VerticalApp() {
 
             <div id="winner-screen" className="hidden">
               <div id="winner-title">ROUND WINNER</div>
-              <div id="winner-trophy">🏆</div>
+              <div id="winner-trophy">
+                <svg viewBox="0 0 24 24" width="62" height="62" fill="url(#goldTrophyGrad)" style={{ filter: 'drop-shadow(0 0 18px rgba(245,158,11,0.85))', display: 'block', margin: '0 auto' }}>
+                  <defs>
+                    <linearGradient id="goldTrophyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fef08a" />
+                      <stop offset="40%" stopColor="#f59e0b" />
+                      <stop offset="75%" stopColor="#d97706" />
+                      <stop offset="100%" stopColor="#92400e" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M19 4h-3V2H8v2H5c-1.1 0-2 .9-2 2v2c0 2.5 1.9 4.6 4.3 4.9.7 1.4 1.9 2.5 3.4 2.9V18H8v2h8v-2h-2.7v-2.2c1.5-.4 2.7-1.5 3.4-2.9 2.4-.3 4.3-2.4 4.3-4.9V6c0-1.1-.9-2-2-2zM5 8V6h3v4.8C6.3 10.4 5 9.4 5 8zm14 0c0 1.4-1.3 2.4-3 2.8V6h3v2z" />
+                </svg>
+              </div>
               <div id="winner-flag-wrap">
                 <img id="winner-flag-img" src="" alt="" crossOrigin="anonymous" />
               </div>
@@ -159,7 +190,11 @@ export default function VerticalApp() {
             </div>
 
             <div id="top5-tracker" className="hidden">
-              <div id="top5-header">⚡ TOP 5 FINALISTS — WHO WILL WIN? ⚡</div>
+              <div id="top5-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="#facc15"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+                <span>TOP 5 FINALISTS — WHO WILL WIN?</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="#facc15"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+              </div>
               <div id="top5-cards"></div>
             </div>
 
