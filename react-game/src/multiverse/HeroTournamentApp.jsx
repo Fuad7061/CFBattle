@@ -37,6 +37,23 @@ const cleanUser = (u) => {
   return '@' + str.replace(/^@+/, '');
 };
 
+// Generates consistent vibrant avatar gradients from username
+const getAvatarGradient = (name = '') => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h1 = Math.abs(hash) % 360;
+  const h2 = (h1 + 45) % 360;
+  return `linear-gradient(135deg, hsl(${h1}, 75%, 45%), hsl(${h2}, 85%, 60%))`;
+};
+
+// Extract clean initial letter or star for avatar fallback
+const getInitial = (name = '') => {
+  const clean = name.replace(/^@+/, '').trim();
+  return (clean.charAt(0) || '★').toUpperCase();
+};
+
 export default function HeroTournamentApp() {
   // Target points for qualification and finals (default 50)
   const [targetPoints, setTargetPoints] = useState(50);
@@ -67,8 +84,9 @@ export default function HeroTournamentApp() {
   const [champion, setChampion] = useState(null);
   const [resetCountdown, setResetCountdown] = useState(12);
 
-  // Supporter Shoutouts Circular Buffer
-  const [recentShoutouts, setRecentShoutouts] = useState([]);
+  // Latest Commenter Shoutout: Single row that stays on screen permanently until the next comment!
+  const [latestStrike, setLatestStrike] = useState(null);
+  const hasRealStrikeRef = useRef(false);
 
   // Supporter Totals Map: username -> { points, heroName }
   const [supporterTotals, setSupporterTotals] = useState({});
@@ -331,7 +349,8 @@ export default function HeroTournamentApp() {
         }
       },
       resetSupporters: () => {
-        setRecentShoutouts([]);
+        setLatestStrike(null);
+        hasRealStrikeRef.current = false;
         setSupporterTotals({});
         heroAudio.playBoost('#38bdf8');
         triggerPopup({
@@ -363,9 +382,9 @@ export default function HeroTournamentApp() {
         setAutoVoterEnabled(Boolean(enabled));
         autoVoterEnabledRef.current = Boolean(enabled);
       },
-      voteHero: (heroNameOrId, points = 1, author = 'Viewer') => {
+      voteHero: (heroNameOrId, points = 1, author = 'Viewer', avatar = null) => {
         const h = findHeroFromComment(heroNameOrId);
-        if (h) processHeroVote(h, points, author);
+        if (h) processHeroVote(h, points, author, false, avatar, true);
       }
     };
     window.heroAudio = heroAudio;
@@ -412,7 +431,7 @@ export default function HeroTournamentApp() {
   // --------------------------------------------------------------------------
   // CORE VOTE PROCESSOR: Adds points, triggers audio, shoutouts, popups & gates
   // --------------------------------------------------------------------------
-  const processHeroVote = (hero, points = 1, author = 'Viewer', isSuperChat = false) => {
+  const processHeroVote = (hero, points = 1, author = 'Viewer', isSuperChat = false, avatarUrl = null, isRealComment = false) => {
     if (!hero) return;
     const heroId = hero.id;
     const formattedUser = cleanUser(author);
@@ -438,16 +457,28 @@ export default function HeroTournamentApp() {
       setFloatingDamage(prev => prev.filter(d => d.id !== damageId));
     }, 1200);
 
-    // Update Shoutout Feed (max 2 items for sleek fit)
+    // Persistent Single-Row Commenter Shoutout:
+    // Stays permanently until the next comment! Real commenters take precedence and are NEVER overwritten by auto-voters.
     const shoutoutItem = {
       id: Date.now() + Math.random().toString(36).slice(2, 6),
       user: formattedUser,
+      avatar: avatarUrl || null,
+      avatarGradient: getAvatarGradient(formattedUser),
+      initial: getInitial(formattedUser),
       heroName: hero.name,
       heroColor: hero.color,
       attackName: hero.attackName,
-      points
+      points,
+      isSuperChat,
+      isReal: isRealComment
     };
-    setRecentShoutouts(prev => [shoutoutItem, ...prev.slice(0, 1)]);
+
+    if (isRealComment) {
+      hasRealStrikeRef.current = true;
+      setLatestStrike(shoutoutItem);
+    } else if (!hasRealStrikeRef.current) {
+      setLatestStrike(shoutoutItem);
+    }
 
     // Update Leaderboard Stats for Podium
     setSupporterTotals(prev => ({
@@ -663,7 +694,7 @@ export default function HeroTournamentApp() {
               else points = 10;
             }
 
-            processHeroVote(hero, points, msg.author || 'Viewer', isSuperChat);
+            processHeroVote(hero, points, msg.author || 'Viewer', isSuperChat, msg.avatar || null, true);
           }
         } catch (e) {}
       };
@@ -706,7 +737,7 @@ export default function HeroTournamentApp() {
       if (targetHero) {
         // Occasionally simulate a 2-point strike or 3-point critical strike (1 in 5 votes) to showcase dynamic particle animations
         const pts = Math.random() < 0.22 ? (Math.random() < 0.5 ? 2 : 3) : 1;
-        processHeroVote(targetHero, pts, fan.name, false);
+        processHeroVote(targetHero, pts, fan.name, false, null, false);
       }
     }, intervalTime);
 
@@ -1105,30 +1136,95 @@ export default function HeroTournamentApp() {
           </div>
         )}
 
-        {/* ----------------- RECENT HERO BOOSTERS (LIVE COMMENTER SHOUTOUTS) ----------------- */}
+        {/* ----------------- LATEST HERO STRIKE (PERSISTENT REAL COMMENTER SHOUTOUT) ----------------- */}
         <footer className="ht-footer-shoutout">
           <div className="ht-shoutout-header">
-            <span className="ht-shoutout-title">📡 LIVE HERO STRIKES</span>
-            <span className="ht-shoutout-cta">TYPE IN CHAT TO JOIN</span>
+            <div className="ht-shoutout-title-wrap">
+              <span className="ht-shoutout-pulse-dot" />
+              <span className="ht-shoutout-title">LATEST HERO STRIKE</span>
+            </div>
+            <span className="ht-shoutout-cta">TYPE IN CHAT TO GET FEATURED</span>
           </div>
 
-          <div className="ht-shoutout-ticker">
-            {recentShoutouts.length === 0 ? (
-              <div className="ht-shoutout-waiting">
-                💬 Who can defeat Doctor Doom? Type any hero name in chat!
+          <div className="ht-shoutout-body">
+            {!latestStrike ? (
+              <div className="ht-latest-shoutout-row empty">
+                <div className="ht-shoutout-left">
+                  <div className="ht-shoutout-avatar-wrap empty-pulse">
+                    <span className="ht-shoutout-avatar-empty-icon">💬</span>
+                  </div>
+                  <div className="ht-shoutout-meta">
+                    <span className="ht-shoutout-prompt-title">BE THE FIRST TO STRIKE DOOM!</span>
+                    <span className="ht-shoutout-prompt-sub">Type any superhero in chat to see your name & photo</span>
+                  </div>
+                </div>
+                <div className="ht-shoutout-strike-badge empty">
+                  <span className="ht-strike-name">WAITING</span>
+                </div>
               </div>
             ) : (
-              recentShoutouts.map(item => (
-                <div key={item.id} className="ht-shoutout-item">
-                  <div className="ht-shoutout-left">
-                    <span className="ht-shoutout-user">{item.user}</span>
-                    <span className="ht-shoutout-hero" style={{ color: item.heroColor }}>
-                      struck with {item.heroName}
+              <div key={latestStrike.id} className="ht-latest-shoutout-row">
+                <div className="ht-shoutout-left">
+                  <div
+                    className="ht-shoutout-avatar-wrap"
+                    style={{
+                      borderColor: latestStrike.heroColor,
+                      boxShadow: `0 0 10px ${latestStrike.heroColor}77`
+                    }}
+                  >
+                    {latestStrike.avatar ? (
+                      <img
+                        src={latestStrike.avatar}
+                        alt={latestStrike.user}
+                        className="ht-shoutout-avatar-img"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fb = e.currentTarget.parentElement?.querySelector('.ht-shoutout-avatar-fb');
+                          if (fb) fb.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="ht-shoutout-avatar-fb"
+                      style={{
+                        display: latestStrike.avatar ? 'none' : 'flex',
+                        background: latestStrike.avatarGradient
+                      }}
+                    >
+                      {latestStrike.initial}
+                    </div>
+                  </div>
+
+                  <div className="ht-shoutout-meta">
+                    <div className="ht-shoutout-user-line">
+                      <span className="ht-shoutout-user" title={latestStrike.user}>
+                        {latestStrike.user}
+                      </span>
+                      {latestStrike.isSuperChat ? (
+                        <span className="ht-shoutout-vip-tag superchat">💎 SUPERCHAT</span>
+                      ) : latestStrike.isReal ? (
+                        <span className="ht-shoutout-vip-tag live">🔴 LIVE</span>
+                      ) : null}
+                    </div>
+                    <span className="ht-shoutout-action">
+                      struck with <b style={{ color: latestStrike.heroColor }}>{latestStrike.heroName}</b>
                     </span>
                   </div>
-                  <span className="ht-shoutout-attack">+{item.points} {item.attackName}</span>
                 </div>
-              ))
+
+                <div
+                  className="ht-shoutout-strike-badge"
+                  style={{
+                    borderColor: `${latestStrike.heroColor}88`,
+                    background: 'linear-gradient(135deg, rgba(0,0,0,0.8), rgba(20,20,30,0.85))'
+                  }}
+                >
+                  <span className="ht-strike-pts" style={{ color: latestStrike.heroColor }}>
+                    +{latestStrike.points}
+                  </span>
+                  <span className="ht-strike-name">{latestStrike.attackName}</span>
+                </div>
+              </div>
             )}
           </div>
         </footer>

@@ -1280,7 +1280,7 @@ app.post('/api/upload-music', express.json({ limit: '50mb' }), checkAuth, (req, 
 });
 
 app.post('/api/test-chat', express.json(), (req, res) => {
-  const { author, text, superChat, tier, amount } = req.body;
+  const { author, text, superChat, tier, amount, avatar } = req.body;
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
   const { parseCommand, superChatWeight, superChatTier } = require('./youtubeChat.js');
@@ -1326,6 +1326,7 @@ app.post('/api/test-chat', express.json(), (req, res) => {
   const msg = {
     id: `test-${Date.now()}`,
     author: author || 'Test User',
+    avatar: avatar || req.body.avatar || null,
     text,
     timestamp: new Date().toISOString(),
     vote,
