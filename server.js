@@ -234,6 +234,16 @@ app.post('/api/bot/test/:id', checkAuth, async (req, res) => {
     res.json(result);
 });
 
+app.post('/api/bot/verify/:id', checkAuth, async (req, res) => {
+    let videoId = req.body?.videoId || commenter.state?.settings?.targetVideoId;
+    if (!videoId && currentSettings.youtubeLiveId) {
+        const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
+        videoId = liveVideoId;
+    }
+    const result = await commenter.verifyAccount(req.params.id, videoId);
+    res.json(result);
+});
+
 app.get('/api/logs', checkAuth, (req, res) => {
     try {
         if (!fs.existsSync(LOG_FILE)) return res.send("No logs yet.");

@@ -103,6 +103,20 @@ function normalizeCookies(raw) {
 }
 
 /**
+ * Resolves the appropriate SAPISID token based on account authUser index
+ */
+function getAccountSapisid(map, authUser = 0) {
+  if (authUser && Number(authUser) > 0) {
+    const idx = String(authUser);
+    const candidate = map[`SAPISID-${idx}`] ||
+                      map[`__Secure-3PAPISID-${idx}`] ||
+                      map[`__Secure-1PAPISID-${idx}`];
+    if (candidate) return candidate;
+  }
+  return map['SAPISID'] || map['__Secure-3PAPISID'] || map['__Secure-1PAPISID'] || '';
+}
+
+/**
  * Computes Google/YouTube SAPISIDHASH for standard InnerTube authentication
  */
 function generateSapisidHash(sapisid, origin = 'https://www.youtube.com') {
@@ -123,6 +137,26 @@ function findSendParamsDeep(obj) {
   for (const key of Object.keys(obj)) {
     try {
       const found = findSendParamsDeep(obj[key]);
+      if (found) return found;
+    } catch (e) {}
+  }
+  return null;
+}
+
+/**
+ * Recursively search any JSON structure for live chat channel / author details
+ */
+function findAuthorInfoDeep(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  if (obj.liveChatMessageInputRenderer) {
+    const inp = obj.liveChatMessageInputRenderer;
+    const authorName = inp.authorName?.simpleText || inp.authorName?.runs?.[0]?.text || null;
+    const authorPhoto = inp.authorPhoto?.thumbnails?.[inp.authorPhoto.thumbnails.length - 1]?.url || null;
+    return { authorName, authorPhoto };
+  }
+  for (const key of Object.keys(obj)) {
+    try {
+      const found = findAuthorInfoDeep(obj[key]);
       if (found) return found;
     } catch (e) {}
   }
@@ -190,6 +224,10 @@ class YouTubeCommenterService {
         return {
           id: acc.id,
           name: acc.name,
+          authUser: acc.authUser !== undefined && acc.authUser !== null ? Number(acc.authUser) : 0,
+          pageId: acc.pageId || '',
+          channelName: acc.channelName || null,
+          channelAvatar: acc.channelAvatar || null,
           enabled: !!acc.enabled,
           status: acc.status || 'ready',
           lastError: acc.lastError || null,
@@ -217,18 +255,30 @@ class YouTubeCommenterService {
     return this.getStateSanitized();
   }
 
-  upsertAccount({ id, name, cookies, enabled }) {
+  upsertAccount({ id, name, cookies, authUser, pageId, enabled }) {
     const existingIdx = this.state.accounts.findIndex(a => a.id === id);
     const norm = normalizeCookies(cookies);
+
+    // Invalidate session cache for this account so new cookies/identity take effect immediately
+    if (id) {
+      for (const k of sessionCache.keys()) {
+        if (k.startsWith(`${id}_`)) sessionCache.delete(k);
+      }
+    }
+
     const accountData = {
       id: id || 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       name: (name || 'Account ' + (this.state.accounts.length + 1)).trim(),
       cookies: String(cookies || '').trim(),
+      authUser: authUser !== undefined && authUser !== null && String(authUser).trim() !== '' ? parseInt(authUser, 10) || 0 : 0,
+      pageId: pageId ? String(pageId).trim() : '',
+      channelName: existingIdx >= 0 ? this.state.accounts[existingIdx].channelName : null,
+      channelAvatar: existingIdx >= 0 ? this.state.accounts[existingIdx].channelAvatar : null,
       enabled: enabled !== undefined ? !!enabled : true,
       status: norm.hasAuth ? 'ready' : 'missing_auth',
       lastError: norm.hasAuth ? null : 'Cookies do not appear to contain Google/YouTube login tokens (SID/SAPISID).',
-      lastPostedAt: null,
-      totalSent: 0
+      lastPostedAt: existingIdx >= 0 ? this.state.accounts[existingIdx].lastPostedAt : null,
+      totalSent: existingIdx >= 0 ? (this.state.accounts[existingIdx].totalSent || 0) : 0
     };
 
     if (existingIdx >= 0) {
@@ -247,6 +297,11 @@ class YouTubeCommenterService {
   }
 
   deleteAccount(id) {
+    if (id) {
+      for (const k of sessionCache.keys()) {
+        if (k.startsWith(`${id}_`)) sessionCache.delete(k);
+      }
+    }
     const idx = this.state.accounts.findIndex(a => a.id === id);
     if (idx >= 0) {
       const removed = this.state.accounts.splice(idx, 1)[0];
@@ -337,15 +392,32 @@ class YouTubeCommenterService {
     const norm = normalizeCookies(account.cookies);
     if (!norm.cookieStr) throw new Error('Missing cookies for account ' + account.name);
 
-    const popoutUrl = `https://www.youtube.com/live_chat?v=${videoId}&is_popout=1`;
-    const res = await fetch(popoutUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Cookie': norm.cookieStr,
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
-    });
+    const authUser = account.authUser !== undefined && account.authUser !== null && String(account.authUser).trim() !== ''
+      ? String(account.authUser).trim()
+      : '';
+    const pageId = account.pageId ? String(account.pageId).trim() : '';
 
+    let popoutUrl = `https://www.youtube.com/live_chat?v=${videoId}&is_popout=1`;
+    if (authUser && authUser !== '0') {
+      popoutUrl += `&authuser=${encodeURIComponent(authUser)}`;
+    }
+    if (pageId) {
+      popoutUrl += `&pageId=${encodeURIComponent(pageId)}`;
+    }
+
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Cookie': norm.cookieStr,
+      'Accept-Language': 'en-US,en;q=0.9'
+    };
+    if (authUser && authUser !== '0') {
+      headers['X-Goog-AuthUser'] = authUser;
+    }
+    if (pageId) {
+      headers['X-Goog-PageId'] = pageId;
+    }
+
+    const res = await fetch(popoutUrl, { headers });
     if (!res.ok) {
       throw new Error(`Failed to load YouTube live chat (HTTP ${res.status})`);
     }
@@ -389,12 +461,39 @@ class YouTubeCommenterService {
       throw new Error('Could not locate live chat send token. Check if chat is enabled and account has permissions.');
     }
 
+    // Detect actual authenticated channel identity
+    const authorInfo = findAuthorInfoDeep(ytInitialData);
+    let channelName = authorInfo?.authorName || null;
+    let channelAvatar = authorInfo?.authorPhoto || null;
+    if (!channelName) {
+      const mName = html.match(/"authorName":\s*\{\s*"simpleText":\s*"([^"]+)"\}/) ||
+                    html.match(/"USER_DISPLAY_NAME":\s*"([^"]+)"/) ||
+                    html.match(/"USER_NAME":\s*"([^"]+)"/);
+      if (mName) channelName = mName[1];
+    }
+    if (!channelAvatar) {
+      const mAvatar = html.match(/"authorPhoto":\s*\{\s*"thumbnails":\s*\[\s*\{\s*"url":\s*"([^"]+)"/);
+      if (mAvatar) channelAvatar = mAvatar[1];
+    }
+
+    if (channelName) {
+      account.channelName = channelName;
+      if (channelAvatar) account.channelAvatar = channelAvatar;
+      this.saveState();
+    }
+
+    const sapisid = getAccountSapisid(norm.map, authUser);
+
     const session = {
       apiKey,
       clientVersion,
       sendParams,
-      sapisid: norm.sapisid,
+      sapisid,
       cookieStr: norm.cookieStr,
+      authUser,
+      pageId,
+      channelName,
+      channelAvatar,
       expiresAt: Date.now() + 15 * 60 * 1000 // Cache for 15 minutes
     };
 
@@ -418,7 +517,8 @@ class YouTubeCommenterService {
             clientVersion: session.clientVersion,
             originalUrl: `https://www.youtube.com/live_chat?v=${videoId}&is_popout=1`,
             platform: 'DESKTOP'
-          }
+          },
+          user: session.pageId ? { onBehalfOfUser: session.pageId } : {}
         },
         params: session.sendParams,
         richMessage: {
@@ -426,17 +526,25 @@ class YouTubeCommenterService {
         }
       };
 
+      const postHeaders = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cookie': session.cookieStr,
+        'Authorization': authHeader,
+        'X-Origin': 'https://www.youtube.com',
+        'X-YouTube-Client-Name': '1',
+        'X-YouTube-Client-Version': session.clientVersion
+      };
+      if (session.authUser && session.authUser !== '0') {
+        postHeaders['X-Goog-AuthUser'] = session.authUser;
+      }
+      if (session.pageId) {
+        postHeaders['X-Goog-PageId'] = session.pageId;
+      }
+
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Cookie': session.cookieStr,
-          'Authorization': authHeader,
-          'X-Origin': 'https://www.youtube.com',
-          'X-YouTube-Client-Name': '1',
-          'X-YouTube-Client-Version': session.clientVersion
-        },
+        headers: postHeaders,
         body: JSON.stringify(payload)
       });
 
@@ -449,8 +557,9 @@ class YouTubeCommenterService {
         account.totalSent = (account.totalSent || 0) + 1;
         this.saveState();
 
-        addLog(account.name, `Sent: "${message}"`, 'success', `HTTP 200 OK`);
-        return { ok: true, message, account: account.name, data };
+        const channelLabel = account.channelName ? ` [${account.channelName}]` : '';
+        addLog(account.name + channelLabel, `Sent: "${message}"`, 'success', `HTTP 200 OK`);
+        return { ok: true, message, account: account.name, channelName: account.channelName, data };
       } else {
         const errMsg = data.error?.message || `YouTube API error (HTTP ${res.status})`;
         account.status = 'error';
@@ -468,6 +577,35 @@ class YouTubeCommenterService {
       this.saveState();
       sessionCache.delete(`${account.id}_${videoId}`);
       addLog(account.name, `Error sending comment`, 'error', err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Verifies an account identity and detects the real channel name
+   */
+  async verifyAccount(accountId, sampleVideoId = null) {
+    const account = this.state.accounts.find(a => a.id === accountId);
+    if (!account) return { ok: false, error: 'Account not found' };
+
+    const videoId = sampleVideoId || this.state.settings.targetVideoId;
+    if (!videoId) return { ok: false, error: 'Please set a YouTube Live Video ID first in the settings.' };
+
+    try {
+      sessionCache.delete(`${account.id}_${videoId}`);
+      const session = await this.getLiveChatSession(account, videoId);
+      return {
+        ok: true,
+        accountName: account.name,
+        channelName: session.channelName || account.channelName || 'Authenticated Channel',
+        channelAvatar: session.channelAvatar || account.channelAvatar || null,
+        authUser: session.authUser || 0,
+        pageId: session.pageId || null
+      };
+    } catch (err) {
+      account.status = 'error';
+      account.lastError = err.message;
+      this.saveState();
       return { ok: false, error: err.message };
     }
   }

@@ -1578,14 +1578,40 @@
                         <label style="font-size: 11px; color: #cbd5e1; font-weight: 600; margin: 0;">YouTube Session Cookies</label>
                         <span id="bot-cookie-chip" style="font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(148, 163, 184, 0.15); color: #94a3b8;">Paste below</span>
                     </div>
-                    <textarea id="bot-acc-cookies" rows="7" placeholder="Paste cookies in ANY format:&#10;• Cookie-Editor JSON export&#10;• Header string (SAPISID=...; SID=...;)&#10;• Netscape tab-separated cookies" oninput="analyzeCookieInput()" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: #38bdf8; font-family: monospace; font-size: 11.5px; line-height: 1.4; resize: vertical; box-sizing: border-box;"></textarea>
-                    
-                    <div style="font-size: 11px; color: #94a3b8; margin-top: 8px; line-height: 1.5; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 6px;">
-                        💡 <b>How to get cookies in 10 seconds:</b><br>
-                        1. In Google Chrome with your 2nd account, install the free extension <b>Cookie-Editor</b>.<br>
-                        2. Open <code>youtube.com</code> and make sure you are signed in.<br>
-                        3. Click Cookie-Editor ➔ click <b>"Export"</b> ➔ click <b>"Export as JSON"</b> (or Header string).<br>
-                        4. Paste here and click <b>Save Account</b>!
+                    <textarea id="bot-acc-cookies" rows="6" placeholder="Paste cookies in ANY format:&#10;• Cookie-Editor JSON export&#10;• Header string (SAPISID=...; SID=...;)&#10;• Netscape tab-separated cookies" oninput="analyzeCookieInput()" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: #38bdf8; font-family: monospace; font-size: 11.5px; line-height: 1.4; resize: vertical; box-sizing: border-box;"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                    <div class="sg">
+                        <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px; font-weight: 600;">Google Account Index (authuser)</label>
+                        <select id="bot-acc-authuser" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px;">
+                            <option value="0">0 (Dedicated Profile - Default)</option>
+                            <option value="1">1 (2nd Account in Same Window)</option>
+                            <option value="2">2 (3rd Account in Same Window)</option>
+                            <option value="3">3 (4th Account in Same Window)</option>
+                        </select>
+                        <span style="font-size: 10px; color: #94a3b8; display: block; margin-top: 3px;">Select 1 if you used "Switch Account" in the same Chrome profile.</span>
+                    </div>
+                    <div class="sg">
+                        <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px; font-weight: 600;">Brand Page ID <span style="font-weight: 400; color: #94a3b8;">(Optional)</span></label>
+                        <input type="text" id="bot-acc-pageid" placeholder="Optional Page ID" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                        <span style="font-size: 10px; color: #94a3b8; display: block; margin-top: 3px;">Only for secondary YouTube Brand Account channels.</span>
+                    </div>
+                </div>
+
+                <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 12px; border-radius: 8px;">
+                    <div style="font-weight: 700; color: #38bdf8; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
+                        <span>🛡️</span> How to Guarantee Comments Never Use Your Main Channel:
+                    </div>
+                    <div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">
+                        When multiple accounts are signed into one Chrome browser, Google keeps your main channel (Index 0) as the primary cookie owner.
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); padding: 9px 11px; border-radius: 6px; color: #f1f5f9; font-size: 11px;">
+                        <b>⭐️ 100% Isolated 2-Minute Setup:</b><br>
+                        1. In Google Chrome, click your profile icon (top-right next to 3 dots) ➔ <b>"Add"</b> ➔ <i>"Continue without an account"</i>.<br>
+                        2. In that clean profile, open <code>youtube.com</code> and log into <b>ONLY your 2nd commenter account</b>.<br>
+                        3. Install Cookie-Editor, click <b>Export</b> ➔ <b>Export as JSON</b>.<br>
+                        4. Paste here (keep Index as 0) and click <b>Save Account</b>. Then click <b>"🔍 Detect Channel"</b> to see your 2nd account's handle confirmed!
                     </div>
                 </div>
 
@@ -3585,18 +3611,32 @@
                         const statusBadgeText = acc.status === 'ready' ? '🟢 Ready' : acc.status === 'missing_auth' ? '⚠️ Missing Tokens' : '❌ Error';
                         const timeStr = acc.lastPostedAt ? new Date(acc.lastPostedAt).toLocaleTimeString() : 'Never';
 
+                        const avatarHtml = acc.channelAvatar
+                            ? `<img src="${escapeHtml(acc.channelAvatar)}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1.5px solid #38bdf8; flex-shrink: 0;" alt="avatar">`
+                            : `<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;">👤</div>`;
+
+                        const channelDisplay = acc.channelName
+                            ? `<span style="color: #38bdf8; font-weight: 700; font-size: 11.5px;">📺 @${escapeHtml(acc.channelName)}</span>`
+                            : `<span style="color: #94a3b8; font-size: 11px; font-style: italic;">📺 Unverified (Click "Detect Channel")</span>`;
+
+                        const authUserBadge = (acc.authUser !== undefined && acc.authUser !== 0 && acc.authUser !== '0')
+                            ? `<span style="font-size: 9.5px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: rgba(168,85,247,0.2); color: #c084fc;">authuser=${acc.authUser}</span>`
+                            : '';
+
                         return `
-                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-                            <div style="display: flex; align-items: center; gap: 12px; min-width: 200px;">
-                                <div style="font-size: 20px;">👤</div>
+                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 12px; min-width: 220px;">
+                                ${avatarHtml}
                                 <div>
                                     <div style="font-weight: 700; color: #f8fafc; font-size: 13px; display: flex; align-items: center; gap: 8px;">
                                         ${escapeHtml(acc.name)}
                                         <span style="font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: ${acc.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(148,163,184,0.15)'}; color: ${acc.enabled ? '#4ade80' : '#94a3b8'};">
                                             ${acc.enabled ? 'ACTIVE' : 'MUTED'}
                                         </span>
+                                        ${authUserBadge}
                                     </div>
-                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; display: flex; gap: 10px;">
+                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 3px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                        ${channelDisplay}
                                         <span>🍪 ${acc.cookieSummary?.count || 0} cookies</span>
                                         <span style="color: ${statusColor}; font-weight: 600;">${statusBadgeText}</span>
                                         <span>💬 Sent: <b>${acc.totalSent || 0}</b></span>
@@ -3606,6 +3646,9 @@
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="btn" onclick="verifyBotAccount('${acc.id}')" title="Detect and verify which YouTube channel will post from these cookies" style="font-size: 11px; padding: 5px 10px; background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.4); color: #c084fc;">
+                                    🔍 Detect Channel
+                                </button>
                                 <button class="btn" onclick="testBotAccount('${acc.id}')" title="Send 1 test comment immediately using this account" style="font-size: 11px; padding: 5px 10px; background: rgba(56,189,248,0.12); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">
                                     🧪 Test Post
                                 </button>
@@ -3673,6 +3716,10 @@
             document.getElementById('bot-acc-id').value = '';
             document.getElementById('bot-acc-name').value = '';
             document.getElementById('bot-acc-cookies').value = '';
+            const authUserEl = document.getElementById('bot-acc-authuser');
+            if (authUserEl) authUserEl.value = '0';
+            const pageIdEl = document.getElementById('bot-acc-pageid');
+            if (pageIdEl) pageIdEl.value = '';
             document.getElementById('bot-modal-title').innerHTML = '<span>🍪</span> Add YouTube Bot Account';
             document.getElementById('bot-cookie-chip').textContent = 'Paste below';
             document.getElementById('bot-cookie-chip').style.color = '#94a3b8';
@@ -3686,6 +3733,10 @@
             document.getElementById('bot-acc-id').value = account.id;
             document.getElementById('bot-acc-name').value = account.name;
             document.getElementById('bot-acc-cookies').value = '';
+            const authUserEl = document.getElementById('bot-acc-authuser');
+            if (authUserEl) authUserEl.value = (account.authUser !== undefined && account.authUser !== null) ? account.authUser : '0';
+            const pageIdEl = document.getElementById('bot-acc-pageid');
+            if (pageIdEl) pageIdEl.value = account.pageId || '';
             document.getElementById('bot-modal-title').innerHTML = `<span>✏️</span> Edit Account: ${escapeHtml(account.name)}`;
             document.getElementById('bot-cookie-chip').textContent = 'Leave blank to keep existing';
             document.getElementById('bot-cookie-chip').style.color = '#38bdf8';
@@ -3724,6 +3775,8 @@
             const id = document.getElementById('bot-acc-id').value;
             const name = document.getElementById('bot-acc-name').value.trim() || 'Account ' + ((vpsBotStateCache?.accounts?.length || 0) + 1);
             const cookies = document.getElementById('bot-acc-cookies').value.trim();
+            const authUser = parseInt(document.getElementById('bot-acc-authuser')?.value, 10) || 0;
+            const pageId = document.getElementById('bot-acc-pageid')?.value.trim() || undefined;
 
             if (!id && !cookies) {
                 return showAlert('Please paste your YouTube cookies', true);
@@ -3733,12 +3786,12 @@
                 const res = await fetch('/api/bot/accounts', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ id: id || undefined, name, cookies })
+                    body: JSON.stringify({ id: id || undefined, name, cookies, authUser, pageId })
                 });
                 const data = await res.json();
                 renderVpsBotState(data);
                 closeBotAccountModal();
-                showAlert(`✅ Account "${name}" saved!`);
+                showAlert(`✅ Account "${name}" saved! Click "🔍 Detect Channel" to verify identity.`);
             } catch (e) {
                 showAlert('Failed to save bot account', true);
             }
@@ -3756,13 +3809,30 @@
             }
         }
 
+        async function verifyBotAccount(id) {
+            showAlert('🔍 Connecting to YouTube to verify channel identity...');
+            try {
+                const res = await fetch(`/api/bot/verify/${id}`, { method: 'POST', headers: API_HEADERS() });
+                const data = await res.json();
+                if (data.ok) {
+                    showAlert(`🎯 Verified: Active as @${data.channelName} (${data.accountName})!`);
+                    fetchVpsBotState();
+                } else {
+                    showAlert(`⚠️ Verification failed: ${data.error || 'Could not verify channel identity'}`, true);
+                    fetchVpsBotState();
+                }
+            } catch (e) {
+                showAlert('Verification request failed: ' + e.message, true);
+            }
+        }
+
         async function testBotAccount(id) {
             showAlert('🧪 Testing comment from account...');
             try {
                 const res = await fetch(`/api/bot/test/${id}`, { method: 'POST', headers: API_HEADERS() });
                 const data = await res.json();
                 if (data.ok) {
-                    showAlert(`💬 Sent "${data.message}" from ${data.account}! (HTTP 200)`);
+                    showAlert(`💬 Sent "${data.message}" from @${data.channelName || data.account}! (HTTP 200)`);
                 } else {
                     showAlert(`Test failed: ${data.error}`, true);
                 }
