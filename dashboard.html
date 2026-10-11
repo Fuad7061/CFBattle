@@ -399,10 +399,18 @@
             font-weight: 700; cursor: pointer; letter-spacing: 1px; font-size: 11px; transition: filter 0.2s;
         }
         #settings-modal .sp-save-btn:hover { filter: brightness(1.12); }
-        #settings-modal[data-engine="points-race"] .physics-only { display: none !important; }
+        #settings-modal[data-engine="hero-tournament"] .physics-only,
+        #settings-modal[data-engine="hero-tournament"] .pr-only { display: none !important; }
+        #settings-modal[data-engine="hero-tournament"] .ht-only { display: block !important; }
+        #settings-modal:not([data-engine="hero-tournament"]) .ht-only { display: none !important; }
+
+        #settings-modal[data-engine="points-race"] .physics-only,
+        #settings-modal[data-engine="points-race"] .ht-only { display: none !important; }
         #settings-modal[data-engine="points-race"] .pr-only { display: block !important; }
-        #settings-modal:not([data-engine="points-race"]) .pr-only { display: none !important; }
-        #settings-modal:not([data-engine="points-race"]) .physics-only { display: block !important; }
+
+        #settings-modal:not([data-engine="points-race"]):not([data-engine="hero-tournament"]) .pr-only,
+        #settings-modal:not([data-engine="points-race"]):not([data-engine="hero-tournament"]) .ht-only { display: none !important; }
+        #settings-modal:not([data-engine="points-race"]):not([data-engine="hero-tournament"]) .physics-only { display: block !important; }
         @media (max-width: 520px) { #settings-modal .modal-card { max-width: 100%; } }
 
         /* --- SCHEDULE MODAL --- */
@@ -1347,6 +1355,52 @@
                         <input type="file" id="pr-music-file" accept="audio/*" onchange="uploadCustomMusic(this)" style="font-size: 12px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px dashed var(--border); border-radius: 6px; width: 100%;">
                         <div id="pr-music-upload-status" style="font-size: 11px; margin-top: 5px; color: var(--text-muted);">Current: /custom-music.mp3</div>
                         <input type="hidden" id="pr-custom-music-url" value="/custom-music.mp3">
+                    </div>
+                </div>
+
+                <!-- MULTIVERSE HERO TOURNAMENT (DOOMSDAY) SECTION -->
+                <div class="ht-only">
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Avengers: Doomsday Tournament Rules</div>
+                    <div class="sg">
+                        <label>Points to Breach Doctor Doom's Shield (Qualify &amp; Win)</label>
+                        <select id="ht-target-points" onchange="onHtTargetPointsChange(this.value)">
+                            <option value="30">30 Points (Hyper Sprint Showdown)</option>
+                            <option value="50" selected>50 Points (Fast Live Viral Match — Recommended)</option>
+                            <option value="75">75 Points (Extended Battle)</option>
+                            <option value="100">100 Points (Standard Esports Battle)</option>
+                            <option value="250">250 Points (Marathon Tournament)</option>
+                        </select>
+                    </div>
+                    <div class="sg">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="ht-auto-voter" checked onchange="onHtAutoVoterChange(this.checked)">
+                            <label for="ht-auto-voter"><b>Auto-Voter Hype Engine</b> <small style="color: rgba(255,255,255,0.5);">(Simulates active comic fans when chat is quiet, pauses immediately when real viewers comment)</small></label>
+                        </div>
+                    </div>
+                    <div class="sg" style="margin-top: 10px;">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="ht-voice-cues" checked>
+                            <label for="ht-voice-cues"><b>Announcer Voice &amp; Sound FX</b> <small style="color: rgba(255,255,255,0.5);">(Doom taunts, qualifiers, attacks, and victory fanfare)</small></label>
+                        </div>
+                    </div>
+
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Doomsday Theme Music &amp; Audio Controls</div>
+                    <div class="sg">
+                        <label>Theme Music Volume (<span id="ht-music-vol-val">60%</span>)</label>
+                        <div class="range-row">
+                            <span>0%</span>
+                            <input type="range" id="ht-music-vol" min="0" max="1" step="0.05" value="0.60" oninput="document.getElementById('ht-music-vol-val').textContent = Math.round(this.value*100)+'%'; onHtMusicVolChange(this.value)">
+                            <span>100%</span>
+                        </div>
+                    </div>
+                    <div class="sg">
+                        <label>Director Quick Stage Jump</label>
+                        <div style="display: flex; gap: 8px; margin-top: 4px;">
+                            <button type="button" class="btn" style="flex: 1; font-size: 11px; padding: 6px; background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #6ee7b7;" onclick="sendDirectorCmd('reset')">↺ RESET QUALIFIERS</button>
+                            <button type="button" class="btn" style="flex: 1; font-size: 11px; padding: 6px; background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; color: #fef08a;" onclick="sendDirectorCmd('next_stage')">⏩ NEXT STAGE</button>
+                        </div>
                     </div>
                 </div>
 
@@ -2717,6 +2771,18 @@
                 if (s.gameSettings.hypeEnabled !== undefined && document.getElementById('pr-hype-enabled')) {
                     document.getElementById('pr-hype-enabled').checked = s.gameSettings.hypeEnabled;
                 }
+                // Multiverse Hero Tournament settings
+                if (s.gameSettings.targetPoints !== undefined && document.getElementById('ht-target-points')) {
+                    document.getElementById('ht-target-points').value = s.gameSettings.targetPoints;
+                }
+                if (s.gameSettings.autoVoter !== undefined && document.getElementById('ht-auto-voter')) {
+                    document.getElementById('ht-auto-voter').checked = s.gameSettings.autoVoter;
+                }
+                if (s.gameSettings.musicVol !== undefined && document.getElementById('ht-music-vol')) {
+                    document.getElementById('ht-music-vol').value = s.gameSettings.musicVol;
+                    const lbl = document.getElementById('ht-music-vol-val');
+                    if (lbl) lbl.textContent = Math.round(s.gameSettings.musicVol * 100) + '%';
+                }
             }
         }
 
@@ -2736,13 +2802,18 @@
                 wmSize: parseInt(document.getElementById('live-wm-size').value) || 32,
                 wmCount: parseInt(document.getElementById('live-wm-count').value) || 3,
                 wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15,
-                // Points Race fields
-                targetPoints: parseInt(document.getElementById('pr-target-points')?.value) || 50,
+                // Points Race & Hero Tournament fields
+                targetPoints: selectedEngine() === 'hero-tournament'
+                    ? (parseInt(document.getElementById('ht-target-points')?.value) || 50)
+                    : (parseInt(document.getElementById('pr-target-points')?.value) || 50),
+                autoVoter: document.getElementById('ht-auto-voter')?.checked ?? true,
                 teamup: document.getElementById('pr-teamup')?.checked ?? true,
                 fairPlay: document.getElementById('pr-fair-play')?.checked ?? true,
                 hypeEnabled: document.getElementById('pr-hype-enabled')?.checked ?? true,
                 musicSource: document.getElementById('pr-music-source')?.value || 'procedural',
-                musicVol: parseFloat(document.getElementById('pr-music-vol')?.value) || 0.50,
+                musicVol: selectedEngine() === 'hero-tournament'
+                    ? (parseFloat(document.getElementById('ht-music-vol')?.value) || 0.60)
+                    : (parseFloat(document.getElementById('pr-music-vol')?.value) || 0.50),
                 customMusicUrl: document.getElementById('pr-custom-music-url')?.value || '/custom-music.mp3'
             };
         }
@@ -2806,6 +2877,14 @@
             if (win.pointsRace) {
                 win.pointsRace.setSettings?.(gamePayload);
             }
+            if (win.heroTournament) {
+                if (gamePayload.targetPoints !== undefined) win.heroTournament.setTargetPoints?.(Number(gamePayload.targetPoints));
+                if (gamePayload.autoVoter !== undefined) win.heroTournament.setAutoVoter?.(Boolean(gamePayload.autoVoter));
+                if (gamePayload.speed !== undefined) win.heroTournament.setSpeed?.(Number(gamePayload.speed));
+            }
+            if (win.heroAudio) {
+                if (gamePayload.musicVol !== undefined) win.heroAudio.setVolume?.(Number(gamePayload.musicVol));
+            }
             if (win.pointsAudio) {
                 if (gamePayload.musicVol !== undefined) win.pointsAudio.setBgVolume?.(Number(gamePayload.musicVol));
                 if (gamePayload.musicSource === 'custom' && gamePayload.customMusicUrl) {
@@ -2822,6 +2901,18 @@
         }
 
         function onMusicSourceChange() {
+            applyGameToPreview(buildGamePayload());
+        }
+
+        function onHtTargetPointsChange(val) {
+            applyGameToPreview(buildGamePayload());
+        }
+
+        function onHtAutoVoterChange(chk) {
+            applyGameToPreview(buildGamePayload());
+        }
+
+        function onHtMusicVolChange(val) {
             applyGameToPreview(buildGamePayload());
         }
 
@@ -3142,6 +3233,25 @@
                 try {
                     const win = frame.contentWindow;
 
+                    // 0. Hero Tournament (Multiverse Doomsday)
+                    if (win.heroTournament) {
+                        if (cmd === 'start') {
+                            win.heroTournament.resume?.();
+                            isPausedNow = false;
+                        } else if (cmd === 'pause') {
+                            isPausedNow = win.heroTournament.togglePause?.();
+                        } else if (cmd === 'reset') {
+                            win.heroTournament.reset?.();
+                        } else if (cmd === 'next_stage') {
+                            win.heroTournament.nextStage?.();
+                        } else if (cmd === 'clear_supporters') {
+                            win.heroTournament.resetSupporters?.();
+                        }
+                    }
+                    if (win.heroAudio && cmd === 'mute') {
+                        win.heroAudio.toggleMute?.();
+                    }
+
                     // 1. Points Race engine
                     if (win.pointsRace) {
                         if (cmd === 'start') {
@@ -3254,6 +3364,7 @@
                     if (frame && frame.contentWindow) {
                         frame.contentWindow.postMessage({ type: 'RESET_SUPPORTERS' }, '*');
                         const win = frame.contentWindow;
+                        if (win.heroTournament) win.heroTournament.resetSupporters?.();
                         if (win.pointsRace) win.pointsRace.resetSupporters?.();
                         if (win.gameInstance && win.gameInstance.ui && typeof win.gameInstance.ui.resetSupporters === 'function') {
                             win.gameInstance.ui.resetSupporters(true);
@@ -3269,7 +3380,7 @@
             }
 
             if (isStreaming || isRecording) {
-                const apiAction = cmd === 'start' ? 'new-round' : (cmd === 'reset' ? 'new-round' : (cmd === 'mute' ? 'toggle-sound' : (cmd === 'pause' ? 'toggle-pause' : (cmd === 'clear_supporters' ? 'clear-supporters' : ''))));
+                const apiAction = cmd === 'start' ? 'new-round' : (cmd === 'reset' ? 'new-round' : (cmd === 'mute' ? 'toggle-sound' : (cmd === 'pause' ? 'toggle-pause' : (cmd === 'clear_supporters' ? 'clear-supporters' : (cmd === 'next_stage' ? 'next-stage' : '')))));
                 if (apiAction) {
                     fetch('/api/control', {
                         method: 'POST',
@@ -3292,6 +3403,9 @@
             if (frame && frame.contentWindow) {
                 try {
                     const win = frame.contentWindow;
+                    if (win.heroTournament) {
+                        win.heroTournament.setSpeed?.(Number(val));
+                    }
                     if (win.pointsRace) {
                         win.pointsRace.setSpeed?.(Number(val));
                     }

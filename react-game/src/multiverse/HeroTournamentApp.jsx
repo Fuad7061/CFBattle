@@ -81,6 +81,36 @@ export default function HeroTournamentApp() {
   const [activePopup, setActivePopup] = useState(null);
   const [floatingDamage, setFloatingDamage] = useState([]);
 
+  // Auto-scale canvas: Base 440x780 design scales to fit any screen with zero overflow
+  const [scaleFactor, setScaleFactor] = useState(1);
+  const baseWidth = 440;
+  const baseHeight = 780;
+
+  useEffect(() => {
+    const handleResize = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const s = Math.min((vw - 4) / baseWidth, (vh - 4) / baseHeight);
+      setScaleFactor(s > 0 ? s : 1);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Director pause & speed state
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
+
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  const speedMultiplierRef = useRef(1);
+  speedMultiplierRef.current = speedMultiplier;
+
+  const [autoVoterEnabled, setAutoVoterEnabled] = useState(true);
+  const autoVoterEnabledRef = useRef(true);
+  autoVoterEnabledRef.current = autoVoterEnabled;
+
   // Real vs Auto-voter timing reference
   const lastRealChatRef = useRef(Date.now());
   const tournamentStageRef = useRef(stage);
@@ -125,6 +155,7 @@ export default function HeroTournamentApp() {
   // Periodic Doctor Doom Taunt Popup (adds dynamic stream excitement)
   useEffect(() => {
     const tauntInterval = setInterval(() => {
+      if (isPausedRef.current) return;
       if (tournamentStageRef.current === 'celebration') return;
       const randomTaunt = DOOM_TAUNTS[Math.floor(Math.random() * DOOM_TAUNTS.length)];
       try {
@@ -139,15 +170,16 @@ export default function HeroTournamentApp() {
         subtitle: randomTaunt.sub,
         color: '#10b981',
         type: 'doom'
-      }, 3400);
-    }, 22000);
+      }, 6500); // 6.5s to give viewers plenty of time to read
+    }, 24000);
 
     return () => clearInterval(tauntInterval);
   }, []);
 
-  // Popup Trigger Helper
-  const triggerPopup = (popupData, duration = 3000) => {
-    setActivePopup(popupData);
+  // Popup Trigger Helper with generous duration so viewers can read comfortably
+  const triggerPopup = (popupData, duration = 6000) => {
+    const dataWithDur = { ...popupData, duration };
+    setActivePopup(dataWithDur);
     setTimeout(() => {
       setActivePopup(current => (current?.id === popupData.id ? null : current));
     }, duration);
@@ -158,55 +190,208 @@ export default function HeroTournamentApp() {
     fetch('/api/status')
       .then(res => res.json())
       .then(data => {
-        if (data.settings?.gameSettings?.pointsTarget) {
-          setTargetPoints(Number(data.settings.gameSettings.pointsTarget) || 50);
+        const gs = data.settings?.gameSettings;
+        if (gs?.pointsTarget || gs?.targetPoints) {
+          const pts = Number(gs.pointsTarget || gs.targetPoints) || 50;
+          setTargetPoints(pts);
+          targetPointsRef.current = pts;
         }
-        if (data.settings?.gameSettings?.customMusicUrl) {
-          heroAudio.loadBgMusic(data.settings.gameSettings.customMusicUrl);
+        if (gs?.autoVoter !== undefined) {
+          setAutoVoterEnabled(Boolean(gs.autoVoter));
+          autoVoterEnabledRef.current = Boolean(gs.autoVoter);
+        }
+        if (gs?.speed !== undefined) {
+          window.heroTournament?.setSpeed(gs.speed);
+        }
+        if (gs?.musicVol !== undefined) {
+          heroAudio.setVolume(Number(gs.musicVol));
+        }
+        if (gs?.customMusicUrl) {
+          heroAudio.loadBgMusic(gs.customMusicUrl);
         }
       })
       .catch(() => {});
   }, []);
 
   // --------------------------------------------------------------------------
-  // EXPOSE GLOBAL API FOR DIRECTOR CONTROLS
+  // EXPOSE GLOBAL API FOR DIRECTOR CONTROLS (DASHBOARD FULL INTEGRATION)
   // --------------------------------------------------------------------------
   useEffect(() => {
     window.heroTournament = {
+      start: () => {
+        setIsPaused(false);
+        isPausedRef.current = false;
+        heroAudio.playBoost('#10b981');
+        heroAudio.speak('Tournament resumed!');
+        return false;
+      },
+      resume: () => {
+        setIsPaused(false);
+        isPausedRef.current = false;
+        heroAudio.playBoost('#10b981');
+        heroAudio.speak('Tournament resumed!');
+        return false;
+      },
+      pause: () => {
+        setIsPaused(true);
+        isPausedRef.current = true;
+        return true;
+      },
+      togglePause: () => {
+        const next = !isPausedRef.current;
+        setIsPaused(next);
+        isPausedRef.current = next;
+        if (next) heroAudio.speak('Tournament paused.');
+        else heroAudio.speak('Tournament resumed!');
+        return next;
+      },
       reset: () => {
         const fresh = {};
         HEROES.forEach(h => { fresh[h.id] = 0; });
         setQualifierScores(fresh);
         setQualifiers([]);
+        qualifiersRef.current = [];
         setTeamupScores({ team1: 0, team2: 0 });
         setFinalists([]);
+        finalistsRef.current = [];
         setFinalsScores({});
         setChampion(null);
         setStage('qualifiers');
+        tournamentStageRef.current = 'qualifiers';
+        setIsPaused(false);
+        isPausedRef.current = false;
         heroAudio.playBoost();
         heroAudio.speak('Avengers Doomsday gauntlet reset! Who will defeat Doctor Doom?');
+        triggerPopup({
+          id: 'reset-' + Date.now(),
+          icon: '↺',
+          badge: 'DIRECTOR RESET',
+          title: 'GAUNTLET RESET TO STAGE 1',
+          subtitle: 'Doctor Doom recharges his shield! Vote your heroes!',
+          color: '#10b981',
+          type: 'milestone'
+        }, 5500);
+      },
+      nextStage: () => {
+        const curStage = tournamentStageRef.current;
+        if (curStage === 'qualifiers') {
+          // Take top 4 from current leaderboard
+          const sorted = [...HEROES].sort((a, b) => (qualifierScores[b.id] || 0) - (qualifierScores[a.id] || 0));
+          const top4 = sorted.slice(0, 4);
+          setQualifiers(top4);
+          qualifiersRef.current = top4;
+          setStage('teamup');
+          tournamentStageRef.current = 'teamup';
+          setTeamupScores({ team1: 0, team2: 0 });
+          heroAudio.playTeamupGong();
+          heroAudio.speak('Alliance Strike Force engaged!');
+          triggerPopup({
+            id: 'adv-teamup-' + Date.now(),
+            icon: '⚔️',
+            badge: 'DIRECTOR ADVANCE',
+            title: 'ALLIANCE STRIKE FORCE ENGAGED!',
+            subtitle: `${top4[0].name} & ${top4[3].name} vs ${top4[1].name} & ${top4[2].name}!`,
+            color: '#10b981',
+            type: 'stage'
+          }, 6500);
+        } else if (curStage === 'teamup') {
+          // Advance to Finals with top 2
+          const q = qualifiersRef.current.length >= 4 ? qualifiersRef.current : HEROES.slice(0, 4);
+          const top2 = teamupScores.team1 >= teamupScores.team2 ? [q[0], q[3]] : [q[1], q[2]];
+          setFinalists(top2);
+          finalistsRef.current = top2;
+          const initF = {};
+          initF[top2[0].id] = 0;
+          initF[top2[1].id] = 0;
+          setFinalsScores(initF);
+          setStage('finals');
+          tournamentStageRef.current = 'finals';
+          heroAudio.playTeamupGong();
+          heroAudio.speak(`Grand Final! ${top2[0].name} versus ${top2[1].name}!`);
+          triggerPopup({
+            id: 'adv-finals-' + Date.now(),
+            icon: '🔥',
+            badge: 'DIRECTOR ADVANCE',
+            title: 'FINAL STAND AGAINST DOCTOR DOOM!',
+            subtitle: `${top2[0].name} vs ${top2[1].name}!`,
+            color: '#ef4444',
+            type: 'stage'
+          }, 6500);
+        } else if (curStage === 'finals') {
+          // Crown leader
+          const fin = finalistsRef.current.length === 2 ? finalistsRef.current : HEROES.slice(0, 2);
+          const champ = (finalsScores[fin[0].id] || 0) >= (finalsScores[fin[1].id] || 0) ? fin[0] : fin[1];
+          setChampion(champ);
+          setStage('celebration');
+          tournamentStageRef.current = 'celebration';
+          heroAudio.playVictoryFanfare();
+          heroAudio.speak(`${champ.name} has slain Doctor Doom!`);
+        } else {
+          window.heroTournament.reset();
+        }
+      },
+      resetSupporters: () => {
+        setRecentShoutouts([]);
+        setSupporterTotals({});
+        heroAudio.playBoost('#38bdf8');
+        triggerPopup({
+          id: 'clear-sup-' + Date.now(),
+          icon: '👑',
+          badge: 'LEADERBOARD RESET',
+          title: 'SUPPORTERS RESET FOR NEW STREAM',
+          subtitle: 'Type any hero in chat to become #1 supporter!',
+          color: '#38bdf8',
+          type: 'milestone'
+        }, 5500);
+      },
+      setSpeed: (val) => {
+        const spd = Math.max(0.5, Math.min(5, Number(val) || 1));
+        setSpeedMultiplier(spd);
+        speedMultiplierRef.current = spd;
       },
       setVolume: (vol) => {
         heroAudio.setVolume(vol);
       },
+      toggleMute: () => {
+        return heroAudio.toggleMute();
+      },
       setTargetPoints: (pts) => {
         setTargetPoints(Number(pts) || 50);
+        targetPointsRef.current = Number(pts) || 50;
+      },
+      setAutoVoter: (enabled) => {
+        setAutoVoterEnabled(Boolean(enabled));
+        autoVoterEnabledRef.current = Boolean(enabled);
       },
       voteHero: (heroNameOrId, points = 1, author = 'Viewer') => {
         const h = findHeroFromComment(heroNameOrId);
         if (h) processHeroVote(h, points, author);
       }
     };
+    window.heroAudio = heroAudio;
 
     const handleMsg = (e) => {
       if (!e.data) return;
       if (e.data.type === 'DIRECTOR_CMD') {
         const cmd = e.data.cmd;
-        if (cmd === 'reset') window.heroTournament?.reset();
+        if (cmd === 'start' || cmd === 'resume') window.heroTournament?.resume();
+        else if (cmd === 'pause') window.heroTournament?.togglePause();
+        else if (cmd === 'reset') window.heroTournament?.reset();
+        else if (cmd === 'next_stage') window.heroTournament?.nextStage();
+        else if (cmd === 'clear_supporters') window.heroTournament?.resetSupporters();
         else if (cmd === 'mute') heroAudio.toggleMute();
       } else if (e.data.type === 'LIVE_SETTINGS_UPDATE' && e.data.settings) {
         const s = e.data.settings;
-        if (s.pointsTarget !== undefined) setTargetPoints(Number(s.pointsTarget) || 50);
+        if (s.speed !== undefined) window.heroTournament?.setSpeed(s.speed);
+        if (s.pointsTarget !== undefined || s.targetPoints !== undefined) {
+          const pts = Number(s.pointsTarget || s.targetPoints) || 50;
+          setTargetPoints(pts);
+          targetPointsRef.current = pts;
+        }
+        if (s.autoVoter !== undefined) {
+          setAutoVoterEnabled(Boolean(s.autoVoter));
+          autoVoterEnabledRef.current = Boolean(s.autoVoter);
+        }
         if (s.musicVol !== undefined) heroAudio.setVolume(Number(s.musicVol));
         if (s.customMusicUrl) {
           heroAudio.loadBgMusic(s.customMusicUrl);
@@ -215,12 +400,14 @@ export default function HeroTournamentApp() {
       } else if (e.data.type === 'MUSIC_UPDATE' && e.data.src) {
         heroAudio.loadBgMusic(e.data.src);
         heroAudio.playBgMusic();
+      } else if (e.data.type === 'RESET_SUPPORTERS') {
+        window.heroTournament?.resetSupporters();
       }
     };
 
     window.addEventListener('message', handleMsg);
     return () => window.removeEventListener('message', handleMsg);
-  }, [targetPoints]);
+  }, [targetPoints, qualifierScores, qualifiers, teamupScores, finalists, finalsScores]);
 
   // --------------------------------------------------------------------------
   // CORE VOTE PROCESSOR: Adds points, triggers audio, shoutouts, popups & gates
@@ -241,15 +428,15 @@ export default function HeroTournamentApp() {
     // Save Last Voter for hero row tag
     setLastVoters(prev => ({ ...prev, [heroId]: formattedUser }));
 
-    // Spawn Floating Attack Particle
+    // Spawn Live Hit Chip (inline inside identity, zero clipping/overlap)
     const damageId = Date.now() + Math.random().toString(36).slice(2, 6);
     setFloatingDamage(prev => [
-      ...prev.slice(-3),
+      ...prev.filter(d => d.heroId !== heroId),
       { id: damageId, heroId, text: `+${points} ${hero.attackName}`, color: hero.color }
     ]);
     setTimeout(() => {
       setFloatingDamage(prev => prev.filter(d => d.id !== damageId));
-    }, 900);
+    }, 1200);
 
     // Update Shoutout Feed (max 2 items for sleek fit)
     const shoutoutItem = {
@@ -281,7 +468,7 @@ export default function HeroTournamentApp() {
         subtitle: `${hero.name} unleashed ${hero.attackName} on Doctor Doom!`,
         color: hero.color,
         type: 'combo'
-      }, 2500);
+      }, 5000);
     }
 
     const currentStage = tournamentStageRef.current;
@@ -305,10 +492,10 @@ export default function HeroTournamentApp() {
             subtitle: `${formattedUser} landed a powerful strike on Doom!`,
             color: hero.color,
             type: 'milestone'
-          }, 2400);
+          }, 6000);
         }
 
-        // Milestone 2: Halfway point (25 points)
+        // Milestone 2: Halfway point
         else if (curScore < Math.floor(currentTarget / 2) && newScore >= Math.floor(currentTarget / 2) && newScore < currentTarget - 8) {
           triggerPopup({
             id: 'half-' + heroId,
@@ -318,10 +505,10 @@ export default function HeroTournamentApp() {
             subtitle: `${formattedUser} powered up ${hero.name}!`,
             color: hero.color,
             type: 'milestone'
-          }, 2600);
+          }, 6000);
         }
 
-        // Milestone 3: 40 Points (Final Push)
+        // Milestone 3: 10 points left (Final Push)
         else if (curScore < currentTarget - 10 && newScore >= currentTarget - 10 && newScore < currentTarget) {
           triggerPopup({
             id: 'near-' + heroId,
@@ -331,7 +518,7 @@ export default function HeroTournamentApp() {
             subtitle: `Type ${hero.name} now in chat to secure the spot!`,
             color: hero.color,
             type: 'milestone'
-          }, 2600);
+          }, 6000);
         }
 
         // Check if this hero just crossed the qualification threshold (50 points)
@@ -352,7 +539,7 @@ export default function HeroTournamentApp() {
                 subtitle: `Breached Doctor Doom's defenses!`,
                 color: '#f59e0b',
                 type: 'qualify'
-              }, 3200);
+              }, 6500);
 
               // If 4 heroes qualified, advance to Phase 2 (Teamup Strike)
               if (updated.length >= 4) {
@@ -369,7 +556,7 @@ export default function HeroTournamentApp() {
                     subtitle: 'Vote your heroes to lead the assault on Doom!',
                     color: '#10b981',
                     type: 'stage'
-                  }, 3500);
+                  }, 6500);
                 }, 1000);
               }
               return updated;
@@ -417,7 +604,7 @@ export default function HeroTournamentApp() {
                 subtitle: `${winningTeamHeroes[0].name} vs ${winningTeamHeroes[1].name}!`,
                 color: '#ef4444',
                 type: 'stage'
-              }, 3500);
+              }, 6500);
             }, 800);
           }
 
@@ -491,7 +678,10 @@ export default function HeroTournamentApp() {
   // BUILT-IN AUTO VOTER (Keeps stream high-energy when real chat is quiet)
   // --------------------------------------------------------------------------
   useEffect(() => {
+    const intervalTime = Math.max(400, Math.round(2400 / (speedMultiplier || 1)));
     const autoVoteInterval = setInterval(() => {
+      if (isPausedRef.current) return;
+      if (!autoVoterEnabledRef.current) return;
       if (tournamentStageRef.current === 'celebration') return;
 
       // Yield 100% to real viewers if real chat arrived in the last 12 seconds
@@ -518,10 +708,10 @@ export default function HeroTournamentApp() {
         const pts = Math.random() < 0.22 ? (Math.random() < 0.5 ? 2 : 3) : 1;
         processHeroVote(targetHero, pts, fan.name, false);
       }
-    }, 2400);
+    }, intervalTime);
 
     return () => clearInterval(autoVoteInterval);
-  }, [qualifierScores, qualifiers, finalists, targetPoints]);
+  }, [speedMultiplier, autoVoterEnabled, qualifierScores, qualifiers, finalists, targetPoints]);
 
   // --------------------------------------------------------------------------
   // RESTART CYCLE TIMER: Resets tournament after Champion Celebration
@@ -572,377 +762,402 @@ export default function HeroTournamentApp() {
   }, [supporterTotals]);
 
   return (
-    <div className="ht-container">
-      {/* Doctor Doom Stained-Glass Ambient Glow */}
-      <div className="ht-stained-glass-bg" />
-      <div className="ht-nebula-bg" />
+    <div className="ht-viewport-root">
+      <div
+        className="ht-container"
+        style={{
+          width: baseWidth,
+          height: baseHeight,
+          transform: `scale(${scaleFactor})`,
+          transformOrigin: 'center center'
+        }}
+      >
+        {/* Doctor Doom Stained-Glass Ambient Glow */}
+        <div className="ht-stained-glass-bg" />
+        <div className="ht-nebula-bg" />
 
-      {/* ----------------- DYNAMIC ENGAGING POPUP NOTIFICATION ----------------- */}
-      {activePopup && (
-        <div
-          key={activePopup.id}
-          className={`ht-popup-overlay ht-popup-${activePopup.type}`}
-          style={{ '--popup-accent': activePopup.color }}
-        >
-          <div className="ht-popup-card">
-            <div className="ht-popup-icon-glow">{activePopup.icon}</div>
-            <div className="ht-popup-body">
-              <span className="ht-popup-badge">{activePopup.badge}</span>
-              <span className="ht-popup-title">{activePopup.title}</span>
-              <span className="ht-popup-sub">{activePopup.subtitle}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- TOP BROADCAST HEADER (DOCTOR DOOM THEME) ----------------- */}
-      <header className="ht-header">
-        <div className="ht-title-strip">
-          <div className="ht-title-left">
-            <span className="ht-title-doom-icon">💀</span>
-            <div className="ht-title-meta">
-              <span className="ht-title-text">AVENGERS: DOOMSDAY</span>
-              <span className="ht-stage-pill">
-                {stage === 'qualifiers' && `WHO CAN DEFEAT DOCTOR DOOM? (GOAL: ${targetPoints})`}
-                {stage === 'teamup' && `ALLIANCE STRIKE FORCE AGAINST DOOM`}
-                {stage === 'finals' && `FINAL STAND: WHO DEFEATS DOOM?`}
-                {stage === 'celebration' && `DOCTOR DOOM IS SLAIN!`}
-              </span>
-            </div>
-          </div>
-
-          {/* Clean Latverian Boss Threat Pill (Zero clickable buttons) */}
-          <div className="ht-doom-threat-badge">
-            <span className="ht-doom-target-icon">🎯</span>
-            <span className="ht-doom-target-text">DOOM'S SHIELD: {targetPoints}P</span>
-          </div>
-        </div>
-
-        {/* ----------------- PROMINENT STREAMLINED VOTING TICKER ----------------- */}
-        <div className="ht-join-banner">
-          <div className="ht-join-inner">
-            <div className="ht-join-cue">
-              <span className="ht-chat-icon">💬</span>
-              <span>WHO BEATS DOOM?</span>
-            </div>
-            <div className="ht-join-keywords">
-              <span className="ht-kw-pill">SPIDEY</span>
-              <span className="ht-kw-pill">REED</span>
-              <span className="ht-kw-pill">WANDA</span>
-              <span className="ht-kw-pill">WOLVERINE</span>
-              <span className="ht-kw-pill">DEADPOOL</span>
-              <span className="ht-kw-pill">STRANGE</span>
-              <span className="ht-kw-pill">THOR</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ----------------- QUALIFIERS SLOTS (TOP 4 TO FACE DOCTOR DOOM) ----------------- */}
-      {stage === 'qualifiers' && (
-        <div className="ht-bracket-strip">
-          {[0, 1, 2, 3].map(idx => {
-            const qualifiedHero = qualifiers[idx];
-            return (
-              <div key={idx} className={`ht-bracket-slot ${qualifiedHero ? 'filled' : ''}`}>
-                <div className="ht-slot-badge">#{idx + 1}</div>
-                {qualifiedHero ? (
-                  <div className="ht-slot-hero">
-                    <div
-                      className="ht-slot-avatar"
-                      style={{ background: qualifiedHero.gradient }}
-                    >
-                      <svg viewBox="0 0 24 24"><path d={qualifiedHero.iconSvg} /></svg>
-                    </div>
-                    <span className="ht-slot-name">{qualifiedHero.name}</span>
-                  </div>
-                ) : (
-                  <div className="ht-slot-placeholder">STRIKE #{idx + 1}</div>
-                )}
+        {/* ----------------- STREAM PAUSED OVERLAY (DIRECTOR SYNC) ----------------- */}
+        {isPaused && (
+          <div className="ht-paused-overlay">
+            <div className="ht-paused-badge">
+              <span className="ht-paused-icon">⏸</span>
+              <div className="ht-paused-text">
+                <span className="ht-paused-title">STREAM PAUSED BY DIRECTOR</span>
+                <span className="ht-paused-sub">Game is paused • Resume from Director Controls</span>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          </div>
+        )}
 
-      {/* ----------------- PHASE 1: 16-HERO DOOMSDAY GAUNTLET ----------------- */}
-      {stage === 'qualifiers' && (
-        <div className="ht-tracks-container">
-          {sortedHeroes.map((hero, idx) => {
-            const pts = qualifierScores[hero.id] || 0;
-            const pct = Math.min(100, Math.round((pts / targetPoints) * 100));
-            const isQualified = qualifiers.some(q => q.id === hero.id);
-            const isBumped = bumpedHeroId === hero.id;
-            const voter = lastVoters[hero.id];
-            const isTop4 = idx < 4;
-            const heroDamage = floatingDamage.find(d => d.heroId === hero.id);
+        {/* ----------------- DYNAMIC ENGAGING POPUP NOTIFICATION ----------------- */}
+        {activePopup && (
+          <div
+            key={activePopup.id}
+            className={`ht-popup-overlay ht-popup-${activePopup.type}`}
+            style={{
+              '--popup-accent': activePopup.color,
+              '--popup-duration': `${activePopup.duration || 6000}ms`
+            }}
+          >
+            <div className="ht-popup-card">
+              <div className="ht-popup-icon-glow">{activePopup.icon}</div>
+              <div className="ht-popup-body">
+                <span className="ht-popup-badge">{activePopup.badge}</span>
+                <span className="ht-popup-title">{activePopup.title}</span>
+                <span className="ht-popup-sub">{activePopup.subtitle}</span>
+              </div>
+              <div className="ht-popup-timer-bar" />
+            </div>
+          </div>
+        )}
 
-            return (
-              <React.Fragment key={hero.id}>
-                {/* Visual Cutoff Banner between #4 and #5 */}
-                {idx === 4 && (
-                  <div className="ht-cutoff-divider">
-                    <div className="ht-cutoff-line" />
-                    <span className="ht-cutoff-label">💀 TOP 4 ADVANCE TO FACE DOCTOR DOOM 💀</span>
-                    <div className="ht-cutoff-line" />
-                  </div>
-                )}
+        {/* ----------------- TOP BROADCAST HEADER (DOCTOR DOOM THEME) ----------------- */}
+        <header className="ht-header">
+          <div className="ht-title-strip">
+            <div className="ht-title-left">
+              <span className="ht-title-doom-icon">💀</span>
+              <div className="ht-title-meta">
+                <span className="ht-title-text">AVENGERS: DOOMSDAY</span>
+                <span className="ht-stage-pill">
+                  {stage === 'qualifiers' && `WHO BEATS DOOM? • ${targetPoints}P`}
+                  {stage === 'teamup' && `ALLIANCE STRIKE FORCE`}
+                  {stage === 'finals' && `FINAL STAND: 1v1 SHOWDOWN`}
+                  {stage === 'celebration' && `DOCTOR DOOM IS SLAIN!`}
+                </span>
+              </div>
+            </div>
 
-                <div
-                  className={`ht-hero-row ${isBumped ? 'bump' : ''} ${isQualified ? 'qualified' : ''} ${isTop4 ? 'qualifying-zone' : ''}`}
-                  style={{
-                    boxShadow: isBumped ? `0 0 16px ${hero.glow}` : 'none'
-                  }}
-                >
-                  {/* Floating Damage Popup on Hero Row */}
-                  {heroDamage && (
-                    <div
-                      key={heroDamage.id}
-                      className="ht-damage-float"
-                      style={{ color: heroDamage.color }}
-                    >
-                      {heroDamage.text}
+            {/* Clean Latverian Boss Threat Pill */}
+            <div className="ht-doom-threat-badge">
+              <span className="ht-doom-target-icon">🎯</span>
+              <span className="ht-doom-target-text">SHIELD: {targetPoints}P</span>
+            </div>
+          </div>
+
+          {/* ----------------- PROMINENT STREAMLINED VOTING TICKER ----------------- */}
+          <div className="ht-join-banner">
+            <div className="ht-join-inner">
+              <div className="ht-join-cue">
+                <span className="ht-chat-icon">💬</span>
+                <span>WHO BEATS DOOM?</span>
+              </div>
+              <div className="ht-join-keywords">
+                <span className="ht-kw-pill">SPIDEY</span>
+                <span className="ht-kw-pill">REED</span>
+                <span className="ht-kw-pill">WANDA</span>
+                <span className="ht-kw-pill">WOLVERINE</span>
+                <span className="ht-kw-pill">DEADPOOL</span>
+                <span className="ht-kw-pill">STRANGE</span>
+                <span className="ht-kw-pill">THOR</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* ----------------- QUALIFIERS SLOTS (TOP 4 TO FACE DOCTOR DOOM) ----------------- */}
+        {stage === 'qualifiers' && (
+          <div className="ht-bracket-strip">
+            {[0, 1, 2, 3].map(idx => {
+              const qualifiedHero = qualifiers[idx];
+              return (
+                <div key={idx} className={`ht-bracket-slot ${qualifiedHero ? 'filled' : ''}`}>
+                  <div className="ht-slot-badge">#{idx + 1}</div>
+                  {qualifiedHero ? (
+                    <div className="ht-slot-hero">
+                      <div
+                        className="ht-slot-avatar"
+                        style={{ background: qualifiedHero.gradient }}
+                      >
+                        <svg viewBox="0 0 24 24"><path d={qualifiedHero.iconSvg} /></svg>
+                      </div>
+                      <span className="ht-slot-name">{qualifiedHero.name}</span>
+                    </div>
+                  ) : (
+                    <div className="ht-slot-placeholder">STRIKE #{idx + 1}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ----------------- PHASE 1: 16-HERO DOOMSDAY GAUNTLET ----------------- */}
+        {stage === 'qualifiers' && (
+          <div className="ht-tracks-container">
+            {sortedHeroes.map((hero, idx) => {
+              const pts = qualifierScores[hero.id] || 0;
+              const pct = Math.min(100, Math.round((pts / targetPoints) * 100));
+              const isQualified = qualifiers.some(q => q.id === hero.id);
+              const isBumped = bumpedHeroId === hero.id;
+              const voter = lastVoters[hero.id];
+              const isTop4 = idx < 4;
+              const heroDamage = floatingDamage.find(d => d.heroId === hero.id);
+
+              return (
+                <React.Fragment key={hero.id}>
+                  {/* Visual Cutoff Banner between #4 and #5 */}
+                  {idx === 4 && (
+                    <div className="ht-cutoff-divider">
+                      <div className="ht-cutoff-line" />
+                      <span className="ht-cutoff-label">💀 TOP 4 ADVANCE TO FACE DOCTOR DOOM 💀</span>
+                      <div className="ht-cutoff-line" />
                     </div>
                   )}
 
-                  {/* Background Progress Fill with smooth gradient */}
                   <div
-                    className="ht-row-progress-fill"
+                    className={`ht-hero-row ${isBumped ? 'bump' : ''} ${isQualified ? 'qualified' : ''} ${isTop4 ? 'qualifying-zone' : ''}`}
                     style={{
-                      width: `${pct}%`,
-                      background: hero.gradient
+                      boxShadow: isBumped ? `0 0 16px ${hero.glow}` : 'none'
                     }}
-                  />
-
-                  {/* Rank Pill: Latverian Gold for Top 4, Dark Slate for rest */}
-                  <div className={`ht-hero-rank-pill ${isTop4 ? 'rank-gold' : ''}`}>
-                    #{idx + 1}
-                  </div>
-
-                  {/* Hero Avatar Emblem */}
-                  <div
-                    className="ht-hero-avatar-box"
-                    style={{ background: hero.gradient }}
                   >
-                    <svg viewBox="0 0 24 24"><path d={hero.iconSvg} /></svg>
-                  </div>
+                    {/* Background Progress Fill with smooth gradient */}
+                    <div
+                      className="ht-row-progress-fill"
+                      style={{
+                        width: `${pct}%`,
+                        background: hero.gradient
+                      }}
+                    />
 
-                  {/* Hero Name — ONLY SHOWN ONCE, BOLD AND CRISP */}
-                  <div className="ht-hero-identity">
-                    <span className="ht-hero-name">{hero.name}</span>
-                    {/* Live Voter Shoutout Chip directly on Hero Card */}
-                    {voter && (
-                      <span className="ht-hero-voter-chip" title={`Latest voter: ${voter}`}>
-                        👤 {voter}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Right Score Progress: Numerical Counter & Mini Meter */}
-                  <div className="ht-hero-score-block">
-                    <div className="ht-score-values">
-                      <span className="ht-score-current">{pts}</span>
-                      <span className="ht-score-target">/{targetPoints}</span>
+                    {/* Rank Pill: Latverian Gold for Top 4, Dark Slate for rest */}
+                    <div className={`ht-hero-rank-pill ${isTop4 ? 'rank-gold' : ''}`}>
+                      #{idx + 1}
                     </div>
 
-                    <div className="ht-mini-meter">
-                      <div
-                        className="ht-mini-meter-fill"
-                        style={{ width: `${pct}%`, background: hero.gradient }}
-                      />
+                    {/* Hero Avatar Emblem */}
+                    <div
+                      className="ht-hero-avatar-box"
+                      style={{ background: hero.gradient }}
+                    >
+                      <svg viewBox="0 0 24 24"><path d={hero.iconSvg} /></svg>
+                    </div>
+
+                    {/* Hero Name — ONLY SHOWN ONCE, BOLD AND CRISP + LIVE HIT / VOTER CHIP */}
+                    <div className="ht-hero-identity">
+                      <span className="ht-hero-name">{hero.name}</span>
+                      {heroDamage ? (
+                        <span
+                          className="ht-hit-chip"
+                          style={{
+                            color: heroDamage.color,
+                            borderColor: heroDamage.color
+                          }}
+                        >
+                          💥 {heroDamage.text}
+                        </span>
+                      ) : voter ? (
+                        <span className="ht-hero-voter-chip" title={`Latest voter: ${voter}`}>
+                          👤 {voter}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Right Score Progress: Numerical Counter & Mini Meter */}
+                    <div className="ht-hero-score-block">
+                      <div className="ht-score-values">
+                        <span className="ht-score-current">{pts}</span>
+                        <span className="ht-score-target">/{targetPoints}</span>
+                      </div>
+
+                      <div className="ht-mini-meter">
+                        <div
+                          className="ht-mini-meter-fill"
+                          style={{ width: `${pct}%`, background: hero.gradient }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ----------------- PHASE 2: ALLIANCE STRIKE FORCE AGAINST DOOM ----------------- */}
-      {stage === 'teamup' && qualifiers.length >= 4 && (
-        <div className="ht-teamup-container">
-          <div className="ht-phase-title-badge">⚔️ ALLIANCE STRIKE FORCE AGAINST DOCTOR DOOM ⚔️</div>
-
-          {/* Team Alpha */}
-          <div className="ht-team-card" style={{ borderColor: qualifiers[0].color }}>
-            <div className="ht-team-header">
-              <div className="ht-team-heroes">
-                <div className="ht-team-avatar-duo">
-                  <div className="ht-hero-avatar-box" style={{ background: qualifiers[0].gradient, width: 44, height: 44 }}>
-                    <svg viewBox="0 0 24 24"><path d={qualifiers[0].iconSvg} /></svg>
-                  </div>
-                  <div className="ht-hero-avatar-box" style={{ background: qualifiers[3].gradient, width: 44, height: 44 }}>
-                    <svg viewBox="0 0 24 24"><path d={qualifiers[3].iconSvg} /></svg>
-                  </div>
-                </div>
-                <div>
-                  <div className="ht-team-title">TEAM ALPHA: {qualifiers[0].name} &amp; {qualifiers[3].name}</div>
-                  <div className="ht-team-cues">Type <b>{qualifiers[0].name}</b> or <b>{qualifiers[3].name}</b> to strike!</div>
-                </div>
-              </div>
-              <div className="ht-team-score-num">{teamupScores.team1} / {targetPoints}</div>
-            </div>
-
-            <div className="ht-team-meter-bg">
-              <div
-                className="ht-team-meter-fill"
-                style={{
-                  width: `${Math.min(100, (teamupScores.team1 / targetPoints) * 100)}%`,
-                  background: `linear-gradient(90deg, ${qualifiers[0].color}, ${qualifiers[3].color})`
-                }}
-              />
-            </div>
+                </React.Fragment>
+              );
+            })}
           </div>
+        )}
 
-          <div className="ht-vs-divider">⚡ ALLIANCE CLASH ⚡</div>
+        {/* ----------------- PHASE 2: ALLIANCE STRIKE FORCE AGAINST DOOM ----------------- */}
+        {stage === 'teamup' && qualifiers.length >= 4 && (
+          <div className="ht-teamup-container">
+            <div className="ht-phase-title-badge">⚔️ ALLIANCE STRIKE FORCE AGAINST DOCTOR DOOM ⚔️</div>
 
-          {/* Team Omega */}
-          <div className="ht-team-card" style={{ borderColor: qualifiers[1].color }}>
-            <div className="ht-team-header">
-              <div className="ht-team-heroes">
-                <div className="ht-team-avatar-duo">
-                  <div className="ht-hero-avatar-box" style={{ background: qualifiers[1].gradient, width: 44, height: 44 }}>
-                    <svg viewBox="0 0 24 24"><path d={qualifiers[1].iconSvg} /></svg>
+            {/* Team Alpha */}
+            <div className="ht-team-card" style={{ borderColor: qualifiers[0].color }}>
+              <div className="ht-team-header">
+                <div className="ht-team-heroes">
+                  <div className="ht-team-avatar-duo">
+                    <div className="ht-hero-avatar-box" style={{ background: qualifiers[0].gradient, width: 44, height: 44 }}>
+                      <svg viewBox="0 0 24 24"><path d={qualifiers[0].iconSvg} /></svg>
+                    </div>
+                    <div className="ht-hero-avatar-box" style={{ background: qualifiers[3].gradient, width: 44, height: 44 }}>
+                      <svg viewBox="0 0 24 24"><path d={qualifiers[3].iconSvg} /></svg>
+                    </div>
                   </div>
-                  <div className="ht-hero-avatar-box" style={{ background: qualifiers[2].gradient, width: 44, height: 44 }}>
-                    <svg viewBox="0 0 24 24"><path d={qualifiers[2].iconSvg} /></svg>
+                  <div>
+                    <div className="ht-team-title">TEAM ALPHA: {qualifiers[0].name} &amp; {qualifiers[3].name}</div>
+                    <div className="ht-team-cues">Type <b>{qualifiers[0].name}</b> or <b>{qualifiers[3].name}</b> to strike!</div>
                   </div>
                 </div>
-                <div>
-                  <div className="ht-team-title">TEAM OMEGA: {qualifiers[1].name} &amp; {qualifiers[2].name}</div>
-                  <div className="ht-team-cues">Type <b>{qualifiers[1].name}</b> or <b>{qualifiers[2].name}</b> to strike!</div>
-                </div>
+                <div className="ht-team-score-num">{teamupScores.team1} / {targetPoints}</div>
               </div>
-              <div className="ht-team-score-num">{teamupScores.team2} / {targetPoints}</div>
+
+              <div className="ht-team-meter-bg">
+                <div
+                  className="ht-team-meter-fill"
+                  style={{
+                    width: `${Math.min(100, (teamupScores.team1 / targetPoints) * 100)}%`,
+                    background: `linear-gradient(90deg, ${qualifiers[0].color}, ${qualifiers[3].color})`
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="ht-team-meter-bg">
-              <div
-                className="ht-team-meter-fill"
-                style={{
-                  width: `${Math.min(100, (teamupScores.team2 / targetPoints) * 100)}%`,
-                  background: `linear-gradient(90deg, ${qualifiers[1].color}, ${qualifiers[2].color})`
-                }}
-              />
+            <div className="ht-vs-divider">⚡ ALLIANCE CLASH ⚡</div>
+
+            {/* Team Omega */}
+            <div className="ht-team-card" style={{ borderColor: qualifiers[1].color }}>
+              <div className="ht-team-header">
+                <div className="ht-team-heroes">
+                  <div className="ht-team-avatar-duo">
+                    <div className="ht-hero-avatar-box" style={{ background: qualifiers[1].gradient, width: 44, height: 44 }}>
+                      <svg viewBox="0 0 24 24"><path d={qualifiers[1].iconSvg} /></svg>
+                    </div>
+                    <div className="ht-hero-avatar-box" style={{ background: qualifiers[2].gradient, width: 44, height: 44 }}>
+                      <svg viewBox="0 0 24 24"><path d={qualifiers[2].iconSvg} /></svg>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="ht-team-title">TEAM OMEGA: {qualifiers[1].name} &amp; {qualifiers[2].name}</div>
+                    <div className="ht-team-cues">Type <b>{qualifiers[1].name}</b> or <b>{qualifiers[2].name}</b> to strike!</div>
+                  </div>
+                </div>
+                <div className="ht-team-score-num">{teamupScores.team2} / {targetPoints}</div>
+              </div>
+
+              <div className="ht-team-meter-bg">
+                <div
+                  className="ht-team-meter-fill"
+                  style={{
+                    width: `${Math.min(100, (teamupScores.team2 / targetPoints) * 100)}%`,
+                    background: `linear-gradient(90deg, ${qualifiers[1].color}, ${qualifiers[2].color})`
+                  }}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ----------------- PHASE 3: FINAL STAND (WHO DELIVERS THE FINAL BLOW TO DOOM?) ----------------- */}
-      {stage === 'finals' && finalists.length === 2 && (
-        <div className="ht-final-container">
-          <div className="ht-phase-title-badge">👑 FINAL STAND: WHO DELIVERS THE FINAL BLOW TO DOOM? 👑</div>
+        {/* ----------------- PHASE 3: FINAL STAND (WHO DELIVERS THE FINAL BLOW TO DOOM?) ----------------- */}
+        {stage === 'finals' && finalists.length === 2 && (
+          <div className="ht-final-container">
+            <div className="ht-phase-title-badge">👑 FINAL STAND: WHO DELIVERS THE FINAL BLOW TO DOOM? 👑</div>
 
-          {/* Finalist 1 */}
-          <div className="ht-finalist-card" style={{ borderColor: finalists[0].color }}>
-            <div className="ht-finalist-top">
-              <div className="ht-finalist-left">
-                <div className="ht-hero-avatar-box" style={{ background: finalists[0].gradient, width: 48, height: 48 }}>
-                  <svg viewBox="0 0 24 24" style={{ width: 28, height: 28 }}><path d={finalists[0].iconSvg} /></svg>
+            {/* Finalist 1 */}
+            <div className="ht-finalist-card" style={{ borderColor: finalists[0].color }}>
+              <div className="ht-finalist-top">
+                <div className="ht-finalist-left">
+                  <div className="ht-hero-avatar-box" style={{ background: finalists[0].gradient, width: 48, height: 48 }}>
+                    <svg viewBox="0 0 24 24" style={{ width: 28, height: 28 }}><path d={finalists[0].iconSvg} /></svg>
+                  </div>
+                  <div>
+                    <div className="ht-finalist-name">{finalists[0].name}</div>
+                    <div className="ht-finalist-sub">Type <b>{finalists[0].name}</b> to strike Doctor Doom!</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="ht-finalist-name">{finalists[0].name}</div>
-                  <div className="ht-finalist-sub">Type <b>{finalists[0].name}</b> to strike Doctor Doom!</div>
-                </div>
+                <div className="ht-finalist-pts">{finalsScores[finalists[0].id] || 0} / {targetPoints}</div>
               </div>
-              <div className="ht-finalist-pts">{finalsScores[finalists[0].id] || 0} / {targetPoints}</div>
+
+              <div className="ht-team-meter-bg">
+                <div
+                  className="ht-team-meter-fill"
+                  style={{
+                    width: `${Math.min(100, ((finalsScores[finalists[0].id] || 0) / targetPoints) * 100)}%`,
+                    background: finalists[0].gradient
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="ht-team-meter-bg">
-              <div
-                className="ht-team-meter-fill"
-                style={{
-                  width: `${Math.min(100, ((finalsScores[finalists[0].id] || 0) / targetPoints) * 100)}%`,
-                  background: finalists[0].gradient
-                }}
-              />
+            <div className="ht-versus-badge">⚡ V E R S U S ⚡</div>
+
+            {/* Finalist 2 */}
+            <div className="ht-finalist-card" style={{ borderColor: finalists[1].color }}>
+              <div className="ht-finalist-top">
+                <div className="ht-finalist-left">
+                  <div className="ht-hero-avatar-box" style={{ background: finalists[1].gradient, width: 48, height: 48 }}>
+                    <svg viewBox="0 0 24 24" style={{ width: 28, height: 28 }}><path d={finalists[1].iconSvg} /></svg>
+                  </div>
+                  <div>
+                    <div className="ht-finalist-name">{finalists[1].name}</div>
+                    <div className="ht-finalist-sub">Type <b>{finalists[1].name}</b> to strike Doctor Doom!</div>
+                  </div>
+                </div>
+                <div className="ht-finalist-pts">{finalsScores[finalists[1].id] || 0} / {targetPoints}</div>
+              </div>
+
+              <div className="ht-team-meter-bg">
+                <div
+                  className="ht-team-meter-fill"
+                  style={{
+                    width: `${Math.min(100, ((finalsScores[finalists[1].id] || 0) / targetPoints) * 100)}%`,
+                    background: finalists[1].gradient
+                  }}
+                />
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="ht-versus-badge">⚡ V E R S U S ⚡</div>
-
-          {/* Finalist 2 */}
-          <div className="ht-finalist-card" style={{ borderColor: finalists[1].color }}>
-            <div className="ht-finalist-top">
-              <div className="ht-finalist-left">
-                <div className="ht-hero-avatar-box" style={{ background: finalists[1].gradient, width: 48, height: 48 }}>
-                  <svg viewBox="0 0 24 24" style={{ width: 28, height: 28 }}><path d={finalists[1].iconSvg} /></svg>
-                </div>
-                <div>
-                  <div className="ht-finalist-name">{finalists[1].name}</div>
-                  <div className="ht-finalist-sub">Type <b>{finalists[1].name}</b> to strike Doctor Doom!</div>
-                </div>
-              </div>
-              <div className="ht-finalist-pts">{finalsScores[finalists[1].id] || 0} / {targetPoints}</div>
-            </div>
-
-            <div className="ht-team-meter-bg">
-              <div
-                className="ht-team-meter-fill"
-                style={{
-                  width: `${Math.min(100, ((finalsScores[finalists[1].id] || 0) / targetPoints) * 100)}%`,
-                  background: finalists[1].gradient
-                }}
-              />
-            </div>
+        {/* ----------------- RECENT HERO BOOSTERS (LIVE COMMENTER SHOUTOUTS) ----------------- */}
+        <footer className="ht-footer-shoutout">
+          <div className="ht-shoutout-header">
+            <span className="ht-shoutout-title">📡 LIVE HERO STRIKES</span>
+            <span className="ht-shoutout-cta">TYPE IN CHAT TO JOIN</span>
           </div>
-        </div>
-      )}
 
-      {/* ----------------- RECENT HERO BOOSTERS (LIVE COMMENTER SHOUTOUTS) ----------------- */}
-      <footer className="ht-footer-shoutout">
-        <div className="ht-shoutout-header">
-          <span className="ht-shoutout-title">📡 LIVE HERO STRIKES AGAINST DOCTOR DOOM</span>
-          <span className="ht-shoutout-cta">TYPE IN CHAT TO APPEAR ON STREAM</span>
-        </div>
+          <div className="ht-shoutout-ticker">
+            {recentShoutouts.length === 0 ? (
+              <div className="ht-shoutout-waiting">
+                💬 Who can defeat Doctor Doom? Type any hero name in chat!
+              </div>
+            ) : (
+              recentShoutouts.map(item => (
+                <div key={item.id} className="ht-shoutout-item">
+                  <div className="ht-shoutout-left">
+                    <span className="ht-shoutout-user">{item.user}</span>
+                    <span className="ht-shoutout-hero" style={{ color: item.heroColor }}>
+                      struck with {item.heroName}
+                    </span>
+                  </div>
+                  <span className="ht-shoutout-attack">+{item.points} {item.attackName}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </footer>
 
-        <div className="ht-shoutout-ticker">
-          {recentShoutouts.length === 0 ? (
-            <div className="ht-shoutout-waiting">
-              💬 Who can defeat Doctor Doom? Type any hero name in chat!
-            </div>
-          ) : (
-            recentShoutouts.map(item => (
-              <div key={item.id} className="ht-shoutout-item">
-                <div className="ht-shoutout-left">
-                  <span className="ht-shoutout-user">{item.user}</span>
-                  <span className="ht-shoutout-hero" style={{ color: item.heroColor }}>
-                    struck with {item.heroName}
+        {/* ----------------- DOCTOR DOOM SLAIN (CHAMPION CELEBRATION) ----------------- */}
+        {stage === 'celebration' && champion && (
+          <div className="ht-victory-overlay">
+            <div className="ht-victory-trophy">🏆</div>
+            <div className="ht-victory-title">DOCTOR DOOM HAS BEEN DEFEATED!</div>
+            <div className="ht-champion-name">{champion.name} SAVED THE MULTIVERSE!</div>
+
+            <div className="ht-supporters-podium">
+              <div className="ht-podium-header">👑 TOP HERO SAVIORS (HONOR PODIUM)</div>
+              {topPodiumSupporters.map((s, idx) => (
+                <div key={idx} className="ht-supporter-row">
+                  <span className="ht-supporter-user">
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🎖️'} {s.user}
                   </span>
+                  <span className="ht-supporter-pts">+{s.points} pts</span>
                 </div>
-                <span className="ht-shoutout-attack">+{item.points} {item.attackName}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </footer>
+              ))}
+            </div>
 
-      {/* ----------------- DOCTOR DOOM SLAIN (CHAMPION CELEBRATION) ----------------- */}
-      {stage === 'celebration' && champion && (
-        <div className="ht-victory-overlay">
-          <div className="ht-victory-trophy">🏆</div>
-          <div className="ht-victory-title">DOCTOR DOOM HAS BEEN DEFEATED!</div>
-          <div className="ht-champion-name">{champion.name} SAVED THE MULTIVERSE!</div>
-
-          <div className="ht-supporters-podium">
-            <div className="ht-podium-header">👑 TOP HERO SAVIORS (HONOR PODIUM)</div>
-            {topPodiumSupporters.map((s, idx) => (
-              <div key={idx} className="ht-supporter-row">
-                <span className="ht-supporter-user">
-                  {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🎖️'} {s.user}
-                </span>
-                <span className="ht-supporter-pts">+{s.points} pts</span>
-              </div>
-            ))}
+            <div className="ht-reset-countdown">
+              Next Doomsday Battle Begins in <b>{resetCountdown}</b> seconds...
+            </div>
           </div>
-
-          <div className="ht-reset-countdown">
-            Next Doomsday Battle Begins in <b>{resetCountdown}</b> seconds...
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

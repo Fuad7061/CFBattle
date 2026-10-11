@@ -853,7 +853,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
     try {
         if (action === 'new-round' || action === 'reset') {
             await currentPage.evaluate(() => {
-                if (window.pointsRace && typeof window.pointsRace.reset === 'function') {
+                if (window.heroTournament && typeof window.heroTournament.reset === 'function') {
+                    window.heroTournament.reset();
+                } else if (window.pointsRace && typeof window.pointsRace.reset === 'function') {
                     window.pointsRace.reset();
                 } else if (window.gameInstance && typeof window.gameInstance.newRound === 'function') {
                     window.gameInstance.newRound();
@@ -863,6 +865,15 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 }
             });
             logMsg("Game new-round / reset triggered remotely.");
+        } else if (action === 'next-stage') {
+            await currentPage.evaluate(() => {
+                if (window.heroTournament && typeof window.heroTournament.nextStage === 'function') {
+                    window.heroTournament.nextStage();
+                } else if (window.pointsRace && typeof window.pointsRace.nextStage === 'function') {
+                    window.pointsRace.nextStage();
+                }
+            });
+            logMsg("Game next-stage triggered remotely.");
         } else if (action === 'shrink-arena') {
             await currentPage.evaluate(() => {
                 if (window.gameInstance && typeof window.gameInstance.shrinkArena === 'function') {
@@ -872,6 +883,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
             logMsg("Game shrink-arena triggered remotely.");
         } else if (action === 'toggle-sound') {
             await currentPage.evaluate(() => {
+                if (window.heroAudio && typeof window.heroAudio.toggleMute === 'function') {
+                    window.heroAudio.toggleMute();
+                }
                 if (window.pointsAudio && typeof window.pointsAudio.toggleMute === 'function') {
                     window.pointsAudio.toggleMute();
                 }
@@ -883,6 +897,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
             logMsg("Game toggle-sound triggered remotely.");
         } else if (action === 'speed') {
             await currentPage.evaluate((spd) => {
+                if (window.heroTournament && typeof window.heroTournament.setSpeed === 'function') {
+                    window.heroTournament.setSpeed(spd);
+                }
                 if (window.pointsRace && typeof window.pointsRace.setSpeed === 'function') {
                     window.pointsRace.setSpeed(spd);
                 }
@@ -897,6 +914,11 @@ app.post('/api/control', checkAuth, async (req, res) => {
             logMsg(`Game speed set to ${payload?.speed || 1} remotely.`);
         } else if (action === 'pause' || action === 'toggle-pause' || action === 'resume') {
             await currentPage.evaluate((act) => {
+                if (window.heroTournament) {
+                    if (act === 'pause') window.heroTournament.pause?.();
+                    else if (act === 'resume') window.heroTournament.resume?.();
+                    else window.heroTournament.togglePause?.();
+                }
                 if (window.pointsRace) {
                     if (act === 'pause') window.pointsRace.pause?.();
                     else if (act === 'resume') window.pointsRace.resume?.();
@@ -925,6 +947,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     try {
                         localStorage.removeItem('fb_top_supporters_map');
                         localStorage.removeItem('fb_top_supporters_vertical');
+                        if (window.heroTournament && typeof window.heroTournament.resetSupporters === 'function') {
+                            window.heroTournament.resetSupporters();
+                        }
                         if (window.gameInstance && window.gameInstance.ui && typeof window.gameInstance.ui.resetSupporters === 'function') {
                             window.gameInstance.ui.resetSupporters(true);
                         }
