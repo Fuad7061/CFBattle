@@ -432,6 +432,12 @@ async function beginStream() {
                 if (closeBtn) closeBtn.click();
 
                 applyGameSettings(window.gameInstance, s);
+                if (window.heroTournament && typeof window.heroTournament.setSettings === 'function') {
+                    window.heroTournament.setSettings(s);
+                }
+                if (window.pointsRace && typeof window.pointsRace.setSettings === 'function') {
+                    window.pointsRace.setSettings(s);
+                }
             }, currentSettings.gameSettings);
             logMsg("Applied saved game settings on stream boot.");
         }
@@ -692,6 +698,12 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
                 window.__liveSettings = s;
                 if (window.applyGameSettings) {
                     window.applyGameSettings(window.gameInstance, s);
+                }
+                if (window.heroTournament && typeof window.heroTournament.setSettings === 'function') {
+                    window.heroTournament.setSettings(s);
+                }
+                if (window.pointsRace && typeof window.pointsRace.setSettings === 'function') {
+                    window.pointsRace.setSettings(s);
                 } else if (window.gameInstance) {
                     const gi = window.gameInstance;
                     const speed = s.speed !== undefined ? Number(s.speed) : 1;
@@ -1023,6 +1035,10 @@ app.post('/api/control', checkAuth, async (req, res) => {
                 // If pointsRace engine exists, update settings
                 if (window.pointsRace && typeof window.pointsRace.setSettings === 'function') {
                     window.pointsRace.setSettings(s);
+                }
+                // If heroTournament engine exists, update settings
+                if (window.heroTournament && typeof window.heroTournament.setSettings === 'function') {
+                    window.heroTournament.setSettings(s);
                 }
                 if (window.pointsAudio) {
                     if (s.musicVol !== undefined) window.pointsAudio.setBgVolume(Number(s.musicVol));

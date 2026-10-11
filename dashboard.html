@@ -2878,9 +2878,22 @@
                 win.pointsRace.setSettings?.(gamePayload);
             }
             if (win.heroTournament) {
-                if (gamePayload.targetPoints !== undefined) win.heroTournament.setTargetPoints?.(Number(gamePayload.targetPoints));
-                if (gamePayload.autoVoter !== undefined) win.heroTournament.setAutoVoter?.(Boolean(gamePayload.autoVoter));
-                if (gamePayload.speed !== undefined) win.heroTournament.setSpeed?.(Number(gamePayload.speed));
+                if (typeof win.heroTournament.setSettings === 'function') {
+                    win.heroTournament.setSettings(gamePayload);
+                } else {
+                    if (gamePayload.targetPoints !== undefined) win.heroTournament.setTargetPoints?.(Number(gamePayload.targetPoints));
+                    if (gamePayload.autoVoter !== undefined) win.heroTournament.setAutoVoter?.(Boolean(gamePayload.autoVoter));
+                    if (gamePayload.speed !== undefined) win.heroTournament.setSpeed?.(Number(gamePayload.speed));
+                }
+                if (gamePayload.watermark !== undefined && typeof win.heroTournament.setWatermark === 'function') {
+                    win.heroTournament.setWatermark({
+                        text: gamePayload.watermark,
+                        opacity: gamePayload.wmOpacity,
+                        size: gamePayload.wmSize,
+                        count: gamePayload.wmCount,
+                        angle: gamePayload.wmAngle
+                    });
+                }
             }
             if (win.heroAudio) {
                 if (gamePayload.musicVol !== undefined) win.heroAudio.setVolume?.(Number(gamePayload.musicVol));

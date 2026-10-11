@@ -143,6 +143,28 @@ export default function HeroTournamentApp() {
   const autoVoterEnabledRef = useRef(true);
   autoVoterEnabledRef.current = autoVoterEnabled;
 
+  // Watermark state (synced with settings and live preview)
+  const [watermark, setWatermark] = useState(() => {
+    if (typeof window !== 'undefined' && window.__liveSettings) {
+      const s = window.__liveSettings;
+      const op = s.wmOpacity !== undefined ? Number(s.wmOpacity) : 0.15;
+      return {
+        text: s.watermark || '@FlagsBattleSimulator',
+        opacity: op === 0 ? 0 : (op < 0.05 ? 0.15 : op),
+        size: s.wmSize !== undefined ? Number(s.wmSize) : 32,
+        count: s.wmCount !== undefined ? Number(s.wmCount) : 3,
+        angle: s.wmAngle !== undefined ? Number(s.wmAngle) : -15
+      };
+    }
+    return {
+      text: '@FlagsBattleSimulator',
+      opacity: 0.15,
+      size: 32,
+      count: 3,
+      angle: -15
+    };
+  });
+
   // Real vs Auto-voter timing reference
   const lastRealChatRef = useRef(Date.now());
   const tournamentStageRef = useRef(stage);
@@ -240,6 +262,19 @@ export default function HeroTournamentApp() {
         }
         if (gs?.customMusicUrl) {
           heroAudio.loadBgMusic(gs.customMusicUrl);
+        }
+        if (gs?.watermark !== undefined || gs?.wmOpacity !== undefined) {
+          setWatermark(prev => {
+            const op = gs.wmOpacity !== undefined ? Number(gs.wmOpacity) : prev.opacity;
+            return {
+              ...prev,
+              text: gs.watermark !== undefined ? gs.watermark : prev.text,
+              opacity: op === 0 ? 0 : (op < 0.05 ? 0.15 : op),
+              size: gs.wmSize !== undefined ? Number(gs.wmSize) : prev.size,
+              count: gs.wmCount !== undefined ? Number(gs.wmCount) : prev.count,
+              angle: gs.wmAngle !== undefined ? Number(gs.wmAngle) : prev.angle
+            };
+          });
         }
       })
       .catch(() => {});
@@ -382,6 +417,50 @@ export default function HeroTournamentApp() {
         setSpeedMultiplier(spd);
         speedMultiplierRef.current = spd;
       },
+      setWatermark: (wm) => {
+        if (!wm) return;
+        setWatermark(prev => {
+          const op = wm.opacity !== undefined ? Number(wm.opacity) : (wm.wmOpacity !== undefined ? Number(wm.wmOpacity) : prev.opacity);
+          return {
+            ...prev,
+            text: (wm.text !== undefined ? wm.text : (wm.watermark !== undefined ? wm.watermark : prev.text)),
+            opacity: op === 0 ? 0 : (op < 0.05 ? 0.15 : op),
+            size: wm.size !== undefined ? Number(wm.size) : (wm.wmSize !== undefined ? Number(wm.wmSize) : prev.size),
+            count: wm.count !== undefined ? Number(wm.count) : (wm.wmCount !== undefined ? Number(wm.wmCount) : prev.count),
+            angle: wm.angle !== undefined ? Number(wm.angle) : (wm.wmAngle !== undefined ? Number(wm.wmAngle) : prev.angle)
+          };
+        });
+      },
+      setSettings: (s) => {
+        if (!s) return;
+        if (s.watermark !== undefined) setWatermark(prev => ({ ...prev, text: s.watermark }));
+        if (s.wmOpacity !== undefined) {
+          const op = Number(s.wmOpacity);
+          setWatermark(prev => ({ ...prev, opacity: op === 0 ? 0 : (op < 0.05 ? 0.15 : op) }));
+        }
+        if (s.wmSize !== undefined) setWatermark(prev => ({ ...prev, size: Number(s.wmSize) }));
+        if (s.wmCount !== undefined) setWatermark(prev => ({ ...prev, count: Number(s.wmCount) }));
+        if (s.wmAngle !== undefined) setWatermark(prev => ({ ...prev, angle: Number(s.wmAngle) }));
+        if (s.pointsTarget !== undefined || s.targetPoints !== undefined) {
+          const pts = Number(s.pointsTarget || s.targetPoints) || 50;
+          setTargetPoints(pts);
+          targetPointsRef.current = pts;
+        }
+        if (s.autoVoter !== undefined) {
+          setAutoVoterEnabled(Boolean(s.autoVoter));
+          autoVoterEnabledRef.current = Boolean(s.autoVoter);
+        }
+        if (s.speed !== undefined) {
+          const spd = Math.max(0.5, Math.min(5, Number(s.speed) || 1));
+          setSpeedMultiplier(spd);
+          speedMultiplierRef.current = spd;
+        }
+        if (s.musicVol !== undefined) heroAudio.setVolume(Number(s.musicVol));
+        if (s.customMusicUrl) {
+          heroAudio.loadBgMusic(s.customMusicUrl);
+          heroAudio.playBgMusic();
+        }
+      },
       setVolume: (vol) => {
         heroAudio.setVolume(vol);
       },
@@ -415,6 +494,14 @@ export default function HeroTournamentApp() {
         else if (cmd === 'mute') heroAudio.toggleMute();
       } else if (e.data.type === 'LIVE_SETTINGS_UPDATE' && e.data.settings) {
         const s = e.data.settings;
+        if (s.watermark !== undefined) setWatermark(prev => ({ ...prev, text: s.watermark }));
+        if (s.wmOpacity !== undefined) {
+          const op = Number(s.wmOpacity);
+          setWatermark(prev => ({ ...prev, opacity: op === 0 ? 0 : (op < 0.05 ? 0.15 : op) }));
+        }
+        if (s.wmSize !== undefined) setWatermark(prev => ({ ...prev, size: Number(s.wmSize) }));
+        if (s.wmCount !== undefined) setWatermark(prev => ({ ...prev, count: Number(s.wmCount) }));
+        if (s.wmAngle !== undefined) setWatermark(prev => ({ ...prev, angle: Number(s.wmAngle) }));
         if (s.speed !== undefined) window.heroTournament?.setSpeed(s.speed);
         if (s.pointsTarget !== undefined || s.targetPoints !== undefined) {
           const pts = Number(s.pointsTarget || s.targetPoints) || 50;
@@ -832,6 +919,24 @@ export default function HeroTournamentApp() {
         {/* Doctor Doom Stained-Glass Ambient Glow */}
         <div className="ht-stained-glass-bg" />
         <div className="ht-nebula-bg" />
+
+        {/* Branding & Watermark Layer */}
+        {watermark.opacity > 0 && watermark.text && (
+          <div className="ht-watermark-layer" style={{ opacity: watermark.opacity }}>
+            {Array.from({ length: Math.max(1, watermark.count || 3) }).map((_, i) => (
+              <span
+                key={i}
+                className="ht-watermark-text"
+                style={{
+                  fontSize: `${watermark.size || 32}px`,
+                  transform: `rotate(${watermark.angle || -15}deg)`
+                }}
+              >
+                {watermark.text}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ----------------- STREAM PAUSED OVERLAY (DIRECTOR SYNC) ----------------- */}
         {isPaused && (
