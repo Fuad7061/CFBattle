@@ -1,14 +1,14 @@
 /* ==========================================================================
-   MULTIVERSE 16-HERO TOURNAMENT STYLES (9:16 VERTICAL SHORT STREAM OPTIMIZED)
-   Engineered for @Spiddyfacts: 30 FPS Lightweight, Pure CSS Acceleration
+   MULTIVERSE 16-HERO TOURNAMENT STYLES (BROADCAST ESPORTS GRADE)
+   Engineered for @Spiddyfacts: 30 FPS Pure CSS Acceleration, Zero Layout Shifts
    ========================================================================== */
 
 :root {
-  --ht-bg: #07090e;
-  --ht-card-bg: rgba(13, 18, 30, 0.88);
-  --ht-border: rgba(255, 255, 255, 0.12);
+  --ht-bg: #05070d;
+  --ht-card-bg: rgba(13, 18, 30, 0.9);
+  --ht-border: rgba(255, 255, 255, 0.1);
   --ht-accent-gold: #f59e0b;
-  --ht-accent-cyan: #06b6d4;
+  --ht-accent-cyan: #38bdf8;
   --ht-accent-crimson: #ef4444;
   --ht-text-main: #f8fafc;
   --ht-text-muted: #94a3b8;
@@ -25,11 +25,11 @@ body, html {
   height: 100%;
   overflow: hidden;
   background: var(--ht-bg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   user-select: none;
 }
 
-/* 9:16 Vertical Screen Frame */
+/* 9:16 Vertical Screen Container */
 .ht-container {
   width: 100vw;
   height: 100vh;
@@ -38,165 +38,264 @@ body, html {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 50% 20%, #151c2e 0%, #090d16 60%, #04060a 100%);
+  background: radial-gradient(circle at 50% 15%, #131b2e 0%, #080c16 55%, #03050a 100%);
   color: var(--ht-text-main);
   overflow: hidden;
 }
 
-/* Cosmic Nebula Ambient Particles */
+/* Cosmic Nebula Background Glow */
 .ht-nebula-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image: 
-    radial-gradient(circle at 20% 15%, rgba(220, 38, 38, 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 80% 25%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 50% 80%, rgba(147, 51, 234, 0.12) 0%, transparent 50%);
+    radial-gradient(circle at 15% 10%, rgba(220, 38, 38, 0.14) 0%, transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(56, 189, 248, 0.14) 0%, transparent 40%),
+    radial-gradient(circle at 50% 85%, rgba(147, 51, 234, 0.12) 0%, transparent 50%);
   z-index: 0;
 }
 
 /* --------------------------------------------------------------------------
-   HEADER & INSTRUCTIONS
+   HEADER & AUDIO CONTROLS
    -------------------------------------------------------------------------- */
 .ht-header {
   position: relative;
   z-index: 10;
-  padding: 14px 16px 8px;
+  padding: 8px 12px 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .ht-title-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  border-radius: 12px;
-  padding: 8px 14px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 10px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .ht-title-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ht-title-badge {
-  font-size: 18px;
+  font-size: 16px;
   filter: drop-shadow(0 0 6px #f59e0b);
+  flex-shrink: 0;
+}
+
+.ht-title-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .ht-title-text {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  font-size: 12.5px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
   background: linear-gradient(90deg, #f8fafc, #38bdf8, #f59e0b);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ht-stage-pill {
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: rgba(245, 158, 11, 0.18);
+  letter-spacing: 0.4px;
   color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  white-space: nowrap;
 }
 
-/* Call to Action Banner (How to Join & Comment) */
+/* Sound / Music Controller Button */
+.ht-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ht-sound-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.5);
+  color: #94a3b8;
+  transition: all 0.2s ease;
+}
+
+.ht-sound-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.ht-sound-toggle-btn.muted {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.ht-sound-icon {
+  font-size: 12px;
+}
+
+.ht-sound-label {
+  white-space: nowrap;
+}
+
+/* Animated Sound Wave Bars */
+.ht-sound-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+}
+
+.ht-sound-bars span {
+  width: 2px;
+  background: #34d399;
+  border-radius: 1px;
+  animation: htSoundWave 0.8s ease-in-out infinite alternate;
+}
+
+.ht-sound-bars span:nth-child(1) { height: 4px; animation-delay: 0.0s; }
+.ht-sound-bars span:nth-child(2) { height: 9px; animation-delay: 0.2s; }
+.ht-sound-bars span:nth-child(3) { height: 6px; animation-delay: 0.4s; }
+
+@keyframes htSoundWave {
+  0% { height: 3px; }
+  100% { height: 10px; }
+}
+
+/* --------------------------------------------------------------------------
+   STREAMLINED VOTING INSTRUCTION TICKER
+   -------------------------------------------------------------------------- */
 .ht-join-banner {
-  background: linear-gradient(90deg, #dc2626, #7c3aed, #2563eb);
-  padding: 2px;
-  border-radius: 10px;
-  box-shadow: 0 4px 18px rgba(220, 38, 38, 0.35);
-  animation: htPulseGlow 3s ease-in-out infinite alternate;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.8), rgba(124, 58, 237, 0.8), rgba(37, 99, 235, 0.8));
+  padding: 1.5px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
 .ht-join-inner {
   background: #090e17;
-  padding: 7px 12px;
-  border-radius: 8px;
+  padding: 5px 9px;
+  border-radius: 6.5px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  overflow: hidden;
 }
 
 .ht-join-cue {
-  font-size: 11px;
-  font-weight: 800;
-  color: #fef08a;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 900;
+  color: #fef08a;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.ht-join-subtext {
-  font-size: 10.5px;
-  color: #94a3b8;
+.ht-chat-icon {
+  font-size: 12px;
+}
+
+.ht-join-keywords {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
   white-space: nowrap;
 }
 
-.ht-join-subtext b {
+.ht-kw-pill {
+  font-size: 9.5px;
+  font-weight: 800;
   color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.4px;
 }
 
 /* --------------------------------------------------------------------------
-   QUALIFIERS BRACKET STRIP (Top 4 spots)
+   QUALIFIERS GATE STRIP (Top 4 spots)
    -------------------------------------------------------------------------- */
 .ht-bracket-strip {
   position: relative;
   z-index: 10;
-  padding: 0 16px 8px;
+  padding: 2px 12px 6px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .ht-bracket-slot {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px dashed var(--ht-border);
-  border-radius: 8px;
-  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  padding: 4px 6px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  transition: all 0.3s ease;
+  gap: 6px;
+  min-height: 32px;
+  transition: all 0.25s ease;
+  overflow: hidden;
 }
 
 .ht-bracket-slot.filled {
   border-style: solid;
   border-color: rgba(245, 158, 11, 0.6);
-  background: rgba(245, 158, 11, 0.12);
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.14);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
 }
 
-.ht-slot-num {
-  font-size: 10px;
-  font-weight: 800;
+.ht-slot-badge {
+  font-size: 9.5px;
+  font-weight: 900;
   color: #64748b;
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.ht-bracket-slot.filled .ht-slot-num {
+.ht-bracket-slot.filled .ht-slot-badge {
   background: #f59e0b;
   color: #000;
 }
@@ -204,186 +303,259 @@ body, html {
 .ht-slot-hero {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
   overflow: hidden;
+}
+
+.ht-slot-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.ht-slot-avatar svg {
+  width: 11px;
+  height: 11px;
+  fill: #fff;
 }
 
 .ht-slot-name {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
+  color: #f8fafc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #f8fafc;
+}
+
+.ht-slot-placeholder {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --------------------------------------------------------------------------
-   MAIN TRACKS CONTAINER (Qualifiers Phase 1)
+   16-HERO QUALIFIER LEADERBOARD (Phase 1)
    -------------------------------------------------------------------------- */
 .ht-tracks-container {
   position: relative;
   z-index: 5;
   flex: 1;
-  padding: 4px 14px;
-  overflow-y: auto;
+  min-height: 0;
+  padding: 2px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3.5px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.ht-tracks-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* Top 4 Cutoff Line Indicator */
+.ht-cutoff-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+  flex-shrink: 0;
+}
+
+.ht-cutoff-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.5), transparent);
+}
+
+.ht-cutoff-label {
+  font-size: 9px;
+  font-weight: 900;
+  color: #f59e0b;
+  letter-spacing: 0.8px;
+  text-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  white-space: nowrap;
 }
 
 /* Hero Row Card */
 .ht-hero-row {
   position: relative;
-  background: var(--ht-card-bg);
-  border: 1px solid var(--ht-border);
-  border-radius: 8px;
-  padding: 6px 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 3px 8px;
+  min-height: 27px;
+  max-height: 33px;
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  background: rgba(13, 18, 30, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: transform 0.15s ease, border-color 0.2s ease;
-  overflow: hidden;
+}
+
+.ht-hero-row.qualifying-zone {
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.ht-hero-row.qualified {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .ht-hero-row.bump {
   transform: scale(1.015);
   border-color: #38bdf8;
+  z-index: 2;
 }
 
-.ht-hero-row.qualified {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
-}
-
-/* Progress Fill Bar behind row */
+/* Background Progress Fill */
 .ht-row-progress-fill {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  opacity: 0.22;
+  opacity: 0.25;
   transition: width 0.25s ease-out;
   pointer-events: none;
   z-index: 0;
 }
 
-/* Hero Avatar & Emblem */
-.ht-hero-badge {
+/* Rank Badge */
+.ht-hero-rank-pill {
   position: relative;
   z-index: 2;
-  width: 32px;
-  height: 32px;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 20px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ht-hero-rank-pill.rank-gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000;
+  font-weight: 900;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+/* Hero Emblem Avatar */
+.ht-hero-avatar-box {
+  position: relative;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1.5px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
   flex-shrink: 0;
 }
 
-.ht-hero-badge svg {
-  width: 18px;
-  height: 18px;
+.ht-hero-avatar-box svg {
+  width: 12px;
+  height: 12px;
   fill: #ffffff;
 }
 
-/* Rank & Name Details */
-.ht-hero-details {
+/* Hero Identity — SINGLE CLEAN HERO NAME */
+.ht-hero-identity {
   position: relative;
   z-index: 2;
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ht-hero-title-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ht-hero-name-group {
   display: flex;
   align-items: center;
   gap: 6px;
   overflow: hidden;
 }
 
-.ht-hero-rank {
-  font-size: 11px;
-  font-weight: 800;
-  color: #64748b;
-}
-
 .ht-hero-name {
-  font-size: 12.5px;
+  font-size: clamp(11.5px, 1.3vh, 13px);
   font-weight: 800;
+  color: #f8fafc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.ht-vote-cue {
+/* Supporter Shoutout Chip directly on Hero Card */
+.ht-hero-voter-chip {
   font-size: 9.5px;
   font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
   color: #38bdf8;
-  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+  flex-shrink: 1;
 }
 
-.ht-hero-points-group {
+/* Score Values & Mini Meter */
+.ht-hero-score-block {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.ht-score-values {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 2px;
   font-variant-numeric: tabular-nums;
 }
 
-.ht-hero-points {
-  font-size: 13px;
-  font-weight: 800;
+.ht-score-current {
+  font-size: 12.5px;
+  font-weight: 900;
   color: #f8fafc;
 }
 
-.ht-hero-target {
-  font-size: 10px;
+.ht-score-target {
+  font-size: 9.5px;
+  font-weight: 600;
   color: #64748b;
 }
 
-/* Secondary Micro-Progress Bar */
-.ht-micro-bar {
-  width: 100%;
-  height: 4px;
+.ht-mini-meter {
+  width: 50px;
+  height: 3px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
 
-.ht-micro-fill {
+.ht-mini-meter-fill {
   height: 100%;
   border-radius: 2px;
   transition: width 0.25s ease-out;
-}
-
-/* Last Voter Shoutout Tag inside Row */
-.ht-last-voter-tag {
-  position: relative;
-  z-index: 2;
-  font-size: 10px;
-  color: #94a3b8;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 2px 7px;
-  border-radius: 4px;
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -393,24 +565,36 @@ body, html {
   position: relative;
   z-index: 5;
   flex: 1;
-  padding: 12px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 18px;
+  justify-content: space-evenly;
+  gap: 10px;
+}
+
+.ht-phase-title-badge {
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  color: #f59e0b;
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.7);
+  flex-shrink: 0;
 }
 
 .ht-team-card {
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(15, 23, 42, 0.94);
   border: 2px solid var(--ht-border);
   border-radius: 14px;
-  padding: 16px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+  min-height: 140px;
+  flex: 1;
+  max-height: 220px;
 }
 
 .ht-team-header {
@@ -422,7 +606,8 @@ body, html {
 .ht-team-heroes {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  min-width: 0;
 }
 
 .ht-team-avatar-duo {
@@ -430,14 +615,21 @@ body, html {
   align-items: center;
 }
 
-.ht-team-avatar-duo .ht-hero-badge:nth-child(2) {
-  margin-left: -12px;
-  border-color: rgba(255, 255, 255, 0.8);
+.ht-team-avatar-duo .ht-hero-avatar-box {
+  width: 44px;
+  height: 44px;
+}
+
+.ht-team-avatar-duo .ht-hero-avatar-box:nth-child(2) {
+  margin-left: -14px;
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
 }
 
 .ht-team-title {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14.5px;
+  font-weight: 900;
+  color: #f8fafc;
   letter-spacing: 0.5px;
 }
 
@@ -451,99 +643,180 @@ body, html {
   color: #38bdf8;
 }
 
+.ht-team-score-num {
+  font-size: 20px;
+  font-weight: 900;
+  color: #f59e0b;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .ht-team-meter-bg {
   width: 100%;
-  height: 18px;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
-  position: relative;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
 .ht-team-meter-fill {
   height: 100%;
-  border-radius: 9px;
+  border-radius: 10px;
   transition: width 0.25s ease-out;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+}
+
+.ht-vs-divider {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 900;
+  color: #ef4444;
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.9);
+  flex-shrink: 0;
 }
 
 /* --------------------------------------------------------------------------
-   PHASE 3: GRAND FINAL (1v1 SHOWDOWN)
+   PHASE 3: GRAND FINAL 1v1 SHOWDOWN
    -------------------------------------------------------------------------- */
 .ht-final-container {
   position: relative;
   z-index: 5;
   flex: 1;
-  padding: 12px 16px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 20px;
-}
-
-.ht-versus-badge {
-  align-self: center;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #ef4444;
-  text-shadow: 0 0 15px rgba(239, 68, 68, 0.8);
+  justify-content: space-evenly;
+  gap: 12px;
 }
 
 .ht-finalist-card {
   background: rgba(15, 23, 42, 0.95);
   border: 2px solid var(--ht-border);
   border-radius: 14px;
-  padding: 18px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  min-height: 140px;
+  flex: 1;
+  max-height: 220px;
+}
+
+.ht-finalist-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+}
+
+.ht-finalist-left {
+  display: flex;
+  align-items: center;
   gap: 14px;
 }
 
+.ht-finalist-left .ht-hero-avatar-box {
+  width: 52px;
+  height: 52px;
+}
+
+.ht-finalist-left .ht-hero-avatar-box svg {
+  width: 28px;
+  height: 28px;
+}
+
+.ht-finalist-name {
+  font-size: 18px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: 0.5px;
+}
+
+.ht-finalist-sub {
+  font-size: 11.5px;
+  color: #38bdf8;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.ht-finalist-pts {
+  font-size: 26px;
+  font-weight: 900;
+  color: #f59e0b;
+  font-variant-numeric: tabular-nums;
+}
+
+.ht-versus-badge {
+  align-self: center;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ef4444;
+  text-shadow: 0 0 16px rgba(239, 68, 68, 0.9);
+  flex-shrink: 0;
+}
+
 /* --------------------------------------------------------------------------
-   FOOTER: RECENT HERO BOOSTERS TICKER (Commenter Shoutouts)
+   FOOTER: RECENT HERO BOOSTERS (Live Commenter Shoutouts)
    -------------------------------------------------------------------------- */
 .ht-footer-shoutout {
   position: relative;
   z-index: 10;
-  padding: 8px 16px 14px;
-  background: rgba(10, 14, 22, 0.95);
+  padding: 6px 12px 8px;
+  background: rgba(8, 12, 20, 0.95);
   border-top: 1px solid var(--ht-border);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .ht-shoutout-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
+}
+
+.ht-shoutout-title {
   color: #94a3b8;
+}
+
+.ht-shoutout-cta {
+  color: #38bdf8;
 }
 
 .ht-shoutout-ticker {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 85px;
+  gap: 3px;
+  max-height: 52px;
   overflow: hidden;
+}
+
+.ht-shoutout-waiting {
+  font-size: 10px;
+  color: #64748b;
+  padding: 3px 0;
 }
 
 .ht-shoutout-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  animation: htFadeInUp 0.22s ease-out;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 10.5px;
+  animation: htSlideIn 0.2s ease-out;
 }
 
 .ht-shoutout-left {
@@ -554,24 +827,25 @@ body, html {
 }
 
 .ht-shoutout-user {
-  font-weight: 700;
+  font-weight: 800;
   color: #f8fafc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  max-width: 140px;
 }
 
 .ht-shoutout-hero {
   font-size: 10px;
-  color: #38bdf8;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .ht-shoutout-attack {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   color: #f59e0b;
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
@@ -581,36 +855,36 @@ body, html {
   position: absolute;
   inset: 0;
   z-index: 100;
-  background: rgba(4, 7, 12, 0.94);
+  background: rgba(4, 7, 12, 0.95);
   backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 20px;
   text-align: center;
   animation: htFadeIn 0.3s ease-out;
 }
 
 .ht-victory-trophy {
-  font-size: 56px;
-  filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.8));
+  font-size: 52px;
+  filter: drop-shadow(0 0 24px rgba(245, 158, 11, 0.8));
   animation: htTrophyBounce 1s infinite alternate;
 }
 
 .ht-victory-title {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: #f59e0b;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .ht-champion-name {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
-  margin: 6px 0 16px;
+  margin: 4px 0 14px;
   background: linear-gradient(135deg, #ffffff, #fef08a, #f59e0b);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -619,29 +893,29 @@ body, html {
 
 .ht-supporters-podium {
   width: 100%;
-  max-width: 380px;
+  max-width: 360px;
   background: rgba(15, 23, 42, 0.85);
   border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
 }
 
 .ht-podium-header {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: #fbbf24;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .ht-supporter-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0;
-  font-size: 12px;
+  padding: 3px 0;
+  font-size: 11.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -649,19 +923,26 @@ body, html {
   border-bottom: none;
 }
 
+.ht-supporter-user {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.ht-supporter-pts {
+  color: #f59e0b;
+  font-weight: 800;
+}
+
 .ht-reset-countdown {
-  font-size: 12px;
+  font-size: 11px;
   color: #94a3b8;
 }
 
-/* Keyframe Animations */
-@keyframes htPulseGlow {
-  0% { box-shadow: 0 0 12px rgba(220, 38, 38, 0.4); }
-  100% { box-shadow: 0 0 24px rgba(37, 99, 235, 0.6); }
-}
-
-@keyframes htFadeInUp {
-  0% { opacity: 0; transform: translateY(8px); }
+/* --------------------------------------------------------------------------
+   KEYFRAME ANIMATIONS
+   -------------------------------------------------------------------------- */
+@keyframes htSlideIn {
+  0% { opacity: 0; transform: translateY(6px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
@@ -672,5 +953,5 @@ body, html {
 
 @keyframes htTrophyBounce {
   0% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(-8px) scale(1.05); }
+  100% { transform: translateY(-6px) scale(1.04); }
 }
