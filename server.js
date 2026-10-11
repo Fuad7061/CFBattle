@@ -62,6 +62,7 @@ let currentSettings = {
     bitrate: 4500, // 4500k sweet spot for 1080p30 / 1080p60 on YouTube Live
     fps: 30, // 30 FPS recommended for smooth real-time cloud VPS; 60 FPS for high-core dedicated VPS
     preset: 'ultrafast', // ultrafast guarantees speed >= 1.0x on VPS CPU without frame drops
+    resolution: '1080x1920', // '1080x1920' (Full HD Vertical) or '720x1280' (Ultra-Lightweight Vertical)
     crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
     activeEngine: 'vertical', // 'vertical' for Super HD Vertical, 'landscape' for React
     youtubeChatMode: 'player', // 'player' (Zero-Quota Web Player, Unlimited 24/7) | 'hybrid' | 'api'
@@ -209,6 +210,61 @@ app.post('/api/logs/clear', checkAuth, (req, res) => {
 });
 
 /**
+ * Returns optimized, ultra-lightweight Puppeteer arguments for headless Linux/VPS execution.
+ * Strips out unnecessary Chromium background services to minimize CPU usage.
+ */
+function getPuppeteerArgs() {
+    const args = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--window-size=1080,1920',
+        '--window-position=0,0',
+        '--autoplay-policy=no-user-gesture-required',
+        '--kiosk',
+        '--js-flags="--max-old-space-size=1024"',
+        '--enable-features=CanvasOopRasterization',
+        '--force-device-scale-factor=1',
+        '--force-color-profile=srgb',
+        '--disable-breakpad',
+        '--disable-component-update',
+        '--disable-ipc-flooding-protection',
+        '--disable-features=CalculateNativeWinOcclusion,TranslateUI,Translate,MediaRouter,OptimizationHints,AudioServiceSandbox,InterestFeedContentSuggestions',
+        '--enable-audio-service-sandbox=false',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-threaded-scrolling',
+        '--disable-logging',
+        '--disable-gpu-watchdog',
+        '--disable-renderer-accessibility',
+        '--disable-sync',
+        '--disable-default-apps',
+        '--disable-extensions',
+        '--disable-hang-monitor',
+        '--disable-domain-reliability',
+        '--disable-client-side-phishing-detection',
+        '--metrics-recording-only',
+        '--password-store=basic',
+        '--use-mock-keychain'
+    ];
+
+    if (process.platform !== 'darwin' && !process.env.USE_GPU) {
+        args.push('--disable-gpu');
+    }
+
+    if (process.env.DISPLAY) {
+        args.push(`--display=${process.env.DISPLAY}`);
+    } else if (process.platform !== 'darwin') {
+        args.push('--display=:99');
+    }
+
+    return args;
+}
+
+/**
  * Boot the game in Chrome and push it to the RTMP endpoint.
  * Extracted from the /api/start-stream route so the scheduler can start a run
  * on a timer through exactly the same path a manual click uses.
@@ -231,40 +287,7 @@ async function beginStream() {
             : '/usr/bin/chromium';
         const chromeExecutable = process.env.CHROME_BIN || defaultChrome;
 
-        const puppeteerArgs = [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--window-size=1080,1920',
-            '--window-position=0,0',
-            '--autoplay-policy=no-user-gesture-required',
-            '--kiosk',
-            '--js-flags="--max-old-space-size=1024"',
-            '--enable-features=CanvasOopRasterization',
-            '--force-device-scale-factor=1',
-            '--force-color-profile=srgb',
-            '--disable-breakpad',
-            '--disable-component-update',
-            '--disable-ipc-flooding-protection',
-            '--disable-features=CalculateNativeWinOcclusion,TranslateUI,Translate,MediaRouter,OptimizationHints,AudioServiceSandbox',
-            '--enable-audio-service-sandbox=false',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-threaded-scrolling'
-        ];
-
-        if (process.platform !== 'darwin' && !process.env.USE_GPU) {
-            puppeteerArgs.push('--disable-gpu');
-        }
-
-        if (process.env.DISPLAY) {
-            puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
-        } else if (process.platform !== 'darwin') {
-            puppeteerArgs.push('--display=:99');
-        }
+        const puppeteerArgs = getPuppeteerArgs();
 
         // Launch Puppeteer (Optimized for minimal CPU)
         browser = await puppeteer.launch({
@@ -385,13 +408,19 @@ async function beginStream() {
 
         logMsg("Starting FFmpeg streaming...");
 
-        // Construct FFmpeg Args based on crop settings
-        let videoFilter = 'format=yuv420p';
+        // Construct FFmpeg video filter chain based on crop and resolution
+        const filterParts = [];
         if (currentSettings.crop && currentSettings.crop.enabled) {
             const { w, h, x, y } = currentSettings.crop;
-            videoFilter = `crop=${w}:${h}:${x}:${y},format=yuv420p`;
-            logMsg(`Applying crop filter: ${videoFilter}`);
+            filterParts.push(`crop=${w}:${h}:${x}:${y}`);
+            logMsg(`Applying crop filter: crop=${w}:${h}:${x}:${y}`);
         }
+        if (currentSettings.resolution === '720x1280') {
+            filterParts.push('scale=720:1280');
+            logMsg(`Applying 720x1280 ultra-low CPU scaling filter`);
+        }
+        filterParts.push('format=yuv420p');
+        const videoFilter = filterParts.join(',');
 
         const bitrateVal = Number(currentSettings.bitrate) || 4500;
         const bitrateStr = `${bitrateVal}k`;
@@ -575,23 +604,7 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         const defaultChrome = process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/chromium';
         const chromeExecutable = process.env.CHROME_BIN || defaultChrome;
 
-        const puppeteerArgs = [
-            '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-            '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-            '--window-size=1080,1920', '--window-position=0,0',
-            '--autoplay-policy=no-user-gesture-required', '--kiosk',
-            '--js-flags="--max-old-space-size=1024"',
-            '--enable-features=CanvasOopRasterization',
-            '--enable-gpu-rasterization',
-            '--ignore-gpu-blocklist'
-        ];
-
-        if (process.platform !== 'darwin' && !process.env.USE_GPU) {
-            puppeteerArgs.push('--disable-gpu');
-        }
-
-        if (process.env.DISPLAY) puppeteerArgs.push(`--display=${process.env.DISPLAY}`);
-        else if (process.platform !== 'darwin') puppeteerArgs.push('--display=:99');
+        const puppeteerArgs = getPuppeteerArgs();
 
         browser = await puppeteer.launch({
             executablePath: chromeExecutable,

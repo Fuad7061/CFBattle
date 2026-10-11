@@ -551,11 +551,18 @@
                             <label>Secret Key (Keep private!)</label>
                             <input type="password" id="set-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx">
                         </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px;">
+                            <div class="form-group">
+                                <label>Resolution</label>
+                                <select id="set-resolution" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
+                                    <option value="1080x1920" selected>1080x1920 (Full HD · Default)</option>
+                                    <option value="720x1280">720x1280 (HD · Ultra-Low CPU, -55% load)</option>
+                                </select>
+                            </div>
                             <div class="form-group">
                                 <label>Framerate (FPS)</label>
                                 <select id="set-fps" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
-                                    <option value="30" selected>30 FPS (Recommended · Silky Smooth on VPS · Zero Lag)</option>
+                                    <option value="30" selected>30 FPS (Recommended · Zero Lag on VPS)</option>
                                     <option value="60">60 FPS (Ultra 60fps · High-End 4+ vCPU VPS)</option>
                                 </select>
                             </div>
@@ -566,14 +573,14 @@
                             <div class="form-group">
                                 <label>Encoding Preset</label>
                                 <select id="set-preset" style="background:#131b2e; border:1px solid var(--border); color:#fff; padding:8px 10px; border-radius:6px; width:100%; height:38px;">
-                                    <option value="ultrafast" selected>Ultrafast (Recommended for VPS · Real-Time Speed >= 1.0x)</option>
+                                    <option value="ultrafast" selected>Ultrafast (Lowest CPU · Real-Time Speed &gt;= 1.0x)</option>
                                     <option value="superfast">Superfast (Balanced)</option>
-                                    <option value="veryfast">Veryfast (High CPU · May Buffer on Standard VPS)</option>
+                                    <option value="veryfast">Veryfast (High CPU · May Buffer on VPS)</option>
                                 </select>
                             </div>
                         </div>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:-6px; margin-bottom:12px; line-height:1.4;">
-                            💡 <strong style="color:#38bdf8;">Optimal VPS Streaming Settings:</strong> 30 FPS + Ultrafast + 4500 Kbps guarantees that video renders as buttery-smooth as the dashboard preview, eliminates YouTube's "insufficient video" error, and keeps chat latency under ~2-3 seconds.
+                            💡 <strong style="color:#38bdf8;">Optimal VPS Streaming Settings:</strong> 30 FPS + Ultrafast + 4500 Kbps guarantees that video renders as buttery-smooth as the dashboard preview, eliminates YouTube's "insufficient video" error, and keeps chat latency under ~2-3 seconds. (For budget 1-2 vCPU instances, select 720x1280 to save another 55% CPU).
                         </div>
                     </div>
                     
@@ -1518,6 +1525,7 @@
             if (s.youtubePollInterval) document.getElementById('set-youtube-poll-interval').value = s.youtubePollInterval;
             onYoutubeModeChange();
             detectYoutubeTargetInput();
+            if (s.resolution !== undefined) document.getElementById('set-resolution').value = s.resolution;
             if (s.fps !== undefined) document.getElementById('set-fps').value = s.fps;
             if (s.bitrate !== undefined) document.getElementById('set-bitrate').value = s.bitrate;
             if (s.preset !== undefined) document.getElementById('set-preset').value = s.preset;
@@ -1650,6 +1658,7 @@
             const rtmpPayload = {
                 streamUrl: document.getElementById('set-stream-url').value,
                 streamKey: document.getElementById('set-stream-key').value,
+                resolution: document.getElementById('set-resolution').value || '1080x1920',
                 fps: parseInt(document.getElementById('set-fps').value) || 30,
                 bitrate: parseInt(document.getElementById('set-bitrate').value) || 4500,
                 preset: document.getElementById('set-preset').value || 'ultrafast',
