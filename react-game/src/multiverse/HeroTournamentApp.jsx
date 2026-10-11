@@ -84,9 +84,23 @@ export default function HeroTournamentApp() {
   const [champion, setChampion] = useState(null);
   const [resetCountdown, setResetCountdown] = useState(12);
 
-  // Latest Commenter Shoutout: Single row that stays on screen permanently until the next comment!
-  const [latestStrike, setLatestStrike] = useState(null);
-  const hasRealStrikeRef = useRef(false);
+  // Latest Commenter Shoutout: TWO dedicated rows
+  // Row 1: Real Commenter (VIP Viewer with YouTube avatar, stays permanently until another viewer comments)
+  // Row 2: Automated System Comment (Background automated strike / arena pulse)
+  const [realViewerStrike, setRealViewerStrike] = useState(null);
+  const [systemStrike, setSystemStrike] = useState({
+    id: 'sys-init',
+    user: '@ArenaPulse_AI',
+    avatar: null,
+    avatarGradient: 'linear-gradient(135deg, #1e293b, #0f172a)',
+    initial: '⚡',
+    heroName: 'Iron Man',
+    heroColor: '#e11d48',
+    attackName: 'Repulsor Blast',
+    points: 1,
+    isSuperChat: false,
+    isReal: false
+  });
 
   // Supporter Totals Map: username -> { points, heroName }
   const [supporterTotals, setSupporterTotals] = useState({});
@@ -99,10 +113,10 @@ export default function HeroTournamentApp() {
   const [activePopup, setActivePopup] = useState(null);
   const [floatingDamage, setFloatingDamage] = useState([]);
 
-  // Auto-scale canvas: Base 440x780 design scales to fit any screen with zero overflow
+  // Auto-scale canvas: Base 440x810 design scales to fit any screen with zero overflow
   const [scaleFactor, setScaleFactor] = useState(1);
   const baseWidth = 440;
-  const baseHeight = 780;
+  const baseHeight = 810;
 
   useEffect(() => {
     const handleResize = () => {
@@ -349,8 +363,8 @@ export default function HeroTournamentApp() {
         }
       },
       resetSupporters: () => {
-        setLatestStrike(null);
-        hasRealStrikeRef.current = false;
+        setRealViewerStrike(null);
+        setSystemStrike(null);
         setSupporterTotals({});
         heroAudio.playBoost('#38bdf8');
         triggerPopup({
@@ -419,8 +433,20 @@ export default function HeroTournamentApp() {
       } else if (e.data.type === 'MUSIC_UPDATE' && e.data.src) {
         heroAudio.loadBgMusic(e.data.src);
         heroAudio.playBgMusic();
-      } else if (e.data.type === 'RESET_SUPPORTERS') {
-        window.heroTournament?.resetSupporters();
+      } else if (e.data.type === 'CHAT_MESSAGE' || e.data.type === 'TEST_COMMENT') {
+        const text = e.data.comment || e.data.text || '';
+        const hero = findHeroFromComment(text);
+        if (hero) {
+          lastRealChatRef.current = Date.now();
+          processHeroVote(
+            hero,
+            Number(e.data.points) || 1,
+            e.data.author || 'Viewer',
+            Boolean(e.data.isSuperChat),
+            e.data.avatar || null,
+            true
+          );
+        }
       }
     };
 
@@ -457,8 +483,9 @@ export default function HeroTournamentApp() {
       setFloatingDamage(prev => prev.filter(d => d.id !== damageId));
     }, 1200);
 
-    // Persistent Single-Row Commenter Shoutout:
-    // Stays permanently until the next comment! Real commenters take precedence and are NEVER overwritten by auto-voters.
+    // Two-Row Shoutout:
+    // Row 1 (realViewerStrike): Real commenters with their YouTube photo/avatar, stays permanently until another viewer comments.
+    // Row 2 (systemStrike): Automated system / bot / arena pulse strikes.
     const shoutoutItem = {
       id: Date.now() + Math.random().toString(36).slice(2, 6),
       user: formattedUser,
@@ -474,10 +501,9 @@ export default function HeroTournamentApp() {
     };
 
     if (isRealComment) {
-      hasRealStrikeRef.current = true;
-      setLatestStrike(shoutoutItem);
-    } else if (!hasRealStrikeRef.current) {
-      setLatestStrike(shoutoutItem);
+      setRealViewerStrike(shoutoutItem);
+    } else {
+      setSystemStrike(shoutoutItem);
     }
 
     // Update Leaderboard Stats for Podium
@@ -1141,41 +1167,45 @@ export default function HeroTournamentApp() {
           <div className="ht-shoutout-header">
             <div className="ht-shoutout-title-wrap">
               <span className="ht-shoutout-pulse-dot" />
-              <span className="ht-shoutout-title">LATEST HERO STRIKE</span>
+              <span className="ht-shoutout-title">LIVE HERO STRIKES</span>
             </div>
             <span className="ht-shoutout-cta">TYPE IN CHAT TO GET FEATURED</span>
           </div>
 
           <div className="ht-shoutout-body">
-            {!latestStrike ? (
-              <div className="ht-latest-shoutout-row empty">
+            {/* ROW 1: REAL COMMENTER (VIP Viewer Shoutout with Profile Picture) */}
+            {!realViewerStrike ? (
+              <div className="ht-latest-shoutout-row real-commenter empty">
                 <div className="ht-shoutout-left">
                   <div className="ht-shoutout-avatar-wrap empty-pulse">
-                    <span className="ht-shoutout-avatar-empty-icon">💬</span>
+                    <span className="ht-shoutout-avatar-empty-icon">⭐</span>
                   </div>
                   <div className="ht-shoutout-meta">
-                    <span className="ht-shoutout-prompt-title">BE THE FIRST TO STRIKE DOOM!</span>
-                    <span className="ht-shoutout-prompt-sub">Type any superhero in chat to see your name & photo</span>
+                    <div className="ht-shoutout-user-line">
+                      <span className="ht-shoutout-badge-vip">⭐ REAL VIEWER SPOT</span>
+                      <span className="ht-shoutout-vip-tag waiting">WAITING FOR YOU</span>
+                    </div>
+                    <span className="ht-shoutout-prompt-sub">Type any superhero in chat to see your name & photo here!</span>
                   </div>
                 </div>
                 <div className="ht-shoutout-strike-badge empty">
-                  <span className="ht-strike-name">WAITING</span>
+                  <span className="ht-strike-name">FEATURED</span>
                 </div>
               </div>
             ) : (
-              <div key={latestStrike.id} className="ht-latest-shoutout-row">
+              <div key={realViewerStrike.id} className="ht-latest-shoutout-row real-commenter">
                 <div className="ht-shoutout-left">
                   <div
                     className="ht-shoutout-avatar-wrap"
                     style={{
-                      borderColor: latestStrike.heroColor,
-                      boxShadow: `0 0 10px ${latestStrike.heroColor}77`
+                      borderColor: realViewerStrike.heroColor,
+                      boxShadow: `0 0 10px ${realViewerStrike.heroColor}88`
                     }}
                   >
-                    {latestStrike.avatar ? (
+                    {realViewerStrike.avatar ? (
                       <img
-                        src={latestStrike.avatar}
-                        alt={latestStrike.user}
+                        src={realViewerStrike.avatar}
+                        alt={realViewerStrike.user}
                         className="ht-shoutout-avatar-img"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
@@ -1187,27 +1217,27 @@ export default function HeroTournamentApp() {
                     <div
                       className="ht-shoutout-avatar-fb"
                       style={{
-                        display: latestStrike.avatar ? 'none' : 'flex',
-                        background: latestStrike.avatarGradient
+                        display: realViewerStrike.avatar ? 'none' : 'flex',
+                        background: realViewerStrike.avatarGradient
                       }}
                     >
-                      {latestStrike.initial}
+                      {realViewerStrike.initial}
                     </div>
                   </div>
 
                   <div className="ht-shoutout-meta">
                     <div className="ht-shoutout-user-line">
-                      <span className="ht-shoutout-user" title={latestStrike.user}>
-                        {latestStrike.user}
+                      <span className="ht-shoutout-user" title={realViewerStrike.user}>
+                        {realViewerStrike.user}
                       </span>
-                      {latestStrike.isSuperChat ? (
+                      {realViewerStrike.isSuperChat ? (
                         <span className="ht-shoutout-vip-tag superchat">💎 SUPERCHAT</span>
-                      ) : latestStrike.isReal ? (
-                        <span className="ht-shoutout-vip-tag live">🔴 LIVE</span>
-                      ) : null}
+                      ) : (
+                        <span className="ht-shoutout-vip-tag live">🔴 REAL VIEWER</span>
+                      )}
                     </div>
                     <span className="ht-shoutout-action">
-                      struck with <b style={{ color: latestStrike.heroColor }}>{latestStrike.heroName}</b>
+                      struck with <b style={{ color: realViewerStrike.heroColor }}>{realViewerStrike.heroName}</b>
                     </span>
                   </div>
                 </div>
@@ -1215,14 +1245,81 @@ export default function HeroTournamentApp() {
                 <div
                   className="ht-shoutout-strike-badge"
                   style={{
-                    borderColor: `${latestStrike.heroColor}88`,
+                    borderColor: `${realViewerStrike.heroColor}88`,
                     background: 'linear-gradient(135deg, rgba(0,0,0,0.8), rgba(20,20,30,0.85))'
                   }}
                 >
-                  <span className="ht-strike-pts" style={{ color: latestStrike.heroColor }}>
-                    +{latestStrike.points}
+                  <span className="ht-strike-pts" style={{ color: realViewerStrike.heroColor }}>
+                    +{realViewerStrike.points}
                   </span>
-                  <span className="ht-strike-name">{latestStrike.attackName}</span>
+                  <span className="ht-strike-name">{realViewerStrike.attackName}</span>
+                </div>
+              </div>
+            )}
+
+            {/* ROW 2: AUTOMATED SYSTEM COMMENT */}
+            {!systemStrike ? (
+              <div className="ht-latest-shoutout-row system-commenter empty">
+                <div className="ht-shoutout-left">
+                  <div className="ht-shoutout-avatar-wrap system-pulse">
+                    <span className="ht-shoutout-avatar-empty-icon">⚡</span>
+                  </div>
+                  <div className="ht-shoutout-meta">
+                    <div className="ht-shoutout-user-line">
+                      <span className="ht-shoutout-badge-system">⚡ ARENA PULSE</span>
+                      <span className="ht-shoutout-vip-tag auto">🤖 AUTO</span>
+                    </div>
+                    <span className="ht-shoutout-action">Connecting to Multiverse battle stream...</span>
+                  </div>
+                </div>
+                <div className="ht-shoutout-strike-badge empty">
+                  <span className="ht-strike-name">ACTIVE</span>
+                </div>
+              </div>
+            ) : (
+              <div key={systemStrike.id} className="ht-latest-shoutout-row system-commenter">
+                <div className="ht-shoutout-left">
+                  <div
+                    className="ht-shoutout-avatar-wrap system-avatar"
+                    style={{
+                      borderColor: systemStrike.heroColor,
+                      boxShadow: `0 0 8px ${systemStrike.heroColor}55`
+                    }}
+                  >
+                    <div
+                      className="ht-shoutout-avatar-fb system-fb"
+                      style={{
+                        background: 'linear-gradient(135deg, #1e293b, #0f172a)'
+                      }}
+                    >
+                      🤖
+                    </div>
+                  </div>
+
+                  <div className="ht-shoutout-meta">
+                    <div className="ht-shoutout-user-line">
+                      <span className="ht-shoutout-user system-user" title={systemStrike.user}>
+                        {systemStrike.user}
+                      </span>
+                      <span className="ht-shoutout-vip-tag auto">🤖 AUTO STRIKE</span>
+                    </div>
+                    <span className="ht-shoutout-action">
+                      automated strike with <b style={{ color: systemStrike.heroColor }}>{systemStrike.heroName}</b>
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className="ht-shoutout-strike-badge system-badge"
+                  style={{
+                    borderColor: `${systemStrike.heroColor}66`,
+                    background: 'linear-gradient(135deg, rgba(15,23,42,0.85), rgba(2,8,5,0.9))'
+                  }}
+                >
+                  <span className="ht-strike-pts" style={{ color: systemStrike.heroColor }}>
+                    +{systemStrike.points}
+                  </span>
+                  <span className="ht-strike-name">{systemStrike.attackName}</span>
                 </div>
               </div>
             )}
