@@ -412,6 +412,7 @@
                 <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white;" onchange="updatePreviewSrc()">
                     <option value="landscape">Landscape (React V2)</option>
                     <option value="vertical">Vertical (Original)</option>
+                    <option value="points-race">Points Race: First to 1,000 (Viral Chat War)</option>
                 </select>
                 <button class="btn btn-success" id="btn-start" onclick="startStream()" style="height: 38px; padding: 0 15px; font-weight: 500;">▶ Start Stream</button>
                 <button class="btn btn-danger" id="btn-stop" style="display:none; height: 38px; padding: 0 15px; font-weight: 500;" onclick="stopStream()">⏹ Stop Engine</button>
@@ -1007,7 +1008,7 @@
 
         function selectedEngine() {
             const el = document.getElementById('live-engine-select');
-            return el && el.value === 'vertical' ? 'vertical' : 'landscape';
+            return el ? el.value : 'landscape';
         }
 
         function syncSettingsModalEngine() {
@@ -1016,9 +1017,13 @@
             const engine = selectedEngine();
             if (modal) modal.dataset.engine = engine;
             if (title) {
-                title.textContent = engine === 'vertical'
-                    ? '⚙ Vertical Game & Watermark Settings'
-                    : '⚙ Landscape Game & Watermark Settings';
+                if (engine === 'points-race') {
+                    title.textContent = '⚙ Points Race: First to 1,000 Chat War Settings';
+                } else if (engine === 'vertical') {
+                    title.textContent = '⚙ Vertical Game & Watermark Settings';
+                } else {
+                    title.textContent = '⚙ Landscape Game & Watermark Settings';
+                }
             }
         }
 
@@ -1887,13 +1892,16 @@
             const select = document.getElementById('live-engine-select');
             const wrapper = document.querySelector('.preview-wrapper');
             if (frame && select) {
-                const isVertical = select.value === 'vertical';
-                const path = isVertical ? '/?view=vertical&clean=true' : '/?view=landscape&clean=true';
+                const isPortrait = select.value === 'vertical' || select.value === 'points-race';
+                let path = '/?view=landscape&clean=true';
+                if (select.value === 'points-race') path = '/?view=points-race&clean=true';
+                else if (select.value === 'vertical') path = '/?view=vertical&clean=true';
+
                 if (!frame.src.endsWith(path)) {
                     frame.src = path;
                 }
                 if (wrapper) {
-                    wrapper.style.aspectRatio = isVertical ? '9/16' : '16/9';
+                    wrapper.style.aspectRatio = isPortrait ? '9/16' : '16/9';
                 }
                 syncSettingsModalEngine();
             }

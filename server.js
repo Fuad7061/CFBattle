@@ -300,7 +300,12 @@ async function beginStream() {
 
         currentPage = await browser.newPage();
         
-        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true&headless=true' : '?view=landscape&stream=true&headless=true';
+        let queryParam = '?view=landscape&stream=true&headless=true';
+        if (currentSettings.activeEngine === 'points-race') {
+            queryParam = '?view=points-race&stream=true&headless=true';
+        } else if (currentSettings.activeEngine === 'vertical') {
+            queryParam = '?view=vertical&stream=true&headless=true';
+        }
         const internalHost = process.env.INTERNAL_HOST || '127.0.0.1';
         const internalPort = process.env.PORT || 3000;
         let gameUrl = `http://${internalHost}:${internalPort}/${queryParam}`;
@@ -616,7 +621,12 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
 
         currentPage = await browser.newPage();
         
-        let queryParam = currentSettings.activeEngine === 'vertical' ? '?view=vertical&stream=true' : '?view=landscape&stream=true';
+        let queryParam = '?view=landscape&stream=true';
+        if (currentSettings.activeEngine === 'points-race') {
+            queryParam = '?view=points-race&stream=true';
+        } else if (currentSettings.activeEngine === 'vertical') {
+            queryParam = '?view=vertical&stream=true';
+        }
         const recHost = process.env.INTERNAL_HOST || '127.0.0.1';
         const recPort = process.env.PORT || 3000;
         let gameUrl = `http://${recHost}:${recPort}/${queryParam}`;
@@ -930,7 +940,7 @@ app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
 
 // Root route serves dashboard, or game if view param is set
 app.get('/', (req, res) => {
-    if (req.query.view === 'landscape' || req.query.view === 'vertical') {
+    if (req.query.view === 'landscape' || req.query.view === 'vertical' || req.query.view === 'points-race') {
         res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html'));
     } else {
         res.sendFile(path.join(__dirname, 'dashboard.html'));
@@ -1029,6 +1039,30 @@ app.post('/api/supporters/reset', (req, res) => {
   bus.emit('chat', { type: 'RESET_SUPPORTERS' });
   logMsg("Top supporters leaderboard reset via API.");
   res.json({ ok: true });
+});
+
+// Points Race State Persistence (Round history & All-Time hall of fame)
+const POINTS_RACE_FILE = path.join(__dirname, 'data', 'points_race_history.json');
+
+app.get('/api/points-race/state', (req, res) => {
+  try {
+    if (fs.existsSync(POINTS_RACE_FILE)) {
+      const data = fs.readFileSync(POINTS_RACE_FILE, 'utf8');
+      return res.json(JSON.parse(data));
+    }
+  } catch (e) {}
+  res.json({ round: 1, targetPoints: 1000, champions: [], allTimeScores: {}, topFans: [] });
+});
+
+app.post('/api/points-race/state', (req, res) => {
+  try {
+    const dir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(POINTS_RACE_FILE, JSON.stringify(req.body, null, 2));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // In-memory cache for synthesized voice lines so repeated announcements stream in 0ms
