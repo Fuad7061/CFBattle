@@ -7,6 +7,7 @@ const https = require('https');
 const { EventEmitter } = require('events');
 const { startYoutubeChatPolling, testYoutubeChatConnection, parseYoutubeTarget } = require('./youtubeChat.js');
 const { StreamScheduler } = require('./streamScheduler.js');
+const commenter = require('./youtubeCommenter.js');
 
 const app = express();
 app.use(express.json());
@@ -20,6 +21,7 @@ const LOGIN_KEY = process.env.LOGIN_KEY || 'admin';
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+commenter.init({ dataDir: DATA_DIR });
 
 // Logger utility
 function logMsg(msg, isError = false) {
@@ -75,6 +77,10 @@ if (fs.existsSync(SETTINGS_FILE)) {
         const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
         currentSettings = { ...currentSettings, ...JSON.parse(data) };
         logMsg("Loaded settings from persistent storage.");
+        if (currentSettings.youtubeLiveId && !commenter.state.settings.targetVideoId) {
+            const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
+            if (liveVideoId) commenter.updateSettings({ targetVideoId: liveVideoId });
+        }
     } catch (err) {
         logMsg("Failed to load settings: " + err.message, true);
     }
@@ -159,6 +165,10 @@ app.post('/api/settings', checkAuth, (req, res) => {
             oldSettings.youtubeChatMode !== currentSettings.youtubeChatMode ||
             oldSettings.youtubePollInterval !== currentSettings.youtubePollInterval) {
             restartYoutubeChat(currentSettings);
+            if (currentSettings.youtubeLiveId) {
+                const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
+                if (liveVideoId) commenter.updateSettings({ targetVideoId: liveVideoId });
+            }
         }
         
         bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: currentSettings.gameSettings || currentSettings });
@@ -186,6 +196,42 @@ app.post('/api/youtube-chat-test', checkAuth, async (req, res) => {
 
 app.get('/api/youtube-chat-status', checkAuth, (req, res) => {
     res.json(youtubeChatStatus);
+});
+
+// --- VPS YouTube Live Auto-Commenter API Routes ---
+app.get('/api/bot/state', checkAuth, (req, res) => {
+    const state = commenter.getStateSanitized();
+    if (!state.settings.targetVideoId && currentSettings.youtubeLiveId) {
+        const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
+        if (liveVideoId) state.settings.targetVideoId = liveVideoId;
+    }
+    res.json(state);
+});
+
+app.post('/api/bot/settings', checkAuth, (req, res) => {
+    const updated = commenter.updateSettings(req.body);
+    res.json(updated);
+});
+
+app.post('/api/bot/accounts', checkAuth, (req, res) => {
+    const updated = commenter.upsertAccount(req.body);
+    res.json(updated);
+});
+
+app.delete('/api/bot/accounts/:id', checkAuth, (req, res) => {
+    const updated = commenter.deleteAccount(req.params.id);
+    res.json(updated);
+});
+
+app.post('/api/bot/toggle', checkAuth, (req, res) => {
+    const newEnabled = !commenter.isRunning;
+    const updated = commenter.updateSettings({ enabled: newEnabled });
+    res.json(updated);
+});
+
+app.post('/api/bot/test/:id', checkAuth, async (req, res) => {
+    const result = await commenter.testSingleAccount(req.params.id, req.body?.customMessage);
+    res.json(result);
 });
 
 app.get('/api/logs', checkAuth, (req, res) => {

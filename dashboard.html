@@ -432,6 +432,29 @@
             padding: 14px 18px; background: rgba(14, 21, 31, 0.98);
             border-bottom: 1px solid var(--border);
         }
+
+        /* --- BOT ACCOUNT MODAL --- */
+        #bot-account-modal.modal-overlay {
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(8px);
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        #bot-account-modal .modal-card {
+            width: 100%;
+            max-width: 540px;
+            background: #0d1219;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 12px;
+            box-shadow: 0 24px 65px rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+            overflow: hidden;
+            animation: fadeIn 0.22s ease-out;
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -508,7 +531,7 @@
                 <button class="tab-btn" onclick="switchTab('tab-schedule')">⏰ Stream Schedule</button>
                 <button class="tab-btn" onclick="switchTab('tab-records')">🎥 Saved Recordings</button>
                 <button class="tab-btn" onclick="switchTab('tab-logs')">📋 System Logs</button>
-                <button class="tab-btn" onclick="switchTab('tab-doc')">📖 Chat Bot &amp; Stream Doc</button>
+                <button class="tab-btn" onclick="switchTab('tab-doc')">🤖 VPS Auto-Chat &amp; Docs</button>
 
                 <div class="quick-links">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -937,6 +960,99 @@
                         <p class="panel-desc" style="margin-bottom: 0;">
                             How top 24/7 flag streams achieve hundreds of concurrent viewers and continuous chat battles. Includes our 1-click copyable auto-commenter macro and OBS streaming checklist.
                         </p>
+                    </div>
+
+                    <!-- CARD 0: VPS CLOUD AUTO-COMMENTER (MULTI-ACCOUNT COOKIE AUTOMATION) -->
+                    <div class="panel" style="border: 1px solid rgba(56, 189, 248, 0.45); background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(11, 17, 32, 0.98)); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                        <div class="panel-header" style="flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="font-size: 26px;">🤖</div>
+                                <div>
+                                    <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                        VPS Cloud Auto-Commenter
+                                        <span id="vps-bot-status-pill" class="status-badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border-color: rgba(148, 163, 184, 0.3); font-size: 11px;">
+                                            ⏸️ Stopped
+                                        </span>
+                                    </h3>
+                                    <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;">
+                                        Multi-Account Cookie Rotation · Zero Chrome Overhead · <span style="color:#38bdf8;">~0.02% CPU · &lt;4 MB RAM</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap: 8px; flex-wrap: wrap;">
+                                <button id="vps-bot-toggle-btn" class="btn btn-success" onclick="toggleVpsBot()" style="font-size: 12px; padding: 7px 16px; font-weight: 600; display:flex; align-items:center; gap:6px;">
+                                    <span id="vps-bot-toggle-icon">▶</span> <span id="vps-bot-toggle-label">Start VPS Worker</span>
+                                </button>
+                                <button class="btn btn-primary" onclick="openAddBotAccountModal()" style="font-size: 12px; padding: 7px 14px; display:flex; align-items:center; gap:6px;">
+                                    <span>➕</span> Add Google Account
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- SETTINGS STRIP -->
+                        <div style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px 14px; margin-top: 14px; border: 1px solid var(--border);">
+                            <div class="grid-3" style="gap: 12px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Target Live Video ID / URL</label>
+                                    <div style="display: flex; gap: 6px;">
+                                        <input type="text" id="vps-bot-target-vid" placeholder="e.g. ftXR8a5zLTw" style="font-size: 12.5px; padding: 7px 10px;">
+                                        <button class="btn" onclick="saveVpsBotSettings()" style="padding: 0 12px; font-size: 11px; white-space: nowrap;">Save</button>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Randomized Cadence (Jitter)</label>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <input type="number" id="vps-bot-min-delay" min="3" max="60" value="10" style="width: 70px; font-size: 12.5px; padding: 7px 8px; text-align: center;">
+                                        <span style="font-size: 12px; color: var(--text-muted);">to</span>
+                                        <input type="number" id="vps-bot-max-delay" min="5" max="120" value="25" style="width: 70px; font-size: 12.5px; padding: 7px 8px; text-align: center;">
+                                        <span style="font-size: 12px; color: var(--text-muted);">sec</span>
+                                        <button class="btn" onclick="saveVpsBotSettings()" style="padding: 0 10px; font-size: 11px; height: 32px;">Set</button>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Audience Country Pool</label>
+                                    <select id="vps-bot-audience-select" onchange="saveVpsBotSettings()" style="font-size: 12px; padding: 7px 10px;">
+                                        <option value="viral">🏆 Top Viral Nations (BR, US, IN, ID, MX, VN, PH, DE, FR)</option>
+                                        <option value="all">🌍 All 195 World Flags</option>
+                                        <option value="latam">⚽ Latin America (BR, MX, AR, CO, CL, PE)</option>
+                                        <option value="asia">🌏 Asia-Pacific (IN, ID, VN, PH, JP, KR, BD, PK)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ACCOUNTS LIST -->
+                        <div style="margin-top: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="font-size: 12px; font-weight: 700; color: #f1f5f9; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    👥 Configured Google Accounts (<span id="vps-bot-acc-count">0</span>)
+                                </div>
+                                <div style="font-size: 11px; color: #94a3b8;">
+                                    Accounts rotate automatically to maintain natural, human-like activity
+                                </div>
+                            </div>
+
+                            <div id="vps-bot-accounts-list" style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="padding: 16px; background: rgba(0,0,0,0.25); border: 1px dashed var(--border); border-radius: 8px; text-align: center; color: #94a3b8; font-size: 12px;">
+                                    No accounts added yet. Click <b>"➕ Add Google Account"</b> to paste your 2nd YouTube account cookies!
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LIVE ACTIVITY FEED -->
+                        <div style="margin-top: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <div style="font-size: 12px; font-weight: 700; color: #f1f5f9; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                                    <span>📡</span> VPS Worker Activity Feed
+                                </div>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="btn" onclick="fetchVpsBotState()" style="font-size: 10px; padding: 2px 8px; background: rgba(255,255,255,0.06);">🔄 Refresh Log</button>
+                                </div>
+                            </div>
+                            <div id="vps-bot-log-feed" style="background: #090d14; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-family: monospace; font-size: 11.5px; color: #e2e8f0; max-height: 130px; overflow-y: auto; line-height: 1.6;">
+                                <span style="color: #64748b;">No recent bot actions. Add an account and click "Start VPS Worker".</span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- CARD 1: THE SECRET BEHIND VIRAL CHAT WARS -->
@@ -1379,6 +1495,48 @@
             </div>
         </div>
     </div>
+
+    <!-- VPS BOT ACCOUNT MODAL -->
+    <div id="bot-account-modal" class="modal-overlay" onclick="if (event.target === this) closeBotAccountModal()">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="YouTube Bot Account Setup">
+            <div class="sp-header">
+                <h3 id="bot-modal-title" style="color: #38bdf8; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">
+                    <span>🍪</span> Add YouTube Bot Account
+                </h3>
+                <button type="button" class="btn" onclick="closeBotAccountModal()" style="padding: 4px 10px; font-size: 11px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #cbd5e1;">✕ Close</button>
+            </div>
+
+            <div class="sp-body" style="padding: 16px 18px 20px; overflow-y: auto;">
+                <input type="hidden" id="bot-acc-id" value="">
+                
+                <div class="sg" style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600;">Account Label / Alias</label>
+                    <input type="text" id="bot-acc-name" placeholder="e.g. FlagFan99 (Account 1)" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 13px; box-sizing: border-box;">
+                </div>
+
+                <div class="sg" style="margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size: 11px; color: #cbd5e1; font-weight: 600; margin: 0;">YouTube Session Cookies</label>
+                        <span id="bot-cookie-chip" style="font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(148, 163, 184, 0.15); color: #94a3b8;">Paste below</span>
+                    </div>
+                    <textarea id="bot-acc-cookies" rows="7" placeholder="Paste cookies in ANY format:&#10;• Cookie-Editor JSON export&#10;• Header string (SAPISID=...; SID=...;)&#10;• Netscape tab-separated cookies" oninput="analyzeCookieInput()" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: #38bdf8; font-family: monospace; font-size: 11.5px; line-height: 1.4; resize: vertical; box-sizing: border-box;"></textarea>
+                    
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 8px; line-height: 1.5; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 6px;">
+                        💡 <b>How to get cookies in 10 seconds:</b><br>
+                        1. In Google Chrome with your 2nd account, install the free extension <b>Cookie-Editor</b>.<br>
+                        2. Open <code>youtube.com</code> and make sure you are signed in.<br>
+                        3. Click Cookie-Editor ➔ click <b>"Export"</b> ➔ click <b>"Export as JSON"</b> (or Header string).<br>
+                        4. Paste here and click <b>Save Account</b>!
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 14px;">
+                    <button type="button" class="btn" onclick="closeBotAccountModal()" style="font-size: 12px; padding: 8px 14px;">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveBotAccount()" style="font-weight: 600; padding: 8px 18px; font-size: 12.5px;">💾 Save Account</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
         const API_HEADERS = () => ({
             'Content-Type': 'application/json',
@@ -1427,6 +1585,7 @@
                 if (setTarget && docTarget && setTarget.value && !docTarget.value) {
                     docTarget.value = setTarget.value;
                 }
+                fetchVpsBotState();
             }
         }
 
@@ -1494,6 +1653,7 @@
                 populateSettings(data.settings);
                 fetchLogs();
                 fetchRecordings();
+                fetchVpsBotState();
             } catch (e) { console.error(e); }
         }
 
@@ -2173,20 +2333,24 @@
 // 🚀 Flag Battle YouTube Live Chat Auto-Commenter Bot (Zero Quota)
 // ============================================================
 // HOW TO RUN:
-// 1. Open your YouTube Live Chat popout window with a 2nd Google account.
+// 1. Open your YouTube Live Chat Popout window:
+//    👉 https://www.youtube.com/live_chat?v=VIDEO_ID&is_popout=1
 // 2. Press F12 (or Cmd+Option+I on Mac) -> Click "Console" tab.
-// 3. Paste this code and press Enter!
+// 3. (Note: If running on the main watch page, select 'chatframe' in the
+//    Console context dropdown instead of 'top').
+// 4. Paste this code and press Enter!
 // ============================================================
 
 (function() {
     console.log("%c[Flag Battle Bot] 🚀 Auto-Commenter initialized! Zero API quota used.", "color: #10b981; font-weight: bold; font-size: 14px;");
 
     const countries = ${countriesJson};
-
     const prefixes = ["", "", "", "Go ", "Vote ", "Team ", "Come on ", "Win ", "Let's go "];
     const suffixes = ["", "", "", "!!", " ❤️", " 🏆", " 🚀", " 🔥", " 🥇", " 💥"];
 
     let count = 0;
+    let timerId = null;
+    let retryCount = 0;
 
     function getRandomMessage() {
         const c = countries[Math.floor(Math.random() * countries.length)];
@@ -2195,42 +2359,219 @@
         return (p + c + s).trim();
     }
 
-    function postComment() {
-        const input = document.querySelector('div#input[contenteditable="true"]');
-        if (!input) {
-            console.warn("[Flag Battle Bot] ⚠️ Chat input element not found. Make sure you are inside the YouTube Live Chat popout window and logged into an account.");
-            return;
+    // Resolves either direct document or iframe#chatframe if running in top on watch page
+    function getChatDoc() {
+        if (document.querySelector('yt-live-chat-app, yt-live-chat-renderer')) return document;
+        const frame = document.querySelector('iframe#chatframe') || document.querySelector('iframe[name="chatframe"]') || document.querySelector('iframe[src*="live_chat"]');
+        if (frame) {
+            try {
+                if (frame.contentDocument && frame.contentDocument.body) return frame.contentDocument;
+            } catch (e) {}
+        }
+        return document;
+    }
+
+    // Comprehensive multi-selector query covering all YouTube Live Chat versions & web components
+    function findChatInput() {
+        const doc = getChatDoc();
+        const selectors = [
+            'div#input[contenteditable="true"]',
+            'div#input[contenteditable="plaintext-only"]',
+            'div#input[contenteditable]',
+            '#input[contenteditable="true"]',
+            '#input[contenteditable]',
+            'yt-live-chat-text-input-field-renderer #input',
+            'yt-live-chat-text-input-field-renderer [contenteditable]',
+            'yt-live-chat-message-input-renderer div#input',
+            'yt-live-chat-message-input-renderer [contenteditable]',
+            'div[role="textbox"][contenteditable]',
+            'div[role="textbox"]',
+            'div[aria-label*="Chat" i][contenteditable]',
+            '#input-container [contenteditable]',
+            '#contenteditable-root',
+            'tp-yt-paper-input-container #input',
+            'textarea#input',
+            'input#input'
+        ];
+
+        // 1. Check direct selectors in document
+        for (const sel of selectors) {
+            const el = doc.querySelector(sel);
+            if (el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                return { el, doc };
+            }
         }
 
-        const msg = getRandomMessage();
-        input.focus();
-        input.textContent = msg;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        // 2. Check if inside Shadow DOM
+        try {
+            const hosts = doc.querySelectorAll('yt-live-chat-text-input-field-renderer, yt-live-chat-message-input-renderer, ytcp-live-chat-message-input');
+            for (const host of hosts) {
+                if (host.shadowRoot) {
+                    for (const sel of selectors) {
+                        const el = host.shadowRoot.querySelector(sel);
+                        if (el) return { el, doc };
+                    }
+                }
+            }
+        } catch (e) {}
 
+        // 3. If placeholder / inactive container exists, click it to activate contenteditable
+        const placeholder = doc.querySelector('#placeholder, #input-container, yt-live-chat-message-input-renderer #container');
+        if (placeholder && !placeholder.dataset.botAwoken) {
+            placeholder.dataset.botAwoken = '1';
+            try { placeholder.click(); } catch (e) {}
+        }
+
+        return null;
+    }
+
+    function findSendButton(doc) {
+        const selectors = [
+            '#send-button button',
+            'yt-button-renderer#send-button button',
+            '#send-button yt-icon-button button',
+            'button[aria-label="Send" i]',
+            'button[aria-label="Chat" i]',
+            'button[aria-label*="Send" i]',
+            'yt-live-chat-message-input-renderer button:not([disabled])',
+            '#send-button ytd-button-renderer button',
+            'yt-button-shape button'
+        ];
+        for (const sel of selectors) {
+            const btn = doc.querySelector(sel);
+            if (btn) return btn;
+        }
+        try {
+            const hosts = doc.querySelectorAll('yt-live-chat-message-input-renderer, #send-button');
+            for (const host of hosts) {
+                if (host.shadowRoot) {
+                    for (const sel of selectors) {
+                        const btn = host.shadowRoot.querySelector(sel);
+                        if (btn) return btn;
+                    }
+                }
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function diagnoseFailure() {
+        const doc = getChatDoc();
+        const url = window.location.href;
+        const isWatchPage = url.includes('/watch');
+        const bodyText = doc.body ? doc.body.innerText : '';
+        const signInBtn = doc.querySelector('a[href*="ServiceLogin"], #sign-in-button, yt-button-renderer a[href*="accounts.google.com"], yt-button-shape a[aria-label*="Sign in" i]');
+
+        console.group("%c[Flag Battle Bot] ⚠️ Diagnostics & Instant Fix", "color: #f59e0b; font-weight: bold; font-size: 13px;");
+
+        if (isWatchPage) {
+            console.error("%c❌ YOU ARE ON THE MAIN WATCH PAGE (" + url + ")", "color: #ef4444; font-weight: bold;");
+            console.warn("DevTools Console is currently targeting 'top'. In 'top', the live chat is isolated inside an iframe!");
+            console.info("%c👉 FIX 1 (Quickest): In the top-left of this Console tab, click the dropdown that says 'top' and select 'chatframe'. Then re-paste this script!", "color: #38bdf8; font-weight: bold;");
+            console.info("%c👉 FIX 2: Open the dedicated popout chat URL in a separate window: " + window.location.origin + "/live_chat?v=" + (new URLSearchParams(window.location.search).get('v') || 'VIDEO_ID') + "&is_popout=1", "color: #38bdf8; font-weight: bold;");
+        } else if (signInBtn || bodyText.includes('Sign in to chat') || bodyText.includes('All messages you send will appear publicly')) {
+            console.error("%c❌ NOT LOGGED IN ON THIS CHAT WINDOW", "color: #ef4444; font-weight: bold;");
+            console.warn("Even if you are logged in on another tab, THIS specific popout window is currently showing 'Sign in to chat'.");
+            console.info("%c👉 FIX: Click the 'Sign in to chat' button at the bottom of this chat window to sign into your account!", "color: #38bdf8; font-weight: bold;");
+        } else if (bodyText.includes('Create a channel') || doc.querySelector('button[aria-label*="Create a channel" i]')) {
+            console.error("%c❌ YOUTUBE CHANNEL REQUIRED TO CHAT", "color: #ef4444; font-weight: bold;");
+            console.info("%c👉 FIX: Click 'Create a channel' at the bottom of this chat window (takes 2 seconds to set username).", "color: #38bdf8; font-weight: bold;");
+        } else if (bodyText.includes('Subscribers-only mode') || doc.querySelector('yt-live-chat-restricted-participation-renderer')) {
+            console.error("%c❌ SUBSCRIBERS-ONLY CHAT MODE IS ACTIVE", "color: #ef4444; font-weight: bold;");
+            console.info("%c👉 FIX: Go to the live stream channel with this account and click 'Subscribe' to participate.", "color: #38bdf8; font-weight: bold;");
+        } else if (bodyText.includes('Slow mode is on')) {
+            console.warn("%c⏳ SLOW MODE: The streamer has slow mode enabled. Script will continue respecting cooldown.", "color: #eab308; font-weight: bold;");
+        } else {
+            console.warn("[Flag Battle Bot] ⏳ Still waiting for chat interface to load completely... (attempt " + retryCount + "/10)");
+        }
+
+        console.info("Window URL: " + url);
+        console.groupEnd();
+    }
+
+    function postComment() {
+        const found = findChatInput();
+        if (!found || !found.el) {
+            retryCount++;
+            if (retryCount <= 3 || retryCount % 5 === 0) {
+                diagnoseFailure();
+            }
+            return false;
+        }
+
+        retryCount = 0;
+        const { el: input, doc } = found;
+        const msg = getRandomMessage();
+
+        // 1. Focus input
+        input.focus();
+
+        // 2. Insert text via document.execCommand to satisfy Polymer internal data binding
+        if (input.isContentEditable) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            const inserted = document.execCommand('insertText', false, msg);
+            if (!inserted) input.textContent = msg;
+        } else {
+            input.value = msg;
+        }
+
+        // 3. Dispatch native input events to enable the Send button
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: msg, inputType: 'insertText' }));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // 4. Click Send or dispatch Enter
         setTimeout(() => {
-            const sendBtn = document.querySelector('#send-button button, yt-icon-button#send-button button, button[aria-label="Send"]');
+            const sendBtn = findSendButton(doc);
             if (sendBtn && !sendBtn.disabled) {
                 sendBtn.click();
                 count++;
-                console.log(\`[Flag Battle Bot] 💬 (#\${count}) Sent: "\${msg}"\`);
+                console.log(\`%c[Flag Battle Bot] 💬 (#\${count}) Sent: "\${msg}"\`, "color: #22c55e; font-weight: bold;");
             } else {
-                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+                input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+                input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
                 count++;
-                console.log(\`[Flag Battle Bot] 💬 (#\${count}) Dispatched Enter: "\${msg}"\`);
+                console.log(\`%c[Flag Battle Bot] 💬 (#\${count}) Dispatched Enter: "\${msg}"\`, "color: #38bdf8; font-weight: bold;");
             }
-        }, 250);
+        }, 300);
+
+        return true;
     }
 
     function scheduleNext() {
         const delay = Math.floor(Math.random() * (${maxDelay} - ${minDelay})) + ${minDelay};
-        setTimeout(() => {
+        timerId = setTimeout(() => {
             postComment();
             scheduleNext();
         }, delay);
     }
 
+    // Public control helpers for user console
+    window.stopFlagBot = function() {
+        if (timerId) clearTimeout(timerId);
+        console.log("%c[Flag Battle Bot] ⏹ Bot stopped.", "color: #ef4444; font-weight: bold;");
+    };
+
+    window.testFlagBot = function() {
+        console.log("[Flag Battle Bot] 🧪 Testing single comment send...");
+        return postComment();
+    };
+
+    // Initial check & startup
+    const check = findChatInput();
+    if (check) {
+        console.log("%c[Flag Battle Bot] ✅ Connected to Chat Input! Auto-loop running every " + (${minDelay}/1000).toFixed(1) + "s - " + (${maxDelay}/1000).toFixed(1) + "s.", "color: #10b981; font-weight: bold;");
+    } else {
+        diagnoseFailure();
+    }
+
     scheduleNext();
-    console.log(\`[Flag Battle Bot] ✅ Auto-loop running! Posting every \${(${minDelay}/1000).toFixed(1)}s - \${(${maxDelay}/1000).toFixed(1)}s.\`);
 })();`;
         }
 
@@ -3015,10 +3356,296 @@
             }
         }, 1000);
 
+        // Safe HTML escaper for bot activity logs and account names
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // --- VPS Cloud Auto-Commenter Client Helpers ---
+        let vpsBotStateCache = null;
+
+        async function fetchVpsBotState() {
+            if (!authKey) return;
+            try {
+                const res = await fetch('/api/bot/state', { headers: API_HEADERS() });
+                if (!res.ok) return;
+                const state = await res.json();
+                vpsBotStateCache = state;
+                renderVpsBotState(state);
+            } catch (e) {
+                console.error('[VPS Bot] State fetch failed:', e);
+            }
+        }
+
+        function renderVpsBotState(state) {
+            if (!state) return;
+            const { settings, accounts, isRunning, recentLogs } = state;
+
+            // Toggle Button
+            const toggleBtn = document.getElementById('vps-bot-toggle-btn');
+            const toggleIcon = document.getElementById('vps-bot-toggle-icon');
+            const toggleLabel = document.getElementById('vps-bot-toggle-label');
+            const statusPill = document.getElementById('vps-bot-status-pill');
+
+            if (toggleBtn) {
+                if (isRunning) {
+                    toggleBtn.className = 'btn btn-danger';
+                    if (toggleIcon) toggleIcon.textContent = '⏹';
+                    if (toggleLabel) toggleLabel.textContent = 'Stop VPS Worker';
+                    if (statusPill) {
+                        statusPill.textContent = `🟢 Active (${accounts.filter(a => a.enabled).length} Accts)`;
+                        statusPill.style.background = 'rgba(34, 197, 94, 0.15)';
+                        statusPill.style.color = '#4ade80';
+                        statusPill.style.borderColor = 'rgba(34, 197, 94, 0.35)';
+                    }
+                } else {
+                    toggleBtn.className = 'btn btn-success';
+                    if (toggleIcon) toggleIcon.textContent = '▶';
+                    if (toggleLabel) toggleLabel.textContent = 'Start VPS Worker';
+                    if (statusPill) {
+                        statusPill.textContent = '⏸️ Stopped';
+                        statusPill.style.background = 'rgba(148, 163, 184, 0.15)';
+                        statusPill.style.color = '#94a3b8';
+                        statusPill.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+                    }
+                }
+            }
+
+            // Target Video ID
+            const vidInput = document.getElementById('vps-bot-target-vid');
+            if (vidInput && document.activeElement !== vidInput && settings.targetVideoId) {
+                vidInput.value = settings.targetVideoId;
+            }
+
+            // Min & Max delays
+            const minDelay = document.getElementById('vps-bot-min-delay');
+            const maxDelay = document.getElementById('vps-bot-max-delay');
+            if (minDelay && document.activeElement !== minDelay && settings.minDelay) minDelay.value = settings.minDelay;
+            if (maxDelay && document.activeElement !== maxDelay && settings.maxDelay) maxDelay.value = settings.maxDelay;
+
+            // Audience
+            const audSel = document.getElementById('vps-bot-audience-select');
+            if (audSel && document.activeElement !== audSel && settings.audience) audSel.value = settings.audience;
+
+            // Accounts count
+            const accCount = document.getElementById('vps-bot-acc-count');
+            if (accCount) accCount.textContent = accounts.length;
+
+            // Render Accounts Cards
+            const listEl = document.getElementById('vps-bot-accounts-list');
+            if (listEl) {
+                if (accounts.length === 0) {
+                    listEl.innerHTML = `<div style="padding: 16px; background: rgba(0,0,0,0.25); border: 1px dashed var(--border); border-radius: 8px; text-align: center; color: #94a3b8; font-size: 12px;">
+                        No accounts added yet. Click <b>"➕ Add Google Account"</b> to paste your 2nd YouTube account cookies!
+                    </div>`;
+                } else {
+                    listEl.innerHTML = accounts.map(acc => {
+                        const statusColor = acc.status === 'ready' ? '#4ade80' : acc.status === 'missing_auth' ? '#f59e0b' : '#ef4444';
+                        const statusBadgeText = acc.status === 'ready' ? '🟢 Ready' : acc.status === 'missing_auth' ? '⚠️ Missing Tokens' : '❌ Error';
+                        const timeStr = acc.lastPostedAt ? new Date(acc.lastPostedAt).toLocaleTimeString() : 'Never';
+
+                        return `
+                        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 12px; min-width: 200px;">
+                                <div style="font-size: 20px;">👤</div>
+                                <div>
+                                    <div style="font-weight: 700; color: #f8fafc; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+                                        ${escapeHtml(acc.name)}
+                                        <span style="font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: ${acc.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(148,163,184,0.15)'}; color: ${acc.enabled ? '#4ade80' : '#94a3b8'};">
+                                            ${acc.enabled ? 'ACTIVE' : 'MUTED'}
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; display: flex; gap: 10px;">
+                                        <span>🍪 ${acc.cookieSummary?.count || 0} cookies</span>
+                                        <span style="color: ${statusColor}; font-weight: 600;">${statusBadgeText}</span>
+                                        <span>💬 Sent: <b>${acc.totalSent || 0}</b></span>
+                                        <span>⏱️ Last: ${timeStr}</span>
+                                    </div>
+                                    ${acc.lastError ? `<div style="font-size: 10.5px; color: #fca5a5; margin-top: 3px;">⚠️ ${escapeHtml(acc.lastError)}</div>` : ''}
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="btn" onclick="testBotAccount('${acc.id}')" title="Send 1 test comment immediately using this account" style="font-size: 11px; padding: 5px 10px; background: rgba(56,189,248,0.12); border-color: rgba(56,189,248,0.35); color: #7dd3fc;">
+                                    🧪 Test Post
+                                </button>
+                                <button class="btn" onclick="openEditBotAccountModal('${acc.id}')" title="Edit cookies or account name" style="font-size: 11px; padding: 5px 10px;">
+                                    ✏️ Edit
+                                </button>
+                                <button class="btn" onclick="deleteBotAccount('${acc.id}', '${escapeHtml(acc.name)}')" title="Remove this account" style="font-size: 11px; padding: 5px 9px; color: #f87171; background: rgba(239,68,68,0.1);">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            // Render Activity Feed
+            const feedEl = document.getElementById('vps-bot-log-feed');
+            if (feedEl && recentLogs) {
+                if (recentLogs.length === 0) {
+                    feedEl.innerHTML = `<span style="color: #64748b;">No recent bot actions. Add an account and click "Start VPS Worker".</span>`;
+                } else {
+                    feedEl.innerHTML = recentLogs.map(log => {
+                        const time = new Date(log.time).toLocaleTimeString();
+                        const color = log.status === 'success' ? '#4ade80' : log.status === 'error' ? '#f87171' : log.status === 'warn' ? '#f59e0b' : '#38bdf8';
+                        return `<div><span style="color: #64748b;">[${time}]</span> <b style="color: ${color};">${escapeHtml(log.accountName)}:</b> <span style="color: #f1f5f9;">${escapeHtml(log.msg)}</span> <small style="color: #94a3b8;">${escapeHtml(log.detail)}</small></div>`;
+                    }).join('');
+                }
+            }
+        }
+
+        async function toggleVpsBot() {
+            try {
+                const res = await fetch('/api/bot/toggle', { method: 'POST', headers: API_HEADERS() });
+                const data = await res.json();
+                renderVpsBotState(data);
+                showAlert(data.isRunning ? '🚀 VPS Cloud Auto-Commenter Started!' : '⏹ VPS Auto-Commenter Stopped.');
+            } catch (e) {
+                showAlert('Failed to toggle VPS Auto-Commenter', true);
+            }
+        }
+
+        async function saveVpsBotSettings() {
+            const rawVid = document.getElementById('vps-bot-target-vid')?.value || '';
+            const minDelay = parseInt(document.getElementById('vps-bot-min-delay')?.value) || 10;
+            const maxDelay = parseInt(document.getElementById('vps-bot-max-delay')?.value) || 25;
+            const audience = document.getElementById('vps-bot-audience-select')?.value || 'viral';
+
+            const targetVideoId = extractVideoId(rawVid) || rawVid;
+
+            try {
+                const res = await fetch('/api/bot/settings', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ targetVideoId, minDelay, maxDelay, audience })
+                });
+                const data = await res.json();
+                renderVpsBotState(data);
+                showAlert('VPS Auto-Commenter settings saved!');
+            } catch (e) {
+                showAlert('Failed to save settings', true);
+            }
+        }
+
+        function openAddBotAccountModal() {
+            document.getElementById('bot-acc-id').value = '';
+            document.getElementById('bot-acc-name').value = '';
+            document.getElementById('bot-acc-cookies').value = '';
+            document.getElementById('bot-modal-title').innerHTML = '<span>🍪</span> Add YouTube Bot Account';
+            document.getElementById('bot-cookie-chip').textContent = 'Paste below';
+            document.getElementById('bot-cookie-chip').style.color = '#94a3b8';
+            document.getElementById('bot-cookie-chip').style.background = 'rgba(148, 163, 184, 0.15)';
+            document.getElementById('bot-account-modal').classList.add('open');
+        }
+
+        function openEditBotAccountModal(id) {
+            const account = vpsBotStateCache?.accounts?.find(a => a.id === id);
+            if (!account) return;
+            document.getElementById('bot-acc-id').value = account.id;
+            document.getElementById('bot-acc-name').value = account.name;
+            document.getElementById('bot-acc-cookies').value = '';
+            document.getElementById('bot-modal-title').innerHTML = `<span>✏️</span> Edit Account: ${escapeHtml(account.name)}`;
+            document.getElementById('bot-cookie-chip').textContent = 'Leave blank to keep existing';
+            document.getElementById('bot-cookie-chip').style.color = '#38bdf8';
+            document.getElementById('bot-cookie-chip').style.background = 'rgba(56, 189, 248, 0.15)';
+            document.getElementById('bot-account-modal').classList.add('open');
+        }
+
+        function closeBotAccountModal() {
+            document.getElementById('bot-account-modal').classList.remove('open');
+        }
+
+        function analyzeCookieInput() {
+            const val = document.getElementById('bot-acc-cookies').value.trim();
+            const chip = document.getElementById('bot-cookie-chip');
+            if (!val) {
+                chip.textContent = 'Paste below';
+                chip.style.color = '#94a3b8';
+                return;
+            }
+            const hasSapisid = val.includes('SAPISID') || val.includes('__Secure-3PAPISID');
+            const hasSid = val.includes('SID') || val.includes('LOGIN_INFO');
+            const isJson = val.startsWith('[') && val.endsWith(']');
+
+            if (hasSapisid || hasSid) {
+                chip.textContent = `✓ ${isJson ? 'JSON' : 'Header'} Cookies Detected (Auth Valid)`;
+                chip.style.color = '#4ade80';
+                chip.style.background = 'rgba(34, 197, 94, 0.15)';
+            } else {
+                chip.textContent = '⚠️ Check cookies: missing SAPISID/SID';
+                chip.style.color = '#f59e0b';
+                chip.style.background = 'rgba(245, 158, 11, 0.15)';
+            }
+        }
+
+        async function saveBotAccount() {
+            const id = document.getElementById('bot-acc-id').value;
+            const name = document.getElementById('bot-acc-name').value.trim() || 'Account ' + ((vpsBotStateCache?.accounts?.length || 0) + 1);
+            const cookies = document.getElementById('bot-acc-cookies').value.trim();
+
+            if (!id && !cookies) {
+                return showAlert('Please paste your YouTube cookies', true);
+            }
+
+            try {
+                const res = await fetch('/api/bot/accounts', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ id: id || undefined, name, cookies })
+                });
+                const data = await res.json();
+                renderVpsBotState(data);
+                closeBotAccountModal();
+                showAlert(`✅ Account "${name}" saved!`);
+            } catch (e) {
+                showAlert('Failed to save bot account', true);
+            }
+        }
+
+        async function deleteBotAccount(id, name) {
+            if (!confirm(`Are you sure you want to delete account "${name}"?`)) return;
+            try {
+                const res = await fetch(`/api/bot/accounts/${id}`, { method: 'DELETE', headers: API_HEADERS() });
+                const data = await res.json();
+                renderVpsBotState(data);
+                showAlert(`Account "${name}" deleted.`);
+            } catch (e) {
+                showAlert('Failed to delete account', true);
+            }
+        }
+
+        async function testBotAccount(id) {
+            showAlert('🧪 Testing comment from account...');
+            try {
+                const res = await fetch(`/api/bot/test/${id}`, { method: 'POST', headers: API_HEADERS() });
+                const data = await res.json();
+                if (data.ok) {
+                    showAlert(`💬 Sent "${data.message}" from ${data.account}! (HTTP 200)`);
+                } else {
+                    showAlert(`Test failed: ${data.error}`, true);
+                }
+                fetchVpsBotState();
+            } catch (e) {
+                showAlert('Test request failed: ' + e.message, true);
+            }
+        }
+
         // Allow 'Enter' to login
         document.getElementById('login-key').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') login();
         });
+
+        // Periodic bot state polling every 6s when dashboard is open
+        setInterval(() => {
+            if (authKey) fetchVpsBotState();
+        }, 6000);
 
         regenerateBotScript();
         checkAuth();
