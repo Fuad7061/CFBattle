@@ -122,57 +122,76 @@
 
         /* --- SIDEBAR TABS --- */
         .sidebar {
-            width: 210px;
+            width: 215px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 3px;
             flex-shrink: 0;
+            max-height: calc(100vh - 85px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 2px;
         }
+        .sidebar::-webkit-scrollbar { width: 3px; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
         .tab-btn {
             background: transparent;
             color: var(--text-muted);
             border: none;
             text-align: left;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 15px;
+            padding: 5px 8px;
+            border-radius: 5px;
+            font-size: 12px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 6px;
+            white-space: nowrap;
         }
         .tab-btn:hover {
-            background: rgba(255,255,255,0.03);
+            background: rgba(255,255,255,0.04);
             color: var(--text-main);
         }
         .tab-btn.active {
             background: var(--primary);
             color: white;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
         }
         
         /* Quick Links Area */
         .quick-links {
-            margin-top: auto;
-            background: var(--panel-bg);
+            margin-top: 4px;
+            background: rgba(0,0,0,0.3);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 20px;
+            border-radius: 6px;
+            padding: 5px 6px;
         }
-        .quick-links h3 { margin: 0 0 15px 0; font-size: 14px; color: white; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
+        .quick-links h3 { margin: 0 0 4px 0; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; }
         
         .game-link-btn {
-            display: flex; align-items: center; justify-content: center; gap: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 4px;
             background: linear-gradient(to right, #3b82f6, #8b5cf6);
-            color: white; text-decoration: none; padding: 12px; border-radius: 8px;
-            font-weight: 600; font-size: 14px; transition: transform 0.2s, box-shadow 0.2s;
+            color: white; text-decoration: none; padding: 4px 4px; border-radius: 4px;
+            font-weight: 600; font-size: 10.5px; transition: transform 0.15s, box-shadow 0.15s;
+            text-align: center;
         }
         .game-link-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(139, 92, 246, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(139, 92, 246, 0.35);
         }
+
+        /* Demo Chat Box */
+        .demo-chat-box {
+            margin-top: 4px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 6px;
+        }
+        .demo-chat-box h3 { margin: 0 0 4px 0; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; }
 
         /* --- MAIN CONTENT AREA --- */
         .main-area {
@@ -380,7 +399,39 @@
             font-weight: 700; cursor: pointer; letter-spacing: 1px; font-size: 11px; transition: filter 0.2s;
         }
         #settings-modal .sp-save-btn:hover { filter: brightness(1.12); }
+        #settings-modal[data-engine="points-race"] .physics-only { display: none !important; }
+        #settings-modal[data-engine="points-race"] .pr-only { display: block !important; }
+        #settings-modal:not([data-engine="points-race"]) .pr-only { display: none !important; }
+        #settings-modal:not([data-engine="points-race"]) .physics-only { display: block !important; }
         @media (max-width: 520px) { #settings-modal .modal-card { max-width: 100%; } }
+
+        /* --- SCHEDULE MODAL --- */
+        #schedule-modal.modal-overlay {
+            background: rgba(0,0,0,0.72);
+            backdrop-filter: blur(8px);
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        #schedule-modal .modal-card {
+            width: 100%;
+            max-width: 490px;
+            background: #0d1219;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 12px;
+            box-shadow: 0 24px 65px rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+            overflow: hidden;
+            animation: fadeIn 0.22s ease-out;
+            pointer-events: auto;
+        }
+        #schedule-modal .sp-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px; background: rgba(14, 21, 31, 0.98);
+            border-bottom: 1px solid var(--border);
+        }
     </style>
 </head>
 <body>
@@ -408,15 +459,34 @@
                 <span class="brand-icon">🏴</span> Flag Battle Director
             </div>
             
-            <div style="display:flex; align-items:center; gap: 10px; flex-grow: 1; flex-wrap: wrap;">
-                <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white;" onchange="updatePreviewSrc()">
+            <div style="display:flex; align-items:center; gap: 8px; flex-grow: 1; flex-wrap: wrap;">
+                <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white; cursor: pointer;" onchange="updatePreviewSrc()">
                     <option value="landscape">Landscape (React V2)</option>
                     <option value="vertical">Vertical (Original)</option>
                     <option value="points-race">Points Race: First to 1,000 (Viral Chat War)</option>
                 </select>
-                <button class="btn btn-success" id="btn-start" onclick="startStream()" style="height: 38px; padding: 0 15px; font-weight: 500;">▶ Start Stream</button>
+
+                <!-- Stream Schedule & Auto-Stop Settings Group -->
+                <div class="topbar-sched-group" style="display:flex; align-items:center; gap: 6px; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; height: 38px;">
+                    <span style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">⏱️ Duration:</span>
+                    <select id="topbar-stream-duration" style="background: transparent; border: none; color: white; font-size: 12.5px; padding: 2px 4px; outline: none; width: auto; cursor: pointer;" title="Stream auto-stop timer">
+                        <option value="0">♾️ Continuous (Manual Stop)</option>
+                        <option value="30">⏱️ 30 Minutes</option>
+                        <option value="60" selected>⏱️ 1 Hour (Standard)</option>
+                        <option value="120">⏱️ 2 Hours</option>
+                        <option value="180">⏱️ 3 Hours</option>
+                        <option value="300">⏱️ 5 Hours</option>
+                        <option value="480">⏱️ 8 Hours</option>
+                    </select>
+                    <div style="width: 1px; height: 16px; background: var(--border);"></div>
+                    <button type="button" class="btn" onclick="openScheduleSettingsModal()" style="padding: 3px 8px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #7dd3fc; display: flex; align-items: center; gap: 4px; font-weight: 500;" title="Configure schedule times and weekly repeats">
+                        ⏰ Schedule Setup
+                    </button>
+                </div>
+
+                <button class="btn btn-success" id="btn-start" onclick="startStream()" style="height: 38px; padding: 0 15px; font-weight: 500; display: flex; align-items: center; gap: 6px;">▶ Start Stream</button>
                 <button class="btn btn-danger" id="btn-stop" style="display:none; height: 38px; padding: 0 15px; font-weight: 500;" onclick="stopStream()">⏹ Stop Engine</button>
-                <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="height: 38px; padding: 0 15px; font-weight: 500; background:var(--accent); border-color:var(--accent);">⏺ Record Offline</button>
+                <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="height: 38px; padding: 0 15px; font-weight: 500; background:var(--accent); border-color:var(--accent);">⏺ Record Gameplay Offline</button>
             </div>
             
             <div class="header-actions">
@@ -432,46 +502,55 @@
         <div class="dashboard-content">
             <!-- SIDEBAR -->
             <div class="sidebar">
-                <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview & Controls</button>
+                <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview &amp; Controls</button>
                 <button class="tab-btn" onclick="openSettingsModal()">⚙️ Match Settings</button>
                 <button class="tab-btn" onclick="switchTab('tab-stream')">📡 Stream Config</button>
                 <button class="tab-btn" onclick="switchTab('tab-schedule')">⏰ Stream Schedule</button>
                 <button class="tab-btn" onclick="switchTab('tab-records')">🎥 Saved Recordings</button>
                 <button class="tab-btn" onclick="switchTab('tab-logs')">📋 System Logs</button>
+                <button class="tab-btn" onclick="switchTab('tab-doc')">📖 Chat Bot &amp; Stream Doc</button>
 
                 <div class="quick-links">
-                    <h3>🚀 Quick Access</h3>
-                    <p style="font-size:12px; color:var(--text-muted); margin-bottom: 15px; line-height: 1.4;">
-                        Select your preferred gameplay view below to open it in a new tab. Use this URL in OBS as a Browser Source.
-                    </p>
-                    <a href="/?view=landscape" target="_blank" class="game-link-btn" style="background: var(--primary); color: white; display: block; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: 500; margin-bottom: 10px; transition: 0.2s;">
-                        🖥️ Launch Landscape (PC/Web)
-                    </a>
-                    <a href="/?view=vertical" target="_blank" class="game-link-btn" style="background: var(--accent); color: white; display: block; text-align: center; padding: 10px; border-radius: 6px; text-decoration: none; font-weight: 500; transition: 0.2s;">
-                        📱 Launch Vertical (TikTok/Shorts)
-                    </a>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">🚀 OBS Sources</span>
+                        <span style="font-size: 9px; color: var(--text-muted); opacity: 0.7;">(New Tab)</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px;">
+                        <a href="/?view=points-race" target="_blank" class="game-link-btn" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white;" title="Viral Points Race (9:16 Shorts / TikTok)">
+                            ⚡ Race
+                        </a>
+                        <a href="/?view=vertical" target="_blank" class="game-link-btn" style="background: var(--accent); color: white;" title="Original Vertical Physics (9:16)">
+                            📱 9:16
+                        </a>
+                        <a href="/?view=landscape" target="_blank" class="game-link-btn" style="background: var(--primary); color: white;" title="Landscape Battle (16:9 PC / Web)">
+                            🖥️ 16:9
+                        </a>
+                    </div>
                 </div>
 
-                <div class="demo-chat-box" style="margin-top: 30px;">
-                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:12px; text-transform:uppercase;">Test Demo Comment</h3>
-                    <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-                        <input type="text" id="demo-author" placeholder="Author Name" value="Director" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
-                        <input type="text" id="demo-text" placeholder="Comment: 'Brazil' / 'slow US' / 'freeze USA' / '!nuke Russia'" style="padding: 6px; border-radius: 4px; font-size: 13px;" />
-                        <div style="display: flex; gap: 6px; align-items: center;">
-                            <label class="checkbox-label" style="padding: 5px 0; font-size: 12px; flex: 1; display: flex; align-items: center; gap: 4px;">
-                                <input type="checkbox" id="demo-superchat" /> SuperChat
-                            </label>
-                            <select id="demo-tier" style="padding: 6px; border-radius: 4px; font-size: 12px; flex: 1;">
-                                <option value="1">🟦 Tier 1 ($1)</option>
-                                <option value="2">🟦 Tier 2 ($5)</option>
-                                <option value="3" selected>🟩 Tier 3 ($10) + Power</option>
-                                <option value="4">🟨 Tier 4 ($20)</option>
-                                <option value="5">🟧 Tier 5 ($50)</option>
-                                <option value="6">🟥 Tier 6 ($100)</option>
-                                <option value="7">🟪 Tier 7 ($200)</option>
-                            </select>
+                <div class="demo-chat-box">
+                    <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>💬 Test Comment</span>
+                        <span style="font-size: 9px; color: var(--text-muted); opacity: 0.7;">(Simulation)</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div style="display: flex; gap: 4px;">
+                            <input type="text" id="demo-author" placeholder="Name" value="Director" style="padding: 4px 6px; border-radius: 4px; font-size: 11px; width: 62px; flex-shrink: 0; background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: #fff;" />
+                            <input type="text" id="demo-text" placeholder="'Brazil' / 'freeze USA'" style="padding: 4px 6px; border-radius: 4px; font-size: 11px; flex: 1; background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: #fff;" />
                         </div>
-                        <button class="btn btn-primary" onclick="sendTestChat()" style="font-size: 13px; padding: 6px;">Send Comment</button>
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            <label class="checkbox-label" style="padding: 0; font-size: 10px; flex: 1; display: flex; align-items: center; gap: 4px; margin: 0; background: transparent; cursor: pointer; color: #cbd5e1;">
+                                <input type="checkbox" id="demo-superchat" style="width: 13px; height: 13px; accent-color: var(--primary);" /> SuperChat
+                            </label>
+                            <select id="demo-tier" style="padding: 2px 4px; border-radius: 4px; font-size: 10px; flex: 1.3; height: 24px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: #fff;">
+                                <option value="1">🟦 T1 ($1)</option>
+                                <option value="2">🟦 T2 ($5)</option>
+                                <option value="3" selected>🟩 T3 ($10)</option>
+                                <option value="5">🟧 T5 ($50)</option>
+                                <option value="7">🟪 T7 ($200)</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="sendTestChat()" style="font-size: 11px; padding: 2px 8px; height: 24px; font-weight: 600;">Send</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -782,6 +861,7 @@
 
                         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                             <button class="btn btn-success" onclick="saveSchedule()" style="height:40px; padding:0 18px; font-weight:600;">💾 Save Schedule</button>
+                            <button class="btn btn-primary" onclick="saveAndStartScheduleNow()" style="height:40px; padding:0 18px; font-weight:600; background: linear-gradient(135deg, #0284c7, #2563eb); border-color: #38bdf8;">▶ Save &amp; Start Stream Now</button>
                             <button class="btn btn-danger" onclick="clearSchedule()" style="height:40px; padding:0 18px; font-weight:600;">✕ Cancel Schedule</button>
                         </div>
                         <div id="sched-summary" style="margin-top:12px; font-size:12px; color:var(--text-muted);"></div>
@@ -840,6 +920,202 @@
                     </div>
                 </div>
 
+                <!-- TAB: CHAT BOT & STREAM DOC -->
+                <div id="tab-doc" class="tab-pane">
+                    <div class="panel" style="border-left: 4px solid var(--primary);">
+                        <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+                            <h2 style="display:flex; align-items:center; gap:8px; margin:0;">
+                                <span>📖</span> YouTube Live Chat Engagement &amp; Stream Automation Guide
+                            </h2>
+                            <span class="status-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">
+                                ⚡ 100% Free · Zero API Quota
+                            </span>
+                        </div>
+                        <p class="panel-desc" style="margin-bottom: 0;">
+                            How top 24/7 flag streams achieve hundreds of concurrent viewers and continuous chat battles. Includes our 1-click copyable auto-commenter macro and OBS streaming checklist.
+                        </p>
+                    </div>
+
+                    <!-- CARD 1: THE SECRET BEHIND VIRAL CHAT WARS -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                <span>🔥</span> 1. The Psychology of 24/7 Flag War Streams
+                            </h3>
+                        </div>
+                        <div style="font-size:13px; line-height:1.6; color:#cbd5e1;">
+                            <p style="margin-top:0;">
+                                If you watch viral live streams like <a href="https://www.youtube.com/watch?v=ftXR8a5zLTw" target="_blank" style="color:#38bdf8; text-decoration:underline;">Country Flag Battle Live</a>, you will notice hundreds of comments every minute. Here is how that flywheel works:
+                            </p>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:15px; margin: 15px 0;">
+                                <div style="background:rgba(0,0,0,0.3); padding:14px; border-radius:8px; border:1px solid var(--border);">
+                                    <div style="font-weight:700; color:#e2e8f0; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                                        <span>🏁</span> Competitive Patriotism
+                                    </div>
+                                    <p style="margin:0; font-size:12px; color:var(--text-muted);">
+                                        When viewers enter and see their country's flag racing (e.g. Brazil 850 pts vs USA 820 pts vs India 800 pts), they immediately comment their country name to push their flag to the 1,000 pts victory ribbon.
+                                    </p>
+                                </div>
+                                <div style="background:rgba(0,0,0,0.3); padding:14px; border-radius:8px; border:1px solid var(--border);">
+                                    <div style="font-weight:700; color:#e2e8f0; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                                        <span>👑</span> Instant On-Screen Shoutout
+                                    </div>
+                                    <p style="margin:0; font-size:12px; color:var(--text-muted);">
+                                        Every time a viewer comments, their real YouTube username flashes in the <b>"RECENT SUPPORTERS"</b> ribbon and the country score immediately increments, providing instant dopamine and validation.
+                                    </p>
+                                </div>
+                                <div style="background:rgba(0,0,0,0.3); padding:14px; border-radius:8px; border:1px solid var(--border);">
+                                    <div style="font-weight:700; color:#e2e8f0; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                                        <span>📈</span> Algorithmic Velocity
+                                    </div>
+                                    <p style="margin:0; font-size:12px; color:var(--text-muted);">
+                                        YouTube's recommendation algorithm detects rapid chat messages per minute and high retention, pushing the live stream into the Suggested Videos and Shorts feed of thousands of international viewers.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 2: FREE BROWSER MACRO VS GOOGLE API QUOTA -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                <span>⚡</span> 2. Why Google Cloud API Fails vs The Free Browser Console Solution
+                            </h3>
+                        </div>
+                        <div style="font-size:13px; line-height:1.6; color:#cbd5e1;">
+                            <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); padding:14px; border-radius:8px; margin-bottom:15px;">
+                                <div style="font-weight:700; color:#fca5a5; margin-bottom:4px;">❌ Why Official YouTube Data API v3 Cannot Bot Chat:</div>
+                                <p style="margin:0; font-size:12px; color:#fecaca;">
+                                    Google charges <b>50 quota units</b> per message posted via <code>liveChatMessages.insert</code>. The daily free Google Cloud quota is only 10,000 units. That means after just <b>200 comments (less than 10 minutes)</b>, your quota is 100% burned and YouTube rejects all subsequent requests with error 403 <code>quotaExceeded</code>.
+                                </p>
+                            </div>
+
+                            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); padding:14px; border-radius:8px;">
+                                <div style="font-weight:700; color:#6ee7b7; margin-bottom:4px;">✅ The 100% Free Solution: YouTube Pop-Out Web Macro</div>
+                                <p style="margin:0; font-size:12px; color:#a7f3d0;">
+                                    YouTube allows <b>unlimited free chat messages</b> through the browser UI! By opening your stream's Popout Live Chat window (<code>https://www.youtube.com/live_chat?v=VIDEO_ID&amp;is_popout=1</code>) in an alternate browser window using a second Google account, you can paste our lightweight JavaScript automation code into the browser console (F12). It automatically types and sends realistic country comments every 3–6 seconds without consuming any API units!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 3: 1-CLICK BOT SCRIPT GENERATOR -->
+                    <div class="panel">
+                        <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                <span>🤖</span> 3. Interactive Auto-Commenter Bot Generator
+                            </h3>
+                            <button class="btn btn-primary" onclick="copyBotScript()" style="font-size:12px; padding:6px 14px; display:flex; align-items:center; gap:6px;">
+                                <span id="btn-copy-icon">📋</span> <span id="btn-copy-text">Copy Script to Clipboard</span>
+                            </button>
+                        </div>
+                        <div style="font-size:13px; line-height:1.6; color:#cbd5e1;">
+                            <div class="grid-3" style="margin-bottom:15px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label>YouTube Live Video ID or URL</label>
+                                    <div style="display:flex; gap:6px;">
+                                        <input type="text" id="doc-bot-video-id" placeholder="e.g. ftXR8a5zLTw" oninput="updateBotPopoutUrl()" style="font-size:13px; padding:8px 10px;">
+                                        <button class="btn" onclick="openBotPopoutChat()" title="Open YouTube Popout Live Chat in a new window" style="white-space:nowrap; padding:0 12px; font-size:12px;">🔗 Popout</button>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label>Comment Frequency / Delay</label>
+                                    <select id="doc-bot-speed" onchange="regenerateBotScript()">
+                                        <option value="rapid">⚡ Rapid Fire (2s - 4s)</option>
+                                        <option value="standard" selected>⏱️ Natural Standard (3s - 6s)</option>
+                                        <option value="chill">🌿 Relaxed &amp; Safe (5s - 10s)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label>Country Audience Focus</label>
+                                    <select id="doc-bot-audience" onchange="regenerateBotScript()">
+                                        <option value="viral" selected>🏆 Top Viral Stream (BR, US, IN, ID, MX, VN, PH, DE, FR)</option>
+                                        <option value="all">🌍 All 195 World Flags</option>
+                                        <option value="latam">⚽ Latin America War (BR, MX, AR, CO, CL, PE)</option>
+                                        <option value="asia">🌏 Asia-Pacific War (IN, ID, VN, PH, JP, KR, BD, PK)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="position:relative;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 14px; border-radius:6px 6px 0 0; border:1px solid var(--border); border-bottom:none;">
+                                    <span style="font-family:monospace; font-size:12px; color:#94a3b8;">youtube-live-chat-bot.js</span>
+                                    <button class="btn" onclick="copyBotScript()" style="font-size:11px; padding:3px 10px; background:rgba(255,255,255,0.08);">📋 Copy Code</button>
+                                </div>
+                                <pre id="doc-script-code" style="margin:0; background:#090d14; border:1px solid var(--border); border-radius:0 0 6px 6px; padding:15px; font-family:monospace; font-size:12px; color:#e2e8f0; overflow-x:auto; max-height:280px; line-height:1.5;"></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 4: STEP BY STEP SETUP -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                <span>🚀</span> 4. Step-by-Step 60-Second Setup Guide
+                            </h3>
+                        </div>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:15px;">
+                            <div style="background:rgba(0,0,0,0.25); padding:16px; border-radius:8px; border:1px solid var(--border);">
+                                <div style="width:28px; height:28px; border-radius:50%; background:var(--primary); color:white; display:flex; align-items:center; justify-content:center; font-weight:700; margin-bottom:10px;">1</div>
+                                <h4 style="margin:0 0 6px 0; font-size:14px; color:white;">Open Popout Chat with Alt Account</h4>
+                                <p style="font-size:12px; color:var(--text-muted); margin:0; line-height:1.5;">
+                                    Open Chrome or your browser with a second Google account (or incognito window). Navigate to your live stream's popout chat: <code>https://www.youtube.com/live_chat?v=YOUR_VIDEO_ID&amp;is_popout=1</code>.
+                                </p>
+                            </div>
+                            <div style="background:rgba(0,0,0,0.25); padding:16px; border-radius:8px; border:1px solid var(--border);">
+                                <div style="width:28px; height:28px; border-radius:50%; background:var(--accent); color:white; display:flex; align-items:center; justify-content:center; font-weight:700; margin-bottom:10px;">2</div>
+                                <h4 style="margin:0 0 6px 0; font-size:14px; color:white;">Open Browser Console (F12)</h4>
+                                <p style="font-size:12px; color:var(--text-muted); margin:0; line-height:1.5;">
+                                    On that Popout Chat window, press <b>F12</b> (or right click anywhere &rarr; <i>Inspect</i>). Switch to the <b>Console</b> tab at the top.
+                                </p>
+                            </div>
+                            <div style="background:rgba(0,0,0,0.25); padding:16px; border-radius:8px; border:1px solid var(--border);">
+                                <div style="width:28px; height:28px; border-radius:50%; background:var(--success); color:white; display:flex; align-items:center; justify-content:center; font-weight:700; margin-bottom:10px;">3</div>
+                                <h4 style="margin:0 0 6px 0; font-size:14px; color:white;">Paste Script &amp; Hit Enter</h4>
+                                <p style="font-size:12px; color:var(--text-muted); margin:0; line-height:1.5;">
+                                    Paste the copied code and press <b>Enter</b>. The bot will automatically type comments and cheering messages. The Flag Battle game updates points and recent supporter shoutouts live on stream!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 5: OBS STUDIO INTEGRATION -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 style="margin:0; font-size:16px; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                <span>🎥</span> 5. OBS Studio &amp; YouTube Vertical Shorts Live Settings
+                            </h3>
+                        </div>
+                        <div style="font-size:13px; line-height:1.6; color:#cbd5e1;">
+                            <div class="grid-2">
+                                <div>
+                                    <h4 style="color:#f8fafc; margin-top:0;">📺 OBS Canvas &amp; Output Configuration</h4>
+                                    <ul style="padding-left:20px; font-size:12px; color:var(--text-muted); line-height:1.6;">
+                                        <li><b>Base (Canvas) Resolution:</b> <code>1080x1920</code> (Vertical 9:16 for Shorts Live) or <code>1920x1080</code> (Landscape 16:9).</li>
+                                        <li><b>Output (Scaled) Resolution:</b> Same as Base.</li>
+                                        <li><b>FPS:</b> 60 FPS (or 30 FPS on entry-level hardware).</li>
+                                        <li><b>Bitrate:</b> 6,000 Kbps - 8,000 Kbps (CBR, Keyframe interval 2s).</li>
+                                        <li><b>Encoder:</b> Apple VideoToolbox / NVIDIA NVENC / AMD HW / x264 (Veryfast).</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 style="color:#f8fafc; margin-top:0;">🌐 OBS Browser Source Settings</h4>
+                                    <ul style="padding-left:20px; font-size:12px; color:var(--text-muted); line-height:1.6;">
+                                        <li><b>URL:</b> <code>http://localhost:3000/?view=points-race</code> (or <code>/?view=vertical</code>)</li>
+                                        <li><b>Width:</b> 1080 | <b>Height:</b> 1920</li>
+                                        <li><b>Control audio via OBS:</b> Enabled (allows adjusting background music &amp; SFX in OBS audio mixer).</li>
+                                        <li><b>Shutdown source when not visible:</b> Unchecked.</li>
+                                        <li><b>Refresh browser when scene becomes active:</b> Unchecked.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -853,7 +1129,8 @@
             </div>
 
             <div class="sp-body">
-                <div class="sp-section-label">Branding &amp; Watermark</div>
+                <!-- COMMON: Branding & Watermark -->
+                <div class="sp-section-label">Branding &amp; Channel Watermark</div>
                 <div class="sg">
                     <label>Channel Watermark</label>
                     <input type="text" id="live-watermark" placeholder="@YourChannel" value="@FlagsBattleSimulator">
@@ -870,8 +1147,8 @@
                     <label>Watermark Font Size</label>
                     <div class="range-row">
                         <span>10</span>
-                        <input type="range" id="live-wm-size" min="10" max="150" step="1" value="36">
-                        <span>150</span>
+                        <input type="range" id="live-wm-size" min="10" max="100" step="1" value="32">
+                        <span>100</span>
                     </div>
                 </div>
                 <div class="sg">
@@ -891,60 +1168,204 @@
                     </div>
                 </div>
 
-                <hr class="sp-hr">
-                <div class="sp-section-label">Gameplay &amp; Chat Rules</div>
-                <div class="sg">
-                    <label>Comments / Votes Needed to Revive Flag</label>
-                    <input type="number" id="live-revive-votes" min="1" max="50" step="1" value="4">
-                    <small style="color: rgba(255,255,255,0.4); font-size: 10px; margin-top: 4px; display: block; text-transform: none;">When an eliminated country is commented this many times, it immediately revives into the battle.</small>
-                </div>
-                <div class="sg">
-                    <div class="toggle-row">
-                        <input type="checkbox" id="live-bias" checked>
-                        <label for="live-bias">Audience Retention Mode <small style="color: rgba(255,255,255,0.4);">(AVD bias)</small></label>
+                <!-- POINTS-RACE SPECIFIC SECTION -->
+                <div class="pr-only">
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Points Race Rules &amp; Viral Chat Hype</div>
+                    <div class="sg">
+                        <label>Target Points to Win Match</label>
+                        <select id="pr-target-points">
+                            <option value="500">500 Points (Quick Sprint Match)</option>
+                            <option value="1000" selected>1,000 Points (Standard Esports Battle)</option>
+                            <option value="1500">1,500 Points (Extended Hype Match)</option>
+                            <option value="2000">2,000 Points (Grand Marathon Championship)</option>
+                        </select>
+                    </div>
+                    <div class="sg">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="pr-fair-play" checked>
+                            <label for="pr-fair-play"><b>Guaranteed Fair Play</b> <small style="color: rgba(255,255,255,0.5);">(Every flag starts with at least 1 point and gets auto comment points so all countries stay active)</small></label>
+                        </div>
+                    </div>
+                    <div class="sg" style="margin-top: 10px;">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="pr-hype-enabled" checked>
+                            <label for="pr-hype-enabled"><b>Live Chat Hype Engine</b> <small style="color: rgba(255,255,255,0.5);">(Simulates international fan rivalry when chat is quiet, pauses when real viewers comment)</small></label>
+                        </div>
+                    </div>
+
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Background Music &amp; Audio Controls</div>
+                    <div class="sg">
+                        <label>Music Soundtrack Mode</label>
+                        <select id="pr-music-source" onchange="onMusicSourceChange()">
+                            <option value="procedural">⚡ Procedural Synthwave Esports Track (Dynamic BPM, No Copyright)</option>
+                            <option value="custom">🎵 Custom Uploaded MP3 Audio</option>
+                        </select>
+                    </div>
+                    <div class="sg">
+                        <label>Background Music Volume (<span id="pr-music-vol-val">50%</span>)</label>
+                        <div class="range-row">
+                            <span>0%</span>
+                            <input type="range" id="pr-music-vol" min="0" max="1" step="0.05" value="0.50" oninput="document.getElementById('pr-music-vol-val').textContent = Math.round(this.value*100)+'%'">
+                            <span>100%</span>
+                        </div>
+                    </div>
+                    <div class="sg">
+                        <label>Upload Custom Music File (.mp3, .wav)</label>
+                        <input type="file" id="pr-music-file" accept="audio/*" onchange="uploadCustomMusic(this)" style="font-size: 12px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px dashed var(--border); border-radius: 6px; width: 100%;">
+                        <div id="pr-music-upload-status" style="font-size: 11px; margin-top: 5px; color: var(--text-muted);">Current: /custom-music.mp3</div>
+                        <input type="hidden" id="pr-custom-music-url" value="/custom-music.mp3">
                     </div>
                 </div>
 
+                <!-- COMMON: Speed Multiplier -->
                 <hr class="sp-hr">
-                <div class="sp-section-label">Physics &amp; Speed</div>
+                <div class="sp-section-label">Game Speed Multiplier</div>
                 <div class="sg">
-                    <label>Arena Rotation Speed</label>
-                    <input type="number" id="live-rot-speed" min="0" max="0.05" step="0.001" value="0.0028">
-                </div>
-                <div class="sg">
-                    <label>Gravity Magnitude <small>(0 = Float, 1.0 = Downward pull)</small></label>
-                    <input type="number" id="live-gravity" min="0" max="5" step="0.1" value="0">
-                </div>
-                <div class="sg">
-                    <label>Game Speed Multiplier</label>
-                    <input type="number" id="live-speed" min="1" max="5" step="0.5" value="1">
+                    <div class="range-row">
+                        <span>1×</span>
+                        <input type="range" id="live-speed" min="1" max="5" step="0.5" value="1" oninput="document.getElementById('live-speed-val').textContent = this.value + '×'; sendDirectorSpeed(this.value);">
+                        <span id="live-speed-val">1×</span>
+                    </div>
                 </div>
 
-                <hr class="sp-hr">
-                <div class="sp-section-label">Tournament Structure</div>
-                <div class="sg">
-                    <label>Total Countries to Spawn</label>
-                    <input type="number" id="live-total-countries" min="10" max="245" value="195">
-                </div>
-                <div class="sg">
-                    <label>Rounds (Best of X)</label>
-                    <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
-                </div>
-                <div class="sg">
-                    <label>Match Duration (Minutes)</label>
-                    <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
-                </div>
-                <div class="sg">
-                    <label>Team Up Mode</label>
-                    <select id="live-teams">
-                        <option value="none">Free for All (Solo)</option>
-                        <option value="2">2 Teams (Red vs Blue)</option>
-                        <option value="4">4 Teams</option>
-                        <option value="continents">By Continent</option>
-                    </select>
+                <!-- PHYSICS-ONLY SECTION -->
+                <div class="physics-only">
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Gameplay &amp; Chat Rules</div>
+                    <div class="sg">
+                        <label>Comments / Votes Needed to Revive Flag</label>
+                        <input type="number" id="live-revive-votes" min="1" max="50" step="1" value="4">
+                        <small style="color: rgba(255,255,255,0.4); font-size: 10px; margin-top: 4px; display: block; text-transform: none;">When an eliminated country is commented this many times, it immediately revives into the battle.</small>
+                    </div>
+                    <div class="sg">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="live-bias" checked>
+                            <label for="live-bias">Audience Retention Mode <small style="color: rgba(255,255,255,0.4);">(AVD bias)</small></label>
+                        </div>
+                    </div>
+
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Physics &amp; Arena Spin</div>
+                    <div class="sg">
+                        <label>Arena Rotation Speed</label>
+                        <input type="number" id="live-rot-speed" min="0" max="0.05" step="0.001" value="0.0028">
+                    </div>
+                    <div class="sg">
+                        <label>Gravity Magnitude <small>(0 = Float, 1.0 = Downward pull)</small></label>
+                        <input type="number" id="live-gravity" min="0" max="5" step="0.1" value="0">
+                    </div>
+
+                    <hr class="sp-hr">
+                    <div class="sp-section-label">Tournament Structure</div>
+                    <div class="sg">
+                        <label>Total Countries to Spawn</label>
+                        <input type="number" id="live-total-countries" min="10" max="245" value="195">
+                    </div>
+                    <div class="sg">
+                        <label>Rounds (Best of X)</label>
+                        <input type="number" id="live-total-rounds" min="1" max="100" value="1" oninput="suggestRecordingDuration()">
+                    </div>
+                    <div class="sg">
+                        <label>Match Duration (Minutes)</label>
+                        <input type="number" id="live-time-limit" min="1" max="120" value="5" oninput="suggestRecordingDuration()">
+                    </div>
+                    <div class="sg">
+                        <label>Team Up Mode</label>
+                        <select id="live-teams">
+                            <option value="none">Free for All (Solo)</option>
+                            <option value="2">2 Teams (Red vs Blue)</option>
+                            <option value="4">4 Teams</option>
+                            <option value="continents">By Continent</option>
+                        </select>
+                    </div>
                 </div>
 
                 <button class="sp-save-btn" onclick="saveAndApplySettings()">✓ SAVE &amp; APPLY TO GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCHEDULE MODAL — Quick access to schedule setup from the topbar -->
+    <div id="schedule-modal" class="modal-overlay" onclick="if (event.target === this) closeScheduleModal()">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Stream Schedule Setup">
+            <div class="sp-header">
+                <h3 style="color: #38bdf8; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">
+                    <span>⏰</span> Stream Schedule &amp; Auto-Stop Setup
+                </h3>
+                <button onclick="closeScheduleModal()" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #cbd5e1;">✕ Close</button>
+            </div>
+
+            <div class="sp-body" style="padding: 16px 18px 20px; overflow-y: auto;">
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 0; margin-bottom: 14px; line-height: 1.5;">
+                    Set your stream run duration, broadcast start date/time, and recurring schedule. Once configured, you can save it or start streaming immediately!
+                </p>
+
+                <div class="sp-section-label" style="color: #38bdf8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    1. Stream Auto-Stop Duration
+                </div>
+                <div class="sg" style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">Run Stream For (Minutes)</label>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(30)">30m</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(60)">1h</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(120)">2h</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(180)">3h</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(300)">5h</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalDuration(480)">8h</button>
+                    </div>
+                    <input type="number" id="modal-sched-duration" value="60" min="1" max="10080" step="1" oninput="syncModalDurationToTopbar(this.value)" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white;">
+                </div>
+
+                <hr class="sp-hr" style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 14px 0;">
+
+                <div class="sp-section-label" style="color: #38bdf8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    2. Broadcast Timing &amp; Calendar (Optional)
+                </div>
+                <div class="sg" style="margin-bottom: 12px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">
+                        <span>Start Date &amp; Time</span>
+                        <span style="font-size:10px; color:var(--text-muted);">Zone: <span id="modal-sched-tz">—</span></span>
+                    </label>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetModalSchedStart(15)">+15m</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetModalSchedStart(30)">+30m</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="offsetModalSchedStart(60)">+1h</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalSchedTonight(20)">Tonight 8 PM</button>
+                        <button type="button" class="btn" style="font-size:11px; padding:3px 8px;" onclick="setModalSchedTomorrow(10)">Tomorrow 10 AM</button>
+                    </div>
+                    <input type="datetime-local" id="modal-sched-start" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white;">
+                </div>
+
+                <div class="sg" style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">Repeat Mode</label>
+                    <select id="modal-sched-repeat" onchange="updateModalRepeatDaysVisibility()" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white;">
+                        <option value="none">One-off (Run Once)</option>
+                        <option value="daily">Every Day</option>
+                        <option value="weekly">Weekly (Pick Days)</option>
+                    </select>
+                </div>
+
+                <div class="sg" id="modal-sched-days-wrap" style="display:none; margin-bottom: 12px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">Repeat on These Days</label>
+                    <div id="modal-sched-days" style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" class="day-chip" data-day="1" onclick="toggleModalDay(1, this)">Mon</button>
+                        <button type="button" class="day-chip" data-day="2" onclick="toggleModalDay(2, this)">Tue</button>
+                        <button type="button" class="day-chip" data-day="3" onclick="toggleModalDay(3, this)">Wed</button>
+                        <button type="button" class="day-chip" data-day="4" onclick="toggleModalDay(4, this)">Thu</button>
+                        <button type="button" class="day-chip" data-day="5" onclick="toggleModalDay(5, this)">Fri</button>
+                        <button type="button" class="day-chip" data-day="6" onclick="toggleModalDay(6, this)">Sat</button>
+                        <button type="button" class="day-chip" data-day="0" onclick="toggleModalDay(0, this)">Sun</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 14px;">
+                    <button class="btn" onclick="saveScheduleFromModal()" style="font-weight: 500; font-size: 12px; padding: 8px 14px;">💾 Save Schedule</button>
+                    <button class="btn btn-success" onclick="saveAndStartStreamFromModal()" style="font-weight: 600; padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                        ▶ Save &amp; Start Stream Now
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -988,6 +1409,13 @@
                 const startEl = document.getElementById('sched-start');
                 if (startEl && !startEl.value) {
                     offsetSchedStart(30);
+                }
+            } else if (tabId === 'tab-doc') {
+                regenerateBotScript();
+                const setTarget = document.getElementById('set-youtube-live-id');
+                const docTarget = document.getElementById('doc-bot-video-id');
+                if (setTarget && docTarget && setTarget.value && !docTarget.value) {
+                    docTarget.value = setTarget.value;
                 }
             }
         }
@@ -1495,20 +1923,361 @@
         }
 
         async function startStream() {
+            const durSelect = document.getElementById('topbar-stream-duration');
+            const dur = durSelect ? Number(durSelect.value) : 0;
             document.getElementById('btn-start').disabled = true;
             try {
-                const res = await fetch('/api/start-stream', { 
-                    method: 'POST', 
-                    headers: API_HEADERS(),
-                    body: JSON.stringify({})
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showAlert('Stream booting! Server starting headless engine...');
-                    checkAuth();
-                } else showAlert(data.error || 'Error', true);
+                if (dur > 0) {
+                    const res = await fetch('/api/schedule/start-now', {
+                        method: 'POST',
+                        headers: API_HEADERS(),
+                        body: JSON.stringify({ durationMinutes: dur })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        if (data.state) applyScheduleState(data.state);
+                        showAlert(`🚀 Stream started! Auto-stop timer set to ${fmtDurationWords(dur)}`);
+                        checkAuth();
+                    } else {
+                        showAlert(data.error || 'Could not start scheduled stream', true);
+                    }
+                } else {
+                    const res = await fetch('/api/start-stream', { 
+                        method: 'POST', 
+                        headers: API_HEADERS(),
+                        body: JSON.stringify({})
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showAlert('Stream booting! Server starting headless engine...');
+                        checkAuth();
+                    } else showAlert(data.error || 'Error', true);
+                }
             } catch (e) { showAlert('Network Error', true); }
             document.getElementById('btn-start').disabled = false;
+        }
+
+        async function saveAndStartScheduleNow() {
+            const duration = Number(document.getElementById('sched-duration').value) || 60;
+            const topbarDur = document.getElementById('topbar-stream-duration');
+            if (topbarDur) topbarDur.value = String(duration);
+            
+            // Save the schedule first
+            await saveSchedule();
+            // Then start the stream right away with this duration
+            await goLiveNow();
+        }
+
+        // --- Stream Schedule Modal Functions ---
+        function openScheduleSettingsModal() {
+            const modal = document.getElementById('schedule-modal');
+            if (!modal) return;
+            
+            const schedStart = document.getElementById('sched-start');
+            const modalStart = document.getElementById('modal-sched-start');
+            if (modalStart) {
+                if (schedStart && schedStart.value) {
+                    modalStart.value = schedStart.value;
+                } else {
+                    offsetModalSchedStart(30);
+                }
+            }
+            
+            const topbarDur = document.getElementById('topbar-stream-duration');
+            const schedDur = document.getElementById('sched-duration');
+            const modalDur = document.getElementById('modal-sched-duration');
+            if (modalDur) {
+                const curDur = (topbarDur && Number(topbarDur.value) > 0) ? Number(topbarDur.value) : (schedDur ? Number(schedDur.value) : 60);
+                modalDur.value = curDur || 60;
+            }
+            
+            const schedRepeat = document.getElementById('sched-repeat');
+            const modalRepeat = document.getElementById('modal-sched-repeat');
+            if (modalRepeat && schedRepeat) {
+                modalRepeat.value = schedRepeat.value || 'none';
+                updateModalRepeatDaysVisibility();
+            }
+            
+            const tzEl = document.getElementById('modal-sched-tz');
+            if (tzEl) {
+                tzEl.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+            }
+            
+            modal.classList.add('open');
+        }
+
+        function closeScheduleModal() {
+            const modal = document.getElementById('schedule-modal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        function setModalDuration(mins) {
+            const el = document.getElementById('modal-sched-duration');
+            if (el) {
+                el.value = mins;
+                syncModalDurationToTopbar(mins);
+            }
+        }
+
+        function syncModalDurationToTopbar(mins) {
+            const topbarDur = document.getElementById('topbar-stream-duration');
+            if (topbarDur) {
+                const exists = Array.from(topbarDur.options).some(o => o.value === String(mins));
+                if (exists) topbarDur.value = String(mins);
+            }
+        }
+
+        function offsetModalSchedStart(mins) {
+            const d = new Date(Date.now() + mins * 60000);
+            const el = document.getElementById('modal-sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
+        function setModalSchedTonight(hour = 20) {
+            const d = new Date();
+            d.setHours(hour, 0, 0, 0);
+            if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+            const el = document.getElementById('modal-sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
+        function setModalSchedTomorrow(hour = 10) {
+            const d = new Date();
+            d.setDate(d.getDate() + 1);
+            d.setHours(hour, 0, 0, 0);
+            const el = document.getElementById('modal-sched-start');
+            if (el) el.value = toLocalInputValue(d);
+        }
+
+        function updateModalRepeatDaysVisibility() {
+            const repeat = document.getElementById('modal-sched-repeat').value;
+            const wrap = document.getElementById('modal-sched-days-wrap');
+            if (wrap) wrap.style.display = (repeat === 'weekly') ? 'block' : 'none';
+        }
+
+        function toggleModalDay(day, btn) {
+            btn.classList.toggle('active');
+        }
+
+        function getModalSelectedDays() {
+            const wrap = document.getElementById('modal-sched-days');
+            if (!wrap) return [];
+            return Array.from(wrap.querySelectorAll('.day-chip.active'))
+                .map(el => Number(el.dataset.day));
+        }
+
+        async function saveScheduleFromModal() {
+            const startInput = document.getElementById('modal-sched-start').value;
+            const duration = Number(document.getElementById('modal-sched-duration').value) || 60;
+            const repeat = document.getElementById('modal-sched-repeat').value;
+            const repeatDays = getModalSelectedDays();
+
+            if (!startInput && repeat !== 'none') {
+                return showAlert('Pick a start date and time for repeated broadcasts', true);
+            }
+            if (repeat === 'weekly' && repeatDays.length === 0) {
+                return showAlert('Pick at least one day for weekly schedule', true);
+            }
+
+            const mainStart = document.getElementById('sched-start');
+            if (mainStart && startInput) mainStart.value = startInput;
+            const mainDur = document.getElementById('sched-duration');
+            if (mainDur) mainDur.value = duration;
+            const mainRep = document.getElementById('sched-repeat');
+            if (mainRep) mainRep.value = repeat;
+            syncModalDurationToTopbar(duration);
+
+            if (startInput) {
+                const body = {
+                    mode: 'schedule',
+                    startAt: new Date(startInput).toISOString(),
+                    durationMinutes: duration,
+                    repeat,
+                    repeatDays,
+                    graceMinutes: 5
+                };
+                try {
+                    const res = await fetch('/api/schedule', {
+                        method: 'POST',
+                        headers: API_HEADERS(),
+                        body: JSON.stringify(body)
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        if (data.state) applyScheduleState(data.state);
+                        showAlert('Schedule saved! Stream is scheduled.');
+                        closeScheduleModal();
+                    } else {
+                        showAlert(data.error || 'Could not save schedule', true);
+                    }
+                } catch (e) { showAlert('Network Error', true); }
+            } else {
+                showAlert('Duration updated to ' + duration + ' minutes.');
+                closeScheduleModal();
+            }
+        }
+
+        async function saveAndStartStreamFromModal() {
+            const duration = Number(document.getElementById('modal-sched-duration').value) || 60;
+            syncModalDurationToTopbar(duration);
+            closeScheduleModal();
+
+            showAlert(`Starting stream with ${duration}-minute auto-stop...`);
+            try {
+                const res = await fetch('/api/schedule/start-now', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ durationMinutes: duration })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert(`🚀 Live Stream started! Auto-stop timer set to ${fmtDurationWords(duration)}`);
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Could not start stream', true);
+                }
+            } catch (e) { showAlert('Network Error', true); }
+        }
+
+        // --- Chat Bot & Documentation Tab Helpers ---
+        const BOT_AUDIENCE_PRESETS = {
+            viral: ["Brazil", "USA", "India", "Indonesia", "Mexico", "Vietnam", "Philippines", "Germany", "Argentina", "France", "Turkey", "Spain", "Japan", "South Korea", "United Kingdom", "Canada"],
+            all: ["Brazil", "USA", "India", "Mexico", "Indonesia", "Germany", "France", "Argentina", "Japan", "United Kingdom", "Canada", "Italy", "Spain", "Australia", "South Korea", "Vietnam", "Philippines", "Turkey", "Poland", "Netherlands", "Saudi Arabia", "Switzerland", "Taiwan", "Sweden", "Belgium", "Argentina", "Thailand", "Ireland", "Austria", "Norway", "Nigeria", "Israel", "South Africa", "Egypt", "Denmark", "Singapore", "Malaysia", "Colombia", "Bangladesh", "Pakistan", "Chile", "Finland", "Romania", "Czech Republic", "Portugal", "New Zealand", "Peru", "Greece", "Iraq", "Ukraine", "Morocco", "Algeria"],
+            latam: ["Brazil", "Mexico", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Guatemala", "Cuba", "Bolivia", "Dominican Republic", "Honduras", "Paraguay", "El Salvador", "Nicaragua", "Costa Rica", "Panama", "Uruguay"],
+            asia: ["India", "Indonesia", "Vietnam", "Philippines", "Japan", "South Korea", "Pakistan", "Bangladesh", "Thailand", "Malaysia", "Singapore", "Nepal", "Sri Lanka", "Myanmar", "Cambodia", "Taiwan"]
+        };
+
+        function generateBotScriptCode() {
+            const speed = document.getElementById('doc-bot-speed')?.value || 'standard';
+            const audienceKey = document.getElementById('doc-bot-audience')?.value || 'viral';
+            const list = BOT_AUDIENCE_PRESETS[audienceKey] || BOT_AUDIENCE_PRESETS.viral;
+
+            let minDelay = 3000, maxDelay = 6000;
+            if (speed === 'rapid') { minDelay = 2000; maxDelay = 4000; }
+            else if (speed === 'chill') { minDelay = 5000; maxDelay = 10000; }
+
+            const countriesJson = JSON.stringify(list, null, 4);
+
+            return `// ============================================================
+// 🚀 Flag Battle YouTube Live Chat Auto-Commenter Bot (Zero Quota)
+// ============================================================
+// HOW TO RUN:
+// 1. Open your YouTube Live Chat popout window with a 2nd Google account.
+// 2. Press F12 (or Cmd+Option+I on Mac) -> Click "Console" tab.
+// 3. Paste this code and press Enter!
+// ============================================================
+
+(function() {
+    console.log("%c[Flag Battle Bot] 🚀 Auto-Commenter initialized! Zero API quota used.", "color: #10b981; font-weight: bold; font-size: 14px;");
+
+    const countries = ${countriesJson};
+
+    const prefixes = ["", "", "", "Go ", "Vote ", "Team ", "Come on ", "Win ", "Let's go "];
+    const suffixes = ["", "", "", "!!", " ❤️", " 🏆", " 🚀", " 🔥", " 🥇", " 💥"];
+
+    let count = 0;
+
+    function getRandomMessage() {
+        const c = countries[Math.floor(Math.random() * countries.length)];
+        const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+        const s = suffixes[Math.floor(Math.random() * suffixes.length)];
+        return (p + c + s).trim();
+    }
+
+    function postComment() {
+        const input = document.querySelector('div#input[contenteditable="true"]');
+        if (!input) {
+            console.warn("[Flag Battle Bot] ⚠️ Chat input element not found. Make sure you are inside the YouTube Live Chat popout window and logged into an account.");
+            return;
+        }
+
+        const msg = getRandomMessage();
+        input.focus();
+        input.textContent = msg;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+
+        setTimeout(() => {
+            const sendBtn = document.querySelector('#send-button button, yt-icon-button#send-button button, button[aria-label="Send"]');
+            if (sendBtn && !sendBtn.disabled) {
+                sendBtn.click();
+                count++;
+                console.log(\`[Flag Battle Bot] 💬 (#\${count}) Sent: "\${msg}"\`);
+            } else {
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                count++;
+                console.log(\`[Flag Battle Bot] 💬 (#\${count}) Dispatched Enter: "\${msg}"\`);
+            }
+        }, 250);
+    }
+
+    function scheduleNext() {
+        const delay = Math.floor(Math.random() * (${maxDelay} - ${minDelay})) + ${minDelay};
+        setTimeout(() => {
+            postComment();
+            scheduleNext();
+        }, delay);
+    }
+
+    scheduleNext();
+    console.log(\`[Flag Battle Bot] ✅ Auto-loop running! Posting every \${(${minDelay}/1000).toFixed(1)}s - \${(${maxDelay}/1000).toFixed(1)}s.\`);
+})();`;
+        }
+
+        function regenerateBotScript() {
+            const codeEl = document.getElementById('doc-script-code');
+            if (codeEl) {
+                codeEl.textContent = generateBotScriptCode();
+            }
+        }
+
+        function copyBotScript() {
+            const code = generateBotScriptCode();
+            navigator.clipboard.writeText(code).then(() => {
+                const btnText = document.getElementById('btn-copy-text');
+                const btnIcon = document.getElementById('btn-copy-icon');
+                if (btnText) btnText.textContent = 'Copied to Clipboard!';
+                if (btnIcon) btnIcon.textContent = '✅';
+                showAlert('📋 Comment Bot Script copied! Open YouTube Live Chat popout, press F12, and paste in Console.');
+                setTimeout(() => {
+                    if (btnText) btnText.textContent = 'Copy Script to Clipboard';
+                    if (btnIcon) btnIcon.textContent = '📋';
+                }, 3000);
+            }).catch(e => {
+                showAlert('Could not copy to clipboard automatically', true);
+            });
+        }
+
+        function extractVideoId(raw) {
+            if (!raw) return '';
+            const val = raw.trim();
+            const match = val.match(/(?:watch\?v=|live\/|youtu\.be\/|video\/)([a-zA-Z0-9_-]{11})/i);
+            if (match) return match[1];
+            if (/^[a-zA-Z0-9_-]{11}$/.test(val)) return val;
+            return val;
+        }
+
+        function updateBotPopoutUrl() {
+            const input = document.getElementById('doc-bot-video-id');
+            const target = input ? extractVideoId(input.value) : '';
+            const setInput = document.getElementById('set-youtube-live-id');
+            if (setInput && target && !setInput.value) {
+                setInput.value = target;
+            }
+        }
+
+        function openBotPopoutChat() {
+            const input = document.getElementById('doc-bot-video-id');
+            let vidId = input ? extractVideoId(input.value) : '';
+            if (!vidId) {
+                const setInput = document.getElementById('set-youtube-live-id');
+                if (setInput) vidId = extractVideoId(setInput.value);
+            }
+            if (!vidId) {
+                return showAlert('Please enter your YouTube Live Video ID or URL first', true);
+            }
+            const url = `https://www.youtube.com/live_chat?v=${vidId}&is_popout=1`;
+            window.open(url, '_blank', 'width=420,height=650');
         }
 
         async function stopStream() {
@@ -1526,6 +2295,10 @@
             document.getElementById('set-stream-key').value = s.streamKey || '';
             document.getElementById('set-youtube-api-key').value = s.youtubeApiKey || '';
             document.getElementById('set-youtube-live-id').value = s.youtubeLiveId || s.youtubeChannelId || '';
+            const docInput = document.getElementById('doc-bot-video-id');
+            if (docInput && (s.youtubeLiveId || s.youtubeChannelId) && !docInput.value) {
+                docInput.value = s.youtubeLiveId || s.youtubeChannelId;
+            }
             if (s.youtubeChatMode) document.getElementById('set-youtube-chat-mode').value = s.youtubeChatMode;
             if (s.youtubePollInterval) document.getElementById('set-youtube-poll-interval').value = s.youtubePollInterval;
             onYoutubeModeChange();
@@ -1565,6 +2338,27 @@
                 if (s.gameSettings.wmSize !== undefined) document.getElementById('live-wm-size').value = s.gameSettings.wmSize;
                 if (s.gameSettings.wmCount !== undefined) document.getElementById('live-wm-count').value = s.gameSettings.wmCount;
                 if (s.gameSettings.wmAngle !== undefined) document.getElementById('live-wm-angle').value = s.gameSettings.wmAngle;
+                // Points Race settings
+                if (s.gameSettings.targetPoints !== undefined && document.getElementById('pr-target-points')) {
+                    document.getElementById('pr-target-points').value = s.gameSettings.targetPoints;
+                }
+                if (s.gameSettings.musicSource !== undefined && document.getElementById('pr-music-source')) {
+                    document.getElementById('pr-music-source').value = s.gameSettings.musicSource;
+                }
+                if (s.gameSettings.musicVol !== undefined && document.getElementById('pr-music-vol')) {
+                    document.getElementById('pr-music-vol').value = s.gameSettings.musicVol;
+                    const lbl = document.getElementById('pr-music-vol-val');
+                    if (lbl) lbl.textContent = Math.round(s.gameSettings.musicVol * 100) + '%';
+                }
+                if (s.gameSettings.customMusicUrl && document.getElementById('pr-custom-music-url')) {
+                    document.getElementById('pr-custom-music-url').value = s.gameSettings.customMusicUrl;
+                }
+                if (s.gameSettings.fairPlay !== undefined && document.getElementById('pr-fair-play')) {
+                    document.getElementById('pr-fair-play').checked = s.gameSettings.fairPlay;
+                }
+                if (s.gameSettings.hypeEnabled !== undefined && document.getElementById('pr-hype-enabled')) {
+                    document.getElementById('pr-hype-enabled').checked = s.gameSettings.hypeEnabled;
+                }
             }
         }
 
@@ -1581,9 +2375,16 @@
                 teams: document.getElementById('live-teams').value,
                 reviveVotes: parseInt(document.getElementById('live-revive-votes').value) || 4,
                 wmOpacity: parseFloat(document.getElementById('live-wm-opacity').value) || 0.15,
-                wmSize: parseInt(document.getElementById('live-wm-size').value) || 36,
+                wmSize: parseInt(document.getElementById('live-wm-size').value) || 32,
                 wmCount: parseInt(document.getElementById('live-wm-count').value) || 3,
-                wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15
+                wmAngle: parseInt(document.getElementById('live-wm-angle').value) || -15,
+                // Points Race fields
+                targetPoints: parseInt(document.getElementById('pr-target-points')?.value) || 1000,
+                fairPlay: document.getElementById('pr-fair-play')?.checked ?? true,
+                hypeEnabled: document.getElementById('pr-hype-enabled')?.checked ?? true,
+                musicSource: document.getElementById('pr-music-source')?.value || 'procedural',
+                musicVol: parseFloat(document.getElementById('pr-music-vol')?.value) || 0.50,
+                customMusicUrl: document.getElementById('pr-custom-music-url')?.value || '/custom-music.mp3'
             };
         }
 
@@ -1638,11 +2439,78 @@
         function applyGameToPreview(gamePayload) {
             const frame = document.getElementById('preview-frame');
             if (!frame || !frame.contentWindow) return;
-            frame.contentWindow.__liveSettings = gamePayload;
-            applyGameSettings(frame.contentWindow.gameInstance, gamePayload);
-            if (frame.contentWindow.postMessage) {
-                frame.contentWindow.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
+            const win = frame.contentWindow;
+            win.__liveSettings = gamePayload;
+            if (win.gameInstance) {
+                applyGameSettings(win.gameInstance, gamePayload);
             }
+            if (win.pointsRace) {
+                win.pointsRace.setSettings?.(gamePayload);
+            }
+            if (win.pointsAudio) {
+                if (gamePayload.musicVol !== undefined) win.pointsAudio.setBgVolume?.(Number(gamePayload.musicVol));
+                if (gamePayload.musicSource === 'custom' && gamePayload.customMusicUrl) {
+                    win.pointsAudio.loadBgMusic?.(gamePayload.customMusicUrl);
+                    win.pointsAudio.playBgMusic?.();
+                } else if (gamePayload.musicSource === 'procedural') {
+                    win.pointsAudio.loadBgMusic?.(null);
+                    win.pointsAudio.playBgMusic?.();
+                }
+            }
+            if (win.postMessage) {
+                win.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: gamePayload }, '*');
+            }
+        }
+
+        function onMusicSourceChange() {
+            applyGameToPreview(buildGamePayload());
+        }
+
+        async function uploadCustomMusic(inputEl) {
+            const file = inputEl.files?.[0];
+            if (!file) return;
+            const statusEl = document.getElementById('pr-music-upload-status');
+            if (statusEl) {
+                statusEl.textContent = '⏳ Uploading ' + file.name + '...';
+                statusEl.style.color = 'var(--accent)';
+            }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const res = await fetch('/api/upload-music', {
+                        method: 'POST',
+                        headers: API_HEADERS(),
+                        body: JSON.stringify({
+                            filename: file.name,
+                            data: e.target.result
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (statusEl) {
+                            statusEl.textContent = '✅ ' + file.name + ' uploaded & active!';
+                            statusEl.style.color = 'var(--success)';
+                        }
+                        showAlert('Background music uploaded & activated!');
+                        const sel = document.getElementById('pr-music-source');
+                        if (sel) sel.value = 'custom';
+                        applyGameToPreview(buildGamePayload());
+                    } else {
+                        if (statusEl) {
+                            statusEl.textContent = '❌ Upload failed: ' + (data.error || 'Error');
+                            statusEl.style.color = 'var(--danger)';
+                        }
+                        showAlert(data.error || 'Upload error', true);
+                    }
+                } catch (err) {
+                    if (statusEl) {
+                        statusEl.textContent = '❌ Upload network error';
+                        statusEl.style.color = 'var(--danger)';
+                    }
+                    showAlert('Network error during upload', true);
+                }
+            };
+            reader.readAsDataURL(file);
         }
 
         // Live preview: reflect control changes to the preview instantly, no save.
@@ -1913,6 +2781,25 @@
             if (frame && frame.contentWindow) {
                 try {
                     const win = frame.contentWindow;
+
+                    // 1. Points Race engine
+                    if (win.pointsRace) {
+                        if (cmd === 'start') {
+                            win.pointsRace.resume?.();
+                            isPausedNow = false;
+                        } else if (cmd === 'pause') {
+                            isPausedNow = win.pointsRace.togglePause?.();
+                        } else if (cmd === 'reset') {
+                            win.pointsRace.reset?.();
+                        } else if (cmd === 'clear_supporters') {
+                            win.pointsRace.resetSupporters?.();
+                        }
+                    }
+                    if (win.pointsAudio && cmd === 'mute') {
+                        win.pointsAudio.toggleMute?.();
+                    }
+
+                    // 2. Physics instances
                     if (win.__flagBattleInstance) {
                         const inst = win.__flagBattleInstance;
                         if (cmd === 'start') {
@@ -1959,6 +2846,7 @@
                             }
                         }
                     }
+                    win.postMessage?.({ type: 'DIRECTOR_CMD', cmd }, '*');
                 } catch(e) {
                     console.error('[sendDirectorCmd] error:', e);
                 }
@@ -2004,6 +2892,7 @@
                     if (frame && frame.contentWindow) {
                         frame.contentWindow.postMessage({ type: 'RESET_SUPPORTERS' }, '*');
                         const win = frame.contentWindow;
+                        if (win.pointsRace) win.pointsRace.resetSupporters?.();
                         if (win.gameInstance && win.gameInstance.ui && typeof win.gameInstance.ui.resetSupporters === 'function') {
                             win.gameInstance.ui.resetSupporters(true);
                         }
@@ -2032,10 +2921,18 @@
         function sendDirectorSpeed(val) {
             const lbl = document.getElementById('dir-speed-label');
             if (lbl) lbl.textContent = val + '×';
+            const liveSpd = document.getElementById('live-speed');
+            if (liveSpd) liveSpd.value = val;
+            const liveSpdLbl = document.getElementById('live-speed-val');
+            if (liveSpdLbl) liveSpdLbl.textContent = val + '×';
+
             const frame = document.getElementById('preview-frame');
             if (frame && frame.contentWindow) {
                 try {
                     const win = frame.contentWindow;
+                    if (win.pointsRace) {
+                        win.pointsRace.setSpeed?.(Number(val));
+                    }
                     if (win.__flagBattleInstance) {
                         win.__flagBattleInstance.physics.setStepsPerFrame(Number(val));
                     }
@@ -2043,13 +2940,14 @@
                         win.gameInstance.settings = win.gameInstance.settings || {};
                         win.gameInstance.settings.speedMult = Number(val);
                     }
+                    win.postMessage?.({ type: 'LIVE_SETTINGS_UPDATE', settings: { speed: Number(val) } }, '*');
                 } catch(e) {}
             }
             if (isStreaming || isRecording) {
                 fetch('/api/control', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ action: 'settings', payload: { speed: Number(val) } })
+                    body: JSON.stringify({ action: 'speed', payload: { speed: Number(val) } })
                 }).catch(() => {});
             }
         }
@@ -2089,11 +2987,15 @@
             if (badge && document.getElementById('tab-schedule').classList.contains('active')) {
                 const text = document.getElementById('sched-status-text');
                 const detail = document.getElementById('sched-status-detail');
-                if (s.status === 'live') detail.textContent = `Streaming now · stops in ${fmtCountdown(base.remainingMs)}`;
+                if (s.status === 'live') {
+                    detail.textContent = `Streaming now · stops in ${fmtCountdown(base.remainingMs)}`;
+                    const topTxt = document.getElementById('status-text');
+                    if (topTxt && base.remainingMs > 0) {
+                        topTxt.textContent = `STREAMING LIVE · ⏱️ ${fmtCountdown(base.remainingMs)} remaining`;
+                    }
+                }
                 if (s.status === 'scheduled') detail.textContent = `Next go-live in ${fmtCountdown(base.nextRunInMs)} · ${describeSchedule(s.config)}`;
                 const topTxt = document.getElementById('status-text');
-                // Only keep ticking the topbar while the schedule really is
-                // pending - otherwise clearing it would leave "SCHEDULED · —".
                 if (topTxt && s.status === 'scheduled') {
                     topTxt.textContent = `SCHEDULED · ${fmtCountdown(base.nextRunInMs)}`;
                 }
@@ -2105,6 +3007,7 @@
             if (e.key === 'Enter') login();
         });
 
+        regenerateBotScript();
         checkAuth();
     </script>
 </body>

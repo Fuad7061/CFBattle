@@ -182,10 +182,11 @@ export default function PointsRaceApp() {
     return loaded;
   });
 
+  // Fair play start: every nation in the world has at least 1 point
   const [roundScores, setRoundScores] = useState(() => {
     const initial = {};
     COUNTRIES.forEach(c => {
-      initial[c.code] = 0;
+      initial[c.code] = 1;
     });
     return initial;
   });
@@ -195,13 +196,82 @@ export default function PointsRaceApp() {
   const [gameState, setGameState] = useState('running'); // 'running' | 'celebrating'
   const [winnerInfo, setWinnerInfo] = useState(null);
   const [nextTimer, setNextTimer] = useState(10);
+  const [isPaused, setIsPaused] = useState(false);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+
+  // Responsive scale hook for 100% fit on any screen / preview iframe without cutoffs
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const updateScale = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const s = Math.min(w / 540, h / 960);
+      setScale(s > 0 ? s : 1);
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
+  // Watermark state (synced with settings and live preview)
+  const [watermark, setWatermark] = useState(() => {
+    if (typeof window !== 'undefined' && window.__liveSettings) {
+      const s = window.__liveSettings;
+      return {
+        text: s.watermark || '@FlagsBattleLive',
+        opacity: s.wmOpacity !== undefined ? Number(s.wmOpacity) : 0.15,
+        size: s.wmSize !== undefined ? Number(s.wmSize) : 32,
+        count: s.wmCount !== undefined ? Number(s.wmCount) : 3,
+        angle: s.wmAngle !== undefined ? Number(s.wmAngle) : -15
+      };
+    }
+    return {
+      text: '@FlagsBattleLive',
+      opacity: 0.15,
+      size: 32,
+      count: 3,
+      angle: -15
+    };
+  });
+
+  const [hypeEnabled, setHypeEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('hype') === '0' || params.get('hype') === 'false') return false;
+      return true; // enabled by default to keep stream active
+    }
+    return true;
+  });
+
+  const [musicActive, setMusicActive] = useState(false);
 
   const prevLeaderRef = useRef(null);
   const userStreakRef = useRef({});
   const confettiCanvasRef = useRef(null);
   const hasTriggeredShowdownRef = useRef(false);
+  const lastRealChatTimeRef = useRef(0);
 
   const targetPoints = persistentState.targetPoints || 1000;
+
+  // Background Music auto-start & cleanup
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const musicParam = params.get('music');
+    if (musicParam !== '0' && musicParam !== 'false') {
+      const enableMusic = () => {
+        pointsAudio.playBgMusic();
+        setMusicActive(true);
+        window.removeEventListener('click', enableMusic);
+      };
+      window.addEventListener('click', enableMusic);
+      try {
+        pointsAudio.playBgMusic();
+        setMusicActive(true);
+      } catch (e) {}
+    }
+    return () => pointsAudio.pauseBgMusic();
+  }, []);
 
   // Build sorted country leaderboard with audience popularity tiebreaker
   const sortedCountries = useMemo(() => {
@@ -225,6 +295,15 @@ export default function PointsRaceApp() {
   // Roundup Match condition: Leader >= 750 (75%) or close top-2 duel >= 600
   const isRoundupShowdown = top1Points >= (targetPoints * 0.75) || (top1Points >= 600 && (top1Points - top2Points <= 50));
   const isClimax = top1Points >= (targetPoints * 0.90);
+
+  // Escalate music BPM during Roundup Showdown
+  useEffect(() => {
+    if (isRoundupShowdown) {
+      pointsAudio.setMusicIntensity('showdown');
+    } else {
+      pointsAudio.setMusicIntensity('normal');
+    }
+  }, [isRoundupShowdown]);
 
   // Trigger showdown audio alert once
   useEffect(() => {
@@ -255,7 +334,7 @@ export default function PointsRaceApp() {
 
   // Handle Score Addition Core Logic
   const handleScoreVote = (countryCode, pointsToAdd, authorName = 'Chatter', isSuperChat = false) => {
-    if (gameState === 'celebrating') return;
+    if (gameState === 'celebrating' || isPaused) return;
     const code = countryCode.toUpperCase();
     const country = COUNTRIES.find(c => c.code === code);
     if (!country) return;
@@ -385,9 +464,9 @@ export default function PointsRaceApp() {
       setNextTimer(countdown);
       if (countdown <= 0) {
         clearInterval(interval);
-        // Reset scores and begin next round
+        // Reset scores and begin next round (All flags get 1 point for fair play)
         const freshScores = {};
-        COUNTRIES.forEach(c => { freshScores[c.code] = 0; });
+        COUNTRIES.forEach(c => { freshScores[c.code] = 1; });
         setRoundScores(freshScores);
         setGameState('running');
         setWinnerInfo(null);
@@ -462,29 +541,203 @@ export default function PointsRaceApp() {
         }
 
         if (code) {
+          lastRealChatTimeRef.current = Date.now();
           handleScoreVote(code, points, msg.author || 'Viewer', isSuperChat);
         }
       } catch (e) {}
     };
 
     return () => sse.close();
-  }, [gameState, targetPoints, roundScores]);
+  }, [gameState, targetPoints, roundScores, isPaused]);
 
-  // Expose test hooks for automated verification & simulation
+  // Background Simulated Chat Hype Loop
+  // Creates live social proof, competition, and ensures ALL flags receive points for fair gameplay
+  useEffect(() => {
+    if (!hypeEnabled || gameState === 'celebrating' || isPaused) return;
+
+    const SIMULATED_CHATTERS = [
+      { name: '@DamianEdwards-B72', bias: ['PH', 'US', 'CA'] },
+      { name: '@UttamDas-qj8li', bias: ['IN', 'BD', 'NP'] },
+      { name: '@ShymayGordon', bias: ['PH', 'GB', 'AU'] },
+      { name: '@Дружбу', bias: ['AM', 'KZ', 'RU'] },
+      { name: '@Rahim_BD', bias: ['BD', 'PK', 'TR'] },
+      { name: '@Carlos_BR', bias: ['BR', 'MX', 'PT'] },
+      { name: '@Mustafa_TR', bias: ['TR', 'AZ', 'DE'] },
+      { name: '@Farhan_PK', bias: ['PK', 'SA', 'AE'] },
+      { name: '@Eko_ID', bias: ['ID', 'MY', 'VN'] },
+      { name: '@Ahmed_EG', bias: ['EG', 'DZ', 'MA'] }
+    ];
+
+    const baseDelay = (2500 + Math.random() * 1500) / (speedMultiplier || 1);
+    const hypeTimer = setInterval(() => {
+      if (isPaused) return;
+      // If a real human chatted within the last 15 seconds, pause simulation
+      const timeSinceReal = Date.now() - (lastRealChatTimeRef.current || 0);
+      if (timeSinceReal < 15000) return;
+
+      const chatter = SIMULATED_CHATTERS[Math.floor(Math.random() * SIMULATED_CHATTERS.length)];
+      
+      // Fair gameplay check: prioritize flags that currently have 1 point or less
+      const lowScoreCountries = COUNTRIES.filter(c => (roundScores[c.code] || 0) <= 1);
+      let targetCode;
+      let fanName = chatter.name;
+
+      if (lowScoreCountries.length > 0 && Math.random() < 0.45) {
+        const pick = lowScoreCountries[Math.floor(Math.random() * lowScoreCountries.length)];
+        targetCode = pick.code;
+        fanName = `@${pick.name.replace(/\s+/g, '')}Fan`;
+      } else if (Math.random() < 0.65 && top1) {
+        const contenders = [top1.code, top2?.code, sortedCountries[2]?.code, sortedCountries[3]?.code].filter(Boolean);
+        targetCode = contenders[Math.floor(Math.random() * contenders.length)];
+      } else {
+        targetCode = chatter.bias[Math.floor(Math.random() * chatter.bias.length)];
+      }
+
+      handleScoreVote(targetCode, 1, fanName, false);
+    }, Math.max(500, baseDelay));
+
+    return () => clearInterval(hypeTimer);
+  }, [hypeEnabled, gameState, isPaused, speedMultiplier, top1, top2, sortedCountries, roundScores]);
+
+  // Expose comprehensive Director hooks & parent window message bus
   useEffect(() => {
     window.pointsRace = {
+      start: () => setIsPaused(false),
+      resume: () => setIsPaused(false),
+      pause: () => setIsPaused(true),
+      togglePause: () => {
+        let next;
+        setIsPaused(prev => { next = !prev; return next; });
+        return next;
+      },
+      reset: () => {
+        const freshScores = {};
+        COUNTRIES.forEach(c => { freshScores[c.code] = 1; });
+        setRoundScores(freshScores);
+        setGameState('running');
+        setWinnerInfo(null);
+        setIsPaused(false);
+      },
+      resetSupporters: () => {
+        const freshState = {
+          round: 1,
+          targetPoints: 1000,
+          champions: [],
+          topFans: DEFAULT_TOP_FANS,
+          allTimeScores: {}
+        };
+        setPersistentState(freshState);
+        savePointsRaceState(freshState);
+      },
+      setSpeed: (val) => {
+        setSpeedMultiplier(Number(val) || 1);
+      },
+      setWatermark: (wm) => {
+        setWatermark(prev => ({ ...prev, ...wm }));
+      },
+      setSettings: (s) => {
+        if (!s) return;
+        if (s.watermark !== undefined) setWatermark(prev => ({ ...prev, text: s.watermark }));
+        if (s.wmOpacity !== undefined) setWatermark(prev => ({ ...prev, opacity: Number(s.wmOpacity) }));
+        if (s.wmSize !== undefined) setWatermark(prev => ({ ...prev, size: Number(s.wmSize) }));
+        if (s.wmCount !== undefined) setWatermark(prev => ({ ...prev, count: Number(s.wmCount) }));
+        if (s.wmAngle !== undefined) setWatermark(prev => ({ ...prev, angle: Number(s.wmAngle) }));
+        if (s.speed !== undefined) setSpeedMultiplier(Number(s.speed) || 1);
+        if (s.targetPoints !== undefined) {
+          setPersistentState(prev => {
+            const u = { ...prev, targetPoints: Number(s.targetPoints) };
+            savePointsRaceState(u);
+            return u;
+          });
+        }
+        if (s.musicVol !== undefined) pointsAudio.setBgVolume(Number(s.musicVol));
+        if (s.customMusicUrl) {
+          pointsAudio.loadBgMusic(s.customMusicUrl);
+          pointsAudio.playBgMusic();
+          setMusicActive(true);
+        }
+      },
       addPoints: (cCode, pts = 1, author = 'TestFan', isSuper = false) => {
         handleScoreVote(cCode, pts, author, isSuper);
       },
       triggerWinner: (cCode = 'CA') => {
         const c = COUNTRIES.find(x => x.code === cCode.toUpperCase()) || COUNTRIES[0];
         triggerRoundWin(c, 'MVP_SuperFan', targetPoints);
+      },
+      toggleMusic: () => {
+        const active = pointsAudio.toggleBgMusic();
+        setMusicActive(active);
+        return active;
+      },
+      toggleHype: (val) => {
+        setHypeEnabled(prev => typeof val === 'boolean' ? val : !prev);
       }
     };
-  }, [gameState, targetPoints, roundScores]);
+  }, [gameState, targetPoints, roundScores, isPaused]);
+
+  // Listen to parent Director messages (postMessage)
+  useEffect(() => {
+    const handleMsg = (e) => {
+      if (!e.data) return;
+      if (e.data.type === 'DIRECTOR_CMD') {
+        const cmd = e.data.cmd;
+        if (cmd === 'start') window.pointsRace?.resume();
+        else if (cmd === 'pause') window.pointsRace?.togglePause();
+        else if (cmd === 'reset') window.pointsRace?.reset();
+        else if (cmd === 'clear_supporters') window.pointsRace?.resetSupporters();
+        else if (cmd === 'mute') pointsAudio.toggleMute();
+      } else if (e.data.type === 'LIVE_SETTINGS_UPDATE' && e.data.settings) {
+        window.pointsRace?.setSettings(e.data.settings);
+      } else if (e.data.type === 'RESET_SUPPORTERS') {
+        window.pointsRace?.resetSupporters();
+      } else if (e.data.type === 'MUSIC_UPDATE' && e.data.src) {
+        pointsAudio.loadBgMusic(e.data.src);
+        pointsAudio.playBgMusic();
+        setMusicActive(true);
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, []);
+
+  const isClean = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('clean') === 'true';
 
   return (
-    <div className="pr-root">
+    <div className="pr-viewport">
+      <div
+        className="pr-root"
+        style={{
+          width: '540px',
+          height: '960px',
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          flexShrink: 0
+        }}
+      >
+        {/* Paused Indicator */}
+        {isPaused && (
+          <div className="pr-paused-badge">
+            <span>⏸ MATCH PAUSED</span>
+          </div>
+        )}
+
+        {/* Branding & Watermark Layer */}
+        {watermark.opacity > 0 && watermark.text && (
+          <div className="pr-watermark-layer" style={{ opacity: watermark.opacity }}>
+            {Array.from({ length: Math.max(1, watermark.count || 3) }).map((_, i) => (
+              <span
+                key={i}
+                className="pr-watermark-text"
+                style={{
+                  fontSize: `${watermark.size || 32}px`,
+                  transform: `rotate(${watermark.angle || -15}deg)`
+                }}
+              >
+                {watermark.text}
+              </span>
+            ))}
+          </div>
+        )}
       {/* ── 1. Top Header ────────────────────────────────────── */}
       <header className="pr-header">
         <h1 className={`pr-title ${isClimax ? 'climax' : ''}`}>
@@ -492,6 +745,27 @@ export default function PointsRaceApp() {
             ? `${top1.name} ${top1Points} / ${targetPoints}`
             : `FIRST TO ${targetPoints} POINTS`}
         </h1>
+        {!isClean && (
+          <div className="pr-header-actions">
+            <button
+              className={`pr-action-btn ${musicActive ? 'active' : ''}`}
+              onClick={() => {
+                const active = pointsAudio.toggleBgMusic();
+                setMusicActive(active);
+              }}
+              title="Toggle Background Music"
+            >
+              {musicActive ? '🎵 MUSIC ON' : '🔇 MUSIC OFF'}
+            </button>
+            <button
+              className={`pr-action-btn ${hypeEnabled ? 'active' : ''}`}
+              onClick={() => setHypeEnabled(!hypeEnabled)}
+              title="Toggle Live Chat Hype Engine"
+            >
+              {hypeEnabled ? '⚡ HYPE ON' : '💤 HYPE OFF'}
+            </button>
+          </div>
+        )}
       </header>
 
       {/* ── 2. Top Fans & Round Info Row ────────────────────── */}
@@ -709,6 +983,7 @@ export default function PointsRaceApp() {
           zIndex: 90
         }}
       />
+      </div>
     </div>
   );
 }

@@ -801,16 +801,18 @@ app.post('/api/control', checkAuth, async (req, res) => {
     
     const { action, payload } = req.body;
     try {
-        if (action === 'new-round') {
+        if (action === 'new-round' || action === 'reset') {
             await currentPage.evaluate(() => {
-                if (window.gameInstance && typeof window.gameInstance.newRound === 'function') {
+                if (window.pointsRace && typeof window.pointsRace.reset === 'function') {
+                    window.pointsRace.reset();
+                } else if (window.gameInstance && typeof window.gameInstance.newRound === 'function') {
                     window.gameInstance.newRound();
                 } else {
                     const btn = document.getElementById('btn-start');
                     if (btn && !btn.disabled) btn.click();
                 }
             });
-            logMsg("Game new-round triggered remotely.");
+            logMsg("Game new-round / reset triggered remotely.");
         } else if (action === 'shrink-arena') {
             await currentPage.evaluate(() => {
                 if (window.gameInstance && typeof window.gameInstance.shrinkArena === 'function') {
@@ -820,14 +822,36 @@ app.post('/api/control', checkAuth, async (req, res) => {
             logMsg("Game shrink-arena triggered remotely.");
         } else if (action === 'toggle-sound') {
             await currentPage.evaluate(() => {
+                if (window.pointsAudio && typeof window.pointsAudio.toggleMute === 'function') {
+                    window.pointsAudio.toggleMute();
+                }
                 if (window.gameInstance && typeof window.gameInstance.setSoundEnabled === 'function') {
                     window.gameInstance.primeAudioOnGesture();
                     window.gameInstance.setSoundEnabled(!window.gameInstance.soundEnabled);
                 }
             });
             logMsg("Game toggle-sound triggered remotely.");
+        } else if (action === 'speed') {
+            await currentPage.evaluate((spd) => {
+                if (window.pointsRace && typeof window.pointsRace.setSpeed === 'function') {
+                    window.pointsRace.setSpeed(spd);
+                }
+                if (window.__flagBattleInstance && window.__flagBattleInstance.physics) {
+                    window.__flagBattleInstance.physics.setStepsPerFrame(spd);
+                }
+                if (window.gameInstance) {
+                    window.gameInstance.settings = window.gameInstance.settings || {};
+                    window.gameInstance.settings.speedMult = spd;
+                }
+            }, payload?.speed || 1);
+            logMsg(`Game speed set to ${payload?.speed || 1} remotely.`);
         } else if (action === 'pause' || action === 'toggle-pause' || action === 'resume') {
             await currentPage.evaluate((act) => {
+                if (window.pointsRace) {
+                    if (act === 'pause') window.pointsRace.pause?.();
+                    else if (act === 'resume') window.pointsRace.resume?.();
+                    else window.pointsRace.togglePause?.();
+                }
                 if (window.gameInstance) {
                     const gi = window.gameInstance;
                     if (act === 'pause') {
@@ -840,11 +864,7 @@ app.post('/api/control', checkAuth, async (req, res) => {
                         if (typeof gi.togglePause === 'function') gi.togglePause();
                         else if (gi.paused && typeof gi.resume === 'function') gi.resume();
                         else if (typeof gi.pause === 'function') gi.pause();
-                        else gi.paused = !gi.paused;
                     }
-                } else {
-                    const btn = document.getElementById('btn-pause') || document.getElementById('dir-btn-pause');
-                    if (btn) btn.click();
                 }
             }, action);
             logMsg(`Game ${action} triggered remotely.`);
@@ -857,6 +877,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
                         localStorage.removeItem('fb_top_supporters_vertical');
                         if (window.gameInstance && window.gameInstance.ui && typeof window.gameInstance.ui.resetSupporters === 'function') {
                             window.gameInstance.ui.resetSupporters(true);
+                        }
+                        if (window.pointsRace && typeof window.pointsRace.resetSupporters === 'function') {
+                            window.pointsRace.resetSupporters();
                         }
                     } catch (e) {}
                     window.postMessage({ type: 'RESET_SUPPORTERS' }, '*');
@@ -922,7 +945,16 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     }
                 }
                 
-                // Dispatch message for React landscape view
+                // If pointsRace engine exists, update settings
+                if (window.pointsRace && typeof window.pointsRace.setSettings === 'function') {
+                    window.pointsRace.setSettings(s);
+                }
+                if (window.pointsAudio) {
+                    if (s.musicVol !== undefined) window.pointsAudio.setBgVolume(Number(s.musicVol));
+                    if (s.customMusicUrl) window.pointsAudio.loadBgMusic(s.customMusicUrl);
+                }
+
+                // Dispatch message for React landscape and vertical views
                 window.postMessage({ type: 'LIVE_SETTINGS_UPDATE', settings: s }, '*');
             }, payload);
             bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: payload });
@@ -1130,6 +1162,43 @@ app.get('/api/tts', async (req, res) => {
     });
   } catch (err) {
     res.status(500).send('TTS error: ' + err.message);
+  }
+});
+
+// Upload and replace custom background music MP3 file
+app.post('/api/upload-music', express.json({ limit: '50mb' }), checkAuth, (req, res) => {
+  try {
+    const { filename, data } = req.body;
+    if (!data) return res.status(400).json({ error: 'Missing audio data' });
+
+    // Handle base64 data URL or raw base64
+    const base64Clean = data.replace(/^data:audio\/\w+;base64,/, '').replace(/^data:application\/octet-stream;base64,/, '');
+    const audioBuffer = Buffer.from(base64Clean, 'base64');
+
+    const targetPath = path.join(__dirname, 'custom-music.mp3');
+    fs.writeFileSync(targetPath, audioBuffer);
+
+    currentSettings.customMusicUrl = '/custom-music.mp3';
+    try {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2));
+    } catch (e) {}
+
+    // Broadcast update to all connected viewers and engines
+    bus.emit('chat', { type: 'MUSIC_UPDATE', src: '/custom-music.mp3' });
+    if (currentPage) {
+      currentPage.evaluate(() => {
+        if (window.pointsAudio) {
+          window.pointsAudio.loadBgMusic('/custom-music.mp3');
+          window.pointsAudio.playBgMusic();
+        }
+      }).catch(() => {});
+    }
+
+    logMsg("Custom background music uploaded and activated.");
+    res.json({ success: true, url: '/custom-music.mp3' });
+  } catch (err) {
+    logMsg("Upload music error: " + err.message, true);
+    res.status(500).json({ error: err.message });
   }
 });
 
