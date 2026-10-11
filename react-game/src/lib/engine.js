@@ -662,7 +662,8 @@ export class FlagBattleEngine extends EventEmitter {
         this.addShockwave(flag.x, flag.y, '#ffd700');
         
         if (this.soundEnabled) {
-          this._playTone(1046, 0.6, 'sawtooth', 0, 0.2);
+          this._playTone(1046.5, 0.45, 'sine', 0, 0.16);
+          this._playTone(1567.98, 0.35, 'sine', 0.08, 0.12);
           const countryName = this.countryNames[targetCode] || targetCode;
           this._queueShoutout(author || 'The chat', countryName, 'revived');
         }
@@ -922,16 +923,31 @@ export class FlagBattleEngine extends EventEmitter {
     osc.stop(t0 + duration + 0.05);
   }
 
+  /** Soothing ASMR crystal drop & singing chime on qualification */
   _playQualifyChime() {
-    this._playTone(660, 0.12, 'triangle', 0, 0.1);
-    this._playTone(880, 0.16, 'triangle', 0.1, 0.1);
+    this._playTone(659.25, 0.22, 'sine', 0, 0.14);
+    this._playTone(987.77, 0.26, 'sine', 0.07, 0.15);
+    this._playTone(1318.51, 0.32, 'sine', 0.14, 0.13);
   }
+
+  /** Soothing ASMR pentatonic celesta fanfare for stage completions */
   _playStageFanfare() {
-    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this._playTone(f, 0.28, 'triangle', i * 0.12, 0.13));
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+      this._playTone(f, 0.32, 'sine', i * 0.12, 0.15);
+      this._playTone(f * 2, 0.20, 'sine', i * 0.12 + 0.01, 0.05);
+    });
   }
+
+  /** Celestial ASMR Celesta & Marimba Fanfare in Cmaj9 when champion wins */
   _playChampionFanfare() {
-    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this._playTone(f, 0.4, 'sawtooth', i * 0.1, 0.1));
+    const notes = [523.25, 659.25, 783.99, 987.77, 1174.66, 1567.98];
+    notes.forEach((f, i) => {
+      this._playTone(f, 0.45, 'sine', i * 0.12, 0.16);
+      this._playTone(f * 2, 0.25, 'sine', i * 0.12 + 0.01, 0.06);
+    });
   }
+
+  /** Soft ASMR silk air-swish whoosh */
   _playWhoosh() {
     if (!this.soundEnabled) return;
     const c = this._ensureAudio();
@@ -944,18 +960,19 @@ export class FlagBattleEngine extends EventEmitter {
     src.buffer = buffer;
     const filter = c.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1100, c.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(280, c.currentTime + 0.22);
+    filter.frequency.setValueAtTime(950, c.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(320, c.currentTime + 0.20);
     const gain = c.createGain();
-    gain.gain.setValueAtTime(0.06, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.22);
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.20);
     src.connect(filter);
     filter.connect(gain);
     gain.connect(c.destination);
     src.start();
   }
 
-  // Dramatic cinematic boom hit for Top 5 / Top 3 suspense.
+  /** Meditative singing bowl & sub-bass resonance for Top 5 / Top 3 suspense */
   _playDramaticHit() {
     if (!this.soundEnabled) return;
     const c = this._ensureAudio();
@@ -965,15 +982,28 @@ export class FlagBattleEngine extends EventEmitter {
     osc.connect(gain);
     gain.connect(c.destination);
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(140, c.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(35, c.currentTime + 0.65);
-    gain.gain.setValueAtTime(0.35, c.currentTime);
+    osc.frequency.setValueAtTime(92, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(38, c.currentTime + 0.65);
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.32, c.currentTime + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.65);
     osc.start(c.currentTime);
     osc.stop(c.currentTime + 0.66);
+
+    // Meditative singing bowl overtone
+    const bowl = c.createOscillator();
+    const bowlGain = c.createGain();
+    bowl.connect(bowlGain); bowlGain.connect(c.destination);
+    bowl.type = 'sine';
+    bowl.frequency.setValueAtTime(276, c.currentTime);
+    bowlGain.gain.setValueAtTime(0, c.currentTime);
+    bowlGain.gain.linearRampToValueAtTime(0.14, c.currentTime + 0.03);
+    bowlGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.60);
+    bowl.start(c.currentTime);
+    bowl.stop(c.currentTime + 0.62);
   }
 
-  // Realistic double-pulse heartbeat (lub-dub) for Top 3 suspense.
+  /** Calming, hypnotic double-pulse heartbeat (lub-dub) for Top 3 suspense */
   _startHeartbeat(fast = false) {
     this._stopHeartbeat();
     if (!this.soundEnabled) return;
@@ -988,32 +1018,34 @@ export class FlagBattleEngine extends EventEmitter {
         osc1.connect(gain1);
         gain1.connect(c.destination);
         osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(70, t0);
-        osc1.frequency.exponentialRampToValueAtTime(42, t0 + 0.11);
-        gain1.gain.setValueAtTime(0.28, t0);
-        gain1.gain.exponentialRampToValueAtTime(0.001, t0 + 0.11);
+        osc1.frequency.setValueAtTime(54, t0);
+        osc1.frequency.exponentialRampToValueAtTime(36, t0 + 0.12);
+        gain1.gain.setValueAtTime(0, t0);
+        gain1.gain.linearRampToValueAtTime(0.24, t0 + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
         osc1.start(t0);
-        osc1.stop(t0 + 0.12);
+        osc1.stop(t0 + 0.13);
 
-        const t1 = t0 + 0.14;
+        const t1 = t0 + 0.15;
         const osc2 = c.createOscillator();
         const gain2 = c.createGain();
         osc2.connect(gain2);
         gain2.connect(c.destination);
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(80, t1);
-        osc2.frequency.exponentialRampToValueAtTime(46, t1 + 0.13);
-        gain2.gain.setValueAtTime(0.32, t1);
-        gain2.gain.exponentialRampToValueAtTime(0.001, t1 + 0.13);
+        osc2.frequency.setValueAtTime(64, t1);
+        osc2.frequency.exponentialRampToValueAtTime(40, t1 + 0.14);
+        gain2.gain.setValueAtTime(0, t1);
+        gain2.gain.linearRampToValueAtTime(0.26, t1 + 0.015);
+        gain2.gain.exponentialRampToValueAtTime(0.001, t1 + 0.14);
         osc2.start(t1);
-        osc2.stop(t1 + 0.14);
+        osc2.stop(t1 + 0.15);
       } catch (e) {
         /* ignore */
       }
     };
 
     beat();
-    this._heartbeatTimer = setInterval(beat, fast ? 620 : 840);
+    this._heartbeatTimer = setInterval(beat, fast ? 660 : 880);
   }
 
   _stopHeartbeat() {
@@ -1023,6 +1055,7 @@ export class FlagBattleEngine extends EventEmitter {
     }
   }
 
+  /** Gentle aerodynamic sine air-glide */
   _playNearMiss() {
     if (!this.soundEnabled) return;
     const c = this._ensureAudio();
@@ -1031,15 +1064,17 @@ export class FlagBattleEngine extends EventEmitter {
     const gain = c.createGain();
     osc.connect(gain);
     gain.connect(c.destination);
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(450, c.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(180, c.currentTime + 0.16);
-    gain.gain.setValueAtTime(0.10, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.16);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(420, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(260, c.currentTime + 0.18);
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.12, c.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.18);
     osc.start(c.currentTime);
-    osc.stop(c.currentTime + 0.17);
+    osc.stop(c.currentTime + 0.19);
   }
 
+  /** Soft ASMR tactile wooden/felt tap on ball bounce */
   _playThump() {
     if (!this.soundEnabled) return;
     const c = this._ensureAudio();
@@ -1048,16 +1083,17 @@ export class FlagBattleEngine extends EventEmitter {
     if (now - this.lastThumpTime < 0.05) return; // 50ms throttle
     this.lastThumpTime = now;
     const osc = c.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(190, now);
-    osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, now);
+    osc.frequency.exponentialRampToValueAtTime(50, now + 0.08);
     const gain = c.createGain();
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
     osc.connect(gain);
     gain.connect(c.destination);
     osc.start(now);
-    osc.stop(now + 0.12);
+    osc.stop(now + 0.10);
   }
 
   _speakChampion(name) {

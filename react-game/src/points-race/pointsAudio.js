@@ -31,6 +31,10 @@ class PointsAudioManager {
     }
   }
 
+  ensureContext() {
+    this._initContext();
+  }
+
   toggleMute() {
     this.muted = !this.muted;
     if (this.bgAudio) this.bgAudio.volume = this.muted ? 0 : this.bgVolume;
@@ -47,56 +51,76 @@ class PointsAudioManager {
     return this.muted;
   }
 
-  // 1. Gentle pop/chime on +1 comment vote
+  // 1. Soothing ASMR Crystal Water-Drop & Bubble Pop on +1 Vote
   playVoteChime() {
     if (this.muted) return;
     try {
       this._initContext();
       if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      // ASMR Pentatonic drop frequencies (D5, E5, G5, A5, C6)
+      const tones = [587.33, 659.25, 783.99, 880.00, 1046.50];
+      const baseFreq = tones[Math.floor(Math.random() * tones.length)];
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(baseFreq * 0.88, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.015);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.98, now + 0.16);
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(587.33, this.ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.08); // A5
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(this.bgVolume * 0.28, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
 
-      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+      // Subtle harmonic overtone for pristine ASMR sparkle
+      const sparkleOsc = this.ctx.createOscillator();
+      const sparkleGain = this.ctx.createGain();
+      sparkleOsc.type = 'sine';
+      sparkleOsc.frequency.setValueAtTime(baseFreq * 2.01, now);
+      sparkleGain.gain.setValueAtTime(this.bgVolume * 0.07, now);
+      sparkleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
 
       osc.connect(gain);
+      sparkleOsc.connect(sparkleGain);
       gain.connect(this.ctx.destination);
+      sparkleGain.connect(this.ctx.destination);
 
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.1);
+      osc.start(now);
+      sparkleOsc.start(now);
+      osc.stop(now + 0.19);
+      sparkleOsc.stop(now + 0.10);
     } catch (e) {}
   }
 
-  // 2. High energy chime on combo streak
+  // 2. Soothing Marimba Duo Chime on Combo Streak
   playStreakChime() {
     if (this.muted) return;
     try {
       this._initContext();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
-      [880, 1174.66].forEach((freq, idx) => {
+      [880.00, 1174.66].forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const st = now + idx * 0.045;
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+        osc.frequency.setValueAtTime(freq, st);
 
-        gain.gain.setValueAtTime(0.12, now + idx * 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.15);
+        gain.gain.setValueAtTime(0, st);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.32, st + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.24);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
-        osc.start(now + idx * 0.05);
-        osc.stop(now + idx * 0.05 + 0.15);
+        osc.start(st);
+        osc.stop(st + 0.25);
       });
     } catch (e) {}
   }
 
-  // 3. Energetic whoosh when #1 position changes (Overtake)
+  // 3. Velvet Whoosh & Harmonic Chime on #1 Overtake
   playOvertakeChime() {
     if (this.muted) return;
     try {
@@ -106,22 +130,24 @@ class PointsAudioManager {
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+        const st = now + idx * 0.04;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, st);
 
-        gain.gain.setValueAtTime(0.15, now + idx * 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.2);
+        gain.gain.setValueAtTime(0, st);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.30, st + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.35);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
-        osc.start(now + idx * 0.04);
-        osc.stop(now + idx * 0.04 + 0.22);
+        osc.start(st);
+        osc.stop(st + 0.36);
       });
     } catch (e) {}
   }
 
-  // 3b. Triumphant fanfare when a Team/Country QUALIFIES
+  // 3b. Meditative Singing Bowl & Crystal Bell on Qualification
   playQualifierChime() {
     if (this.muted) return;
     try {
@@ -131,43 +157,47 @@ class PointsAudioManager {
       [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+        const st = now + idx * 0.06;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, st);
 
-        gain.gain.setValueAtTime(0.18, now + idx * 0.07);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.35);
+        gain.gain.setValueAtTime(0, st);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.35, st + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.55);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
-        osc.start(now + idx * 0.07);
-        osc.stop(now + idx * 0.07 + 0.38);
+        osc.start(st);
+        osc.stop(st + 0.58);
       });
     } catch (e) {}
   }
 
-  // 4. Golden register chord for Super Chat
+  // 4. Celestial Wind Chime & Harp Cascade on Super Chat (Zero Harsh Sawtooth)
   playSuperChatFanfare() {
     if (this.muted) return;
     try {
       this._initContext();
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
-      const chord = [523.25, 659.25, 783.99, 1046.5, 1318.51]; // C Major
-      chord.forEach(freq => {
+      const chord = [523.25, 659.25, 783.99, 987.77, 1046.50, 1318.51]; // Cmaj9
+      chord.forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, now);
+        const st = now + idx * 0.04;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, st);
 
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+        gain.gain.setValueAtTime(0, st);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.34, st + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.45);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
-        osc.start(now);
-        osc.stop(now + 0.65);
+        osc.start(st);
+        osc.stop(st + 0.48);
       });
     } catch (e) {}
   }
@@ -300,19 +330,20 @@ class PointsAudioManager {
         this._noiseBuffer = b;
       }
 
-      // Energetic Dopamine Chord Progression (Am - F - C - G)
+      // Soothing ASMR Dopamine Chord Progression (Am9 -> Fmaj7 -> Cmaj7 -> G6)
       const bassRoots = [
-        33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 33,  33, 33, 45, 43, // Am
-        29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 29,  29, 29, 41, 40, // F
-        36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 47, // C
-        31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 31,  31, 31, 43, 41  // G
+        33, 0, 0, 33,   0, 0, 33, 0,   33, 0, 0, 33,   0, 0, 0, 43, // Am9
+        29, 0, 0, 29,   0, 0, 29, 0,   29, 0, 0, 29,   0, 0, 0, 40, // Fmaj7
+        36, 0, 0, 36,   0, 0, 36, 0,   36, 0, 0, 36,   0, 0, 0, 47, // Cmaj7
+        31, 0, 0, 31,   0, 0, 31, 0,   31, 0, 0, 31,   0, 0, 0, 41  // G6
       ];
 
+      // Relaxing Kalimba & Marimba Pentatonic Chimes
       const arpLead = [
-        69, 72, 76, 81,  76, 72, 81, 76,  69, 72, 76, 81,  84, 81, 76, 72,
-        65, 69, 72, 77,  72, 69, 77, 72,  65, 69, 72, 77,  81, 77, 72, 69,
-        60, 64, 67, 72,  67, 64, 72, 67,  60, 64, 67, 72,  76, 72, 67, 64,
-        67, 71, 74, 79,  74, 71, 79, 74,  67, 71, 74, 79,  83, 79, 74, 71
+        69, 0, 72, 76,  0, 72, 0, 76,   69, 76, 0, 81,  0, 76, 72, 0,
+        65, 0, 69, 72,  0, 69, 0, 72,   65, 72, 0, 77,  0, 72, 69, 0,
+        60, 0, 64, 67,  0, 64, 0, 67,   60, 67, 0, 72,  0, 67, 64, 0,
+        67, 0, 71, 74,  0, 71, 0, 74,   67, 74, 0, 79,  0, 74, 71, 0
       ];
 
       const m2f = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -322,17 +353,18 @@ class PointsAudioManager {
       this._scheduler = () => {
         if (!this._proceduralActive || this.muted || !this.musicEnabled) return;
 
-        let bpm = 126;
-        let filterCutoff = 1600;
+        // Relaxed, soothing ASMR lofi tempo
+        let bpm = 84;
+        let filterCutoff = 1350;
         const isShowdown = this._musicStage === 'showdown';
         const isTop5 = this._musicStage === 'top5' || isShowdown;
 
         if (isShowdown) {
-          bpm = 138;
-          filterCutoff = 4200;
+          bpm = 92;
+          filterCutoff = 1800;
         } else if (isTop5) {
-          bpm = 132;
-          filterCutoff = 2600;
+          bpm = 88;
+          filterCutoff = 1500;
         }
 
         const stepTime = (60 / bpm) / 4;
@@ -341,109 +373,100 @@ class PointsAudioManager {
           const t = nextNoteTime;
           const barStep = step % 64;
           const beat16 = step % 16;
-          const isQuarter = beat16 % 4 === 0;
 
-          // 1. Kick (4-on-the-floor)
-          if (isQuarter) {
+          // 1. Warm Soft ASMR Felt Kick (Beats 1 & 10)
+          if (beat16 === 0 || beat16 === 10) {
             const kOsc = ctx.createOscillator();
             const kGain = ctx.createGain();
             kOsc.connect(kGain);
             kGain.connect(ctx.destination);
-            kOsc.frequency.setValueAtTime(isShowdown ? 150 : 135, t);
-            kOsc.frequency.exponentialRampToValueAtTime(36, t + 0.085);
-            kGain.gain.setValueAtTime(this.bgVolume * (isShowdown ? 0.42 : 0.35), t);
-            kGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+            kOsc.type = 'sine';
+            kOsc.frequency.setValueAtTime(82, t);
+            kOsc.frequency.exponentialRampToValueAtTime(40, t + 0.09);
+            kGain.gain.setValueAtTime(this.bgVolume * 0.30, t);
+            kGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
             kOsc.start(t);
-            kOsc.stop(t + 0.095);
+            kOsc.stop(t + 0.14);
           }
 
-          // 2. Snare / Clap
+          // 2. Soft ASMR Velvet Rimshot / Snare on beats 4 & 12
           if (beat16 === 4 || beat16 === 12) {
             if (this._noiseBuffer) {
               const snNode = ctx.createBufferSource();
               snNode.buffer = this._noiseBuffer;
               const snFilter = ctx.createBiquadFilter();
               snFilter.type = 'bandpass';
-              snFilter.frequency.value = 1900;
-              snFilter.Q.value = 1.2;
+              snFilter.frequency.value = 1450;
+              snFilter.Q.value = 1.8;
               const snGain = ctx.createGain();
               snNode.connect(snFilter);
               snFilter.connect(snGain);
               snGain.connect(ctx.destination);
-              snGain.gain.setValueAtTime(this.bgVolume * 0.18, t);
-              snGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+              snGain.gain.setValueAtTime(this.bgVolume * 0.12, t);
+              snGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
               snNode.start(t);
-              snNode.stop(t + 0.125);
+              snNode.stop(t + 0.13);
             }
           }
 
-          // 3. Hi-Hats
-          if (this._noiseBuffer) {
-            const isOffbeat = beat16 % 4 === 2;
-            if (isOffbeat) {
-              const ohNode = ctx.createBufferSource();
-              ohNode.buffer = this._noiseBuffer;
-              const ohFilter = ctx.createBiquadFilter();
-              ohFilter.type = 'highpass';
-              ohFilter.frequency.value = 7500;
-              const ohGain = ctx.createGain();
-              ohNode.connect(ohFilter);
-              ohFilter.connect(ohGain);
-              ohGain.connect(ctx.destination);
-              ohGain.gain.setValueAtTime(this.bgVolume * 0.08, t);
-              ohGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
-              ohNode.start(t);
-              ohNode.stop(t + 0.115);
-            }
+          // 3. Gentle Soft-Shaker / Brush Ticks on eighth notes
+          if (this._noiseBuffer && beat16 % 2 === 0) {
+            const shNode = ctx.createBufferSource();
+            shNode.buffer = this._noiseBuffer;
+            const shFilter = ctx.createBiquadFilter();
+            shFilter.type = 'highpass';
+            shFilter.frequency.value = 8500;
+            const shGain = ctx.createGain();
+            shNode.connect(shFilter);
+            shFilter.connect(shGain);
+            shGain.connect(ctx.destination);
+            shGain.gain.setValueAtTime(this.bgVolume * 0.035, t);
+            shGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+            shNode.start(t);
+            shNode.stop(t + 0.055);
           }
 
-          // 4. Synthwave Bass
+          // 4. Warm Soothing Sub-Bass (Pure Sine, zero harsh buzzing)
           const bassMidi = bassRoots[barStep];
           if (bassMidi) {
             const bOsc = ctx.createOscillator();
-            const bFilter = ctx.createBiquadFilter();
             const bGain = ctx.createGain();
-            bOsc.type = 'sawtooth';
+            bOsc.type = 'sine';
             bOsc.frequency.setValueAtTime(m2f(bassMidi), t);
-            bFilter.type = 'lowpass';
-            bFilter.frequency.setValueAtTime(isQuarter ? 480 : 880, t);
-            bFilter.Q.value = 2.8;
-            bOsc.connect(bFilter);
-            bFilter.connect(bGain);
+            bOsc.connect(bGain);
             bGain.connect(ctx.destination);
-            const bassVol = isQuarter ? this.bgVolume * 0.09 : this.bgVolume * 0.18;
-            bGain.gain.setValueAtTime(bassVol, t);
-            bGain.gain.exponentialRampToValueAtTime(0.005, t + stepTime * 0.88);
+            bGain.gain.setValueAtTime(this.bgVolume * 0.18, t);
+            bGain.gain.exponentialRampToValueAtTime(0.0001, t + stepTime * 2.2);
             bOsc.start(t);
-            bOsc.stop(t + stepTime * 0.9);
+            bOsc.stop(t + stepTime * 2.3);
           }
 
-          // 5. Arpeggio Lead
+          // 5. Dreamy Kalimba / Celesta Lofi Arpeggios (Relaxing Pentatonic)
           const arpMidi = arpLead[barStep];
           if (arpMidi) {
             const lOsc = ctx.createOscillator();
             const lFilter = ctx.createBiquadFilter();
             const lGain = ctx.createGain();
-            lOsc.type = 'square';
+            lOsc.type = 'sine';
             lOsc.frequency.setValueAtTime(m2f(arpMidi), t);
             lFilter.type = 'lowpass';
             lFilter.frequency.setValueAtTime(filterCutoff, t);
-            lFilter.Q.value = 2.0;
+            lFilter.Q.value = 1.2;
             lOsc.connect(lFilter);
             lFilter.connect(lGain);
             lGain.connect(ctx.destination);
-            const arpVol = isShowdown ? this.bgVolume * 0.10 : this.bgVolume * 0.07;
-            lGain.gain.setValueAtTime(arpVol, t);
-            lGain.gain.linearRampToValueAtTime(0.001, t + stepTime * 0.85);
+            lGain.gain.setValueAtTime(0, t);
+            lGain.gain.linearRampToValueAtTime(this.bgVolume * 0.09, t + 0.015);
+            lGain.gain.exponentialRampToValueAtTime(0.0001, t + stepTime * 1.8);
             lOsc.start(t);
-            lOsc.stop(t + stepTime * 0.9);
+            lOsc.stop(t + stepTime * 1.9);
           }
 
           step++;
           nextNoteTime += stepTime;
         }
 
-        this._seqTimer = setTimeout(this._scheduler, 30);
+        this._seqTimer = setTimeout(this._scheduler, 35);
       };
 
       this._scheduler();

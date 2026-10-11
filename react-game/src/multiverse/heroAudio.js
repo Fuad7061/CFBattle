@@ -73,94 +73,116 @@ class HeroAudioEngine {
   // SOUND EFFECTS (Web Audio Oscillators)
   // --------------------------------------------------------------------------
 
-  // 1. Comic Zap / Punch on Vote Boost
+  // 1. Soothing ASMR Crystal Water-Drop & Bubble Pop on Vote Boost
   playBoost(heroColor = '#ef4444') {
     if (this.muted) return;
     this._initContext();
     if (!this.ctx) return;
 
     try {
+      const now = this.ctx.currentTime;
+      // ASMR Pentatonic frequencies (D5, E5, G5, A5, B5, D6)
+      const pentatonicTones = [587.33, 659.25, 783.99, 880.00, 987.77, 1174.66];
+      let hash = 0;
+      for (let i = 0; i < heroColor.length; i++) hash = heroColor.charCodeAt(i) + ((hash << 5) - hash);
+      const baseFreq = pentatonicTones[Math.abs(hash) % pentatonicTones.length];
+
+      // Primary warm sine body (satisfying water drop / crystal chime)
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      const now = this.ctx.currentTime;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(baseFreq * 0.88, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.015);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.98, now + 0.16);
 
-      osc.type = 'triangle';
-      // High-energy laser punch pitch dive
-      osc.frequency.setValueAtTime(580, now);
-      osc.frequency.exponentialRampToValueAtTime(160, now + 0.08);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(this.bgVolume * 0.32, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
 
-      gain.gain.setValueAtTime(this.bgVolume * 0.45, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+      // Subtle harmonic overtone for pristine ASMR sparkle
+      const sparkleOsc = this.ctx.createOscillator();
+      const sparkleGain = this.ctx.createGain();
+      sparkleOsc.type = 'sine';
+      sparkleOsc.frequency.setValueAtTime(baseFreq * 2.01, now);
+      sparkleGain.gain.setValueAtTime(this.bgVolume * 0.08, now);
+      sparkleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
 
       osc.connect(gain);
+      sparkleOsc.connect(sparkleGain);
       gain.connect(this.ctx.destination);
+      sparkleGain.connect(this.ctx.destination);
 
       osc.start(now);
-      osc.stop(now + 0.09);
+      sparkleOsc.start(now);
+      osc.stop(now + 0.19);
+      sparkleOsc.stop(now + 0.10);
     } catch (e) {}
   }
 
-  // 2. Super Chat / Major Boost Fanfare
+  // 2. Soothing ASMR Celestial Wind Chime & Harp Cascade (Super Chat / Power Strike)
   playSuperBoost() {
     if (this.muted) return;
     this._initContext();
     if (!this.ctx) return;
 
     try {
-      const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major arpeggio
+      // Lush Cmaj9 pentatonic cascade (C5, E5, G5, B5, C6, E6)
+      const notes = [523.25, 659.25, 783.99, 987.77, 1046.50, 1318.51];
       const now = this.ctx.currentTime;
 
       notes.forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        const startTime = now + idx * 0.05;
+        const startTime = now + idx * 0.045;
 
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
 
-        gain.gain.setValueAtTime(this.bgVolume * 0.55, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.28);
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.38, startTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.38);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
         osc.start(startTime);
-        osc.stop(startTime + 0.29);
+        osc.stop(startTime + 0.40);
       });
     } catch (e) {}
   }
 
-  // 3. Qualified Hero Notification Chime
+  // 3. Meditative Tibetan Singing Bowl & Crystal Bell (Hero Qualified)
   playQualifiedBell() {
     if (this.muted) return;
     this._initContext();
     if (!this.ctx) return;
 
     try {
-      const freqs = [880, 1108.73, 1318.51, 1760];
+      const freqs = [587.33, 880.00, 1174.66, 1760.00]; // D pentatonic bell harmonics
       const now = this.ctx.currentTime;
 
       freqs.forEach((freq, idx) => {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        const st = now + idx * 0.06;
+        const st = now + idx * 0.05;
 
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, st);
 
-        gain.gain.setValueAtTime(this.bgVolume * 0.5, st);
-        gain.gain.exponentialRampToValueAtTime(0.001, st + 0.5);
+        gain.gain.setValueAtTime(0, st);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.34, st + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.65);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
 
         osc.start(st);
-        osc.stop(st + 0.52);
+        osc.stop(st + 0.68);
       });
     } catch (e) {}
   }
 
-  // 4. Tag-Team Synergy Clash Gong
+  // 4. Deep Resonant Acoustic Singing Bowl & Temple Bell (Tag-Team Clash)
   playTeamupGong() {
     if (this.muted) return;
     this._initContext();
@@ -168,25 +190,30 @@ class HeroAudioEngine {
 
     try {
       const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
+      // Warm acoustic bowl fundamental + calm harmonics (zero harsh buzz)
+      const bowlHarmonics = [130.81, 261.63, 392.00, 523.25]; // C3, C4, G4, C5
 
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(160, now);
-      osc.frequency.exponentialRampToValueAtTime(380, now + 0.35);
+      bowlHarmonics.forEach((freq, i) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
 
-      gain.gain.setValueAtTime(this.bgVolume * 0.5, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+        const vol = (this.bgVolume * 0.32) / (i + 1);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(vol, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
 
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
 
-      osc.start(now);
-      osc.stop(now + 0.72);
+        osc.start(now);
+        osc.stop(now + 1.25);
+      });
     } catch (e) {}
   }
 
-  // 5. Championship Victory Fanfare
+  // 5. Soothing Celesta & Marimba Victory Cascade (Doom Defeated)
   playVictoryFanfare() {
     if (this.muted) return;
     this._initContext();
@@ -194,12 +221,12 @@ class HeroAudioEngine {
 
     try {
       const notes = [
-        { f: 293.66, t: 0.00, d: 0.16 }, // D4
-        { f: 369.99, t: 0.15, d: 0.16 }, // F#4
-        { f: 440.00, t: 0.30, d: 0.20 }, // A4
-        { f: 587.33, t: 0.50, d: 0.60 }, // D5
-        { f: 440.00, t: 1.10, d: 0.20 }, // A4
-        { f: 587.33, t: 1.30, d: 1.00 }  // D5 (heroic hold)
+        { f: 587.33, t: 0.00, d: 0.30 }, // D5
+        { f: 739.99, t: 0.12, d: 0.30 }, // F#5
+        { f: 880.00, t: 0.24, d: 0.35 }, // A5
+        { f: 1174.66, t: 0.40, d: 0.70 }, // D6
+        { f: 880.00, t: 0.85, d: 0.35 }, // A5
+        { f: 1174.66, t: 1.05, d: 1.20 }  // D6 (warm sustained chime)
       ];
 
       const now = this.ctx.currentTime;
@@ -208,11 +235,12 @@ class HeroAudioEngine {
         const gain = this.ctx.createGain();
         const startTime = now + t;
 
-        osc.type = 'triangle';
+        osc.type = 'sine';
         osc.frequency.setValueAtTime(f, startTime);
 
-        gain.gain.setValueAtTime(this.bgVolume * 0.65, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + d);
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(this.bgVolume * 0.42, startTime + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + d);
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
@@ -287,21 +315,20 @@ class HeroAudioEngine {
         this._noiseBuffer = b;
       }
 
-      // Epic Superhero Chord Progression in D Minor: Dm -> Bb -> F -> C
-      // Bass MIDI notes (16 sixteenths per chord, 64 steps total)
+      // Soothing ASMR Dreamy Chord Progression (Dm9 -> Bbmaj7 -> Fmaj7 -> C6/9)
       const bassRoots = [
-        38, 38, 50, 38,  38, 38, 50, 38,  38, 38, 50, 38,  38, 38, 50, 48, // Dm
-        34, 34, 46, 34,  34, 34, 46, 34,  34, 34, 46, 34,  34, 34, 46, 45, // Bb
-        41, 41, 53, 41,  41, 41, 53, 41,  41, 41, 53, 41,  41, 41, 53, 52, // F
-        36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 36,  36, 36, 48, 47  // C
+        38, 0, 0, 38,   0, 0, 38, 0,   38, 0, 0, 38,   0, 0, 0, 48, // Dm9
+        34, 0, 0, 34,   0, 0, 34, 0,   34, 0, 0, 34,   0, 0, 0, 45, // Bbmaj7
+        41, 0, 0, 41,   0, 0, 41, 0,   41, 0, 0, 41,   0, 0, 0, 52, // Fmaj7
+        36, 0, 0, 36,   0, 0, 36, 0,   36, 0, 0, 36,   0, 0, 0, 47  // C6
       ];
 
-      // Superhero Heroic Motif Arpeggio (cinematic theme)
+      // Soothing Kalimba / Celesta Dream Melody (ASMR Pentatonic Chill)
       const arpNotes = [
-        74, 77, 81, 86,  81, 77, 86, 81,  74, 77, 81, 86,  89, 86, 81, 77, // Dm
-        70, 74, 77, 82,  77, 74, 82, 77,  70, 74, 77, 82,  86, 82, 77, 74, // Bb
-        72, 77, 81, 84,  81, 77, 84, 81,  72, 77, 81, 84,  89, 84, 81, 77, // F
-        67, 72, 76, 79,  76, 72, 79, 76,  67, 72, 76, 79,  84, 79, 76, 72  // C
+        74, 0, 77, 81,  0, 77, 0, 81,   74, 81, 0, 86,  0, 81, 77, 0, // Dm
+        70, 0, 74, 77,  0, 74, 0, 77,   70, 77, 0, 82,  0, 77, 74, 0, // Bb
+        72, 0, 77, 81,  0, 77, 0, 81,   72, 81, 0, 84,  0, 81, 77, 0, // F
+        67, 0, 72, 76,  0, 72, 0, 76,   67, 76, 0, 79,  0, 76, 72, 0  // C
       ];
 
       const m2f = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -311,17 +338,18 @@ class HeroAudioEngine {
       this._scheduler = () => {
         if (!this._proceduralActive || this.muted || !this.musicEnabled) return;
 
-        let bpm = 126;
-        let filterCutoff = 2200;
+        // Relaxed, soothing ASMR lofi tempo
+        let bpm = 84;
+        let filterCutoff = 1300;
         const isFinals = this._musicStage === 'finals';
         const isTeamup = this._musicStage === 'teamup';
 
         if (isFinals) {
-          bpm = 142;
-          filterCutoff = 4800;
+          bpm = 94;
+          filterCutoff = 1800;
         } else if (isTeamup) {
-          bpm = 134;
-          filterCutoff = 3200;
+          bpm = 88;
+          filterCutoff = 1500;
         }
 
         const stepTime = (60 / bpm) / 4;
@@ -330,106 +358,100 @@ class HeroAudioEngine {
           const t = nextNoteTime;
           const barStep = step % 64;
           const beat16 = step % 16;
-          const isQuarter = beat16 % 4 === 0;
 
-          // 1. Driving Kick Drum (4-on-the-floor)
-          if (isQuarter) {
+          // 1. Warm Soft ASMR Felt Kick (Beats 1 & 10)
+          if (beat16 === 0 || beat16 === 10) {
             const kOsc = ctx.createOscillator();
             const kGain = ctx.createGain();
             kOsc.connect(kGain);
             kGain.connect(ctx.destination);
-            kOsc.frequency.setValueAtTime(isFinals ? 155 : 138, t);
-            kOsc.frequency.exponentialRampToValueAtTime(36, t + 0.08);
-            kGain.gain.setValueAtTime(this.bgVolume * (isFinals ? 0.45 : 0.38), t);
-            kGain.gain.exponentialRampToValueAtTime(0.001, t + 0.085);
+            kOsc.type = 'sine';
+            kOsc.frequency.setValueAtTime(84, t);
+            kOsc.frequency.exponentialRampToValueAtTime(42, t + 0.09);
+            kGain.gain.setValueAtTime(this.bgVolume * 0.32, t);
+            kGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
             kOsc.start(t);
-            kOsc.stop(t + 0.09);
+            kOsc.stop(t + 0.15);
           }
 
-          // 2. Snappy Snare / Clap on beats 2 & 4
+          // 2. Soft ASMR Velvet Rimshot / Snare on beats 4 & 12
           if (beat16 === 4 || beat16 === 12) {
             if (this._noiseBuffer) {
               const snNode = ctx.createBufferSource();
               snNode.buffer = this._noiseBuffer;
               const snFilter = ctx.createBiquadFilter();
               snFilter.type = 'bandpass';
-              snFilter.frequency.value = 2100;
-              snFilter.Q.value = 1.3;
+              snFilter.frequency.value = 1450;
+              snFilter.Q.value = 1.8;
               const snGain = ctx.createGain();
               snNode.connect(snFilter);
               snFilter.connect(snGain);
               snGain.connect(ctx.destination);
-              snGain.gain.setValueAtTime(this.bgVolume * 0.22, t);
-              snGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+              snGain.gain.setValueAtTime(this.bgVolume * 0.13, t);
+              snGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
               snNode.start(t);
-              snNode.stop(t + 0.12);
+              snNode.stop(t + 0.13);
             }
           }
 
-          // 3. Crisp Hi-Hats on offbeats
-          if (this._noiseBuffer && beat16 % 2 === 1) {
-            const ohNode = ctx.createBufferSource();
-            ohNode.buffer = this._noiseBuffer;
-            const ohFilter = ctx.createBiquadFilter();
-            ohFilter.type = 'highpass';
-            ohFilter.frequency.value = 7500;
-            const ohGain = ctx.createGain();
-            ohNode.connect(ohFilter);
-            ohFilter.connect(ohGain);
-            ohGain.connect(ctx.destination);
-            ohGain.gain.setValueAtTime(this.bgVolume * 0.08, t);
-            ohGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-            ohNode.start(t);
-            ohNode.stop(t + 0.085);
+          // 3. Gentle Soft-Shaker / Brush Ticks on eighth notes
+          if (this._noiseBuffer && beat16 % 2 === 0) {
+            const shNode = ctx.createBufferSource();
+            shNode.buffer = this._noiseBuffer;
+            const shFilter = ctx.createBiquadFilter();
+            shFilter.type = 'highpass';
+            shFilter.frequency.value = 8500;
+            const shGain = ctx.createGain();
+            shNode.connect(shFilter);
+            shFilter.connect(shGain);
+            shGain.connect(ctx.destination);
+            shGain.gain.setValueAtTime(this.bgVolume * 0.035, t);
+            shGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+            shNode.start(t);
+            shNode.stop(t + 0.055);
           }
 
-          // 4. Superhero Synth Bass
+          // 4. Warm Soothing Sub-Bass (Pure Sine, zero harsh buzzing)
           const bassMidi = bassRoots[barStep];
           if (bassMidi) {
             const bOsc = ctx.createOscillator();
-            const bFilter = ctx.createBiquadFilter();
             const bGain = ctx.createGain();
-            bOsc.type = 'sawtooth';
+            bOsc.type = 'sine';
             bOsc.frequency.setValueAtTime(m2f(bassMidi), t);
-            bFilter.type = 'lowpass';
-            bFilter.frequency.setValueAtTime(isQuarter ? 550 : 920, t);
-            bFilter.Q.value = 2.4;
-            bOsc.connect(bFilter);
-            bFilter.connect(bGain);
+            bOsc.connect(bGain);
             bGain.connect(ctx.destination);
-            const bassVol = isQuarter ? this.bgVolume * 0.11 : this.bgVolume * 0.18;
-            bGain.gain.setValueAtTime(bassVol, t);
-            bGain.gain.exponentialRampToValueAtTime(0.004, t + stepTime * 0.88);
+            bGain.gain.setValueAtTime(this.bgVolume * 0.18, t);
+            bGain.gain.exponentialRampToValueAtTime(0.0001, t + stepTime * 2.2);
             bOsc.start(t);
-            bOsc.stop(t + stepTime * 0.9);
+            bOsc.stop(t + stepTime * 2.3);
           }
 
-          // 5. Heroic Lead Arpeggio
+          // 5. Dreamy Kalimba / Celesta Lofi Arpeggios (Relaxing Pentatonic)
           const arpMidi = arpNotes[barStep];
           if (arpMidi) {
             const lOsc = ctx.createOscillator();
             const lFilter = ctx.createBiquadFilter();
             const lGain = ctx.createGain();
-            lOsc.type = 'square';
+            lOsc.type = 'sine';
             lOsc.frequency.setValueAtTime(m2f(arpMidi), t);
             lFilter.type = 'lowpass';
             lFilter.frequency.setValueAtTime(filterCutoff, t);
-            lFilter.Q.value = 2.1;
+            lFilter.Q.value = 1.2;
             lOsc.connect(lFilter);
             lFilter.connect(lGain);
             lGain.connect(ctx.destination);
-            const arpVol = isFinals ? this.bgVolume * 0.11 : this.bgVolume * 0.07;
-            lGain.gain.setValueAtTime(arpVol, t);
-            lGain.gain.linearRampToValueAtTime(0.001, t + stepTime * 0.82);
+            lGain.gain.setValueAtTime(0, t);
+            lGain.gain.linearRampToValueAtTime(this.bgVolume * 0.09, t + 0.015);
+            lGain.gain.exponentialRampToValueAtTime(0.0001, t + stepTime * 1.8);
             lOsc.start(t);
-            lOsc.stop(t + stepTime * 0.88);
+            lOsc.stop(t + stepTime * 1.9);
           }
 
           step++;
           nextNoteTime += stepTime;
         }
 
-        this._seqTimer = setTimeout(this._scheduler, 30);
+        this._seqTimer = setTimeout(this._scheduler, 35);
       };
 
       this._scheduler();
