@@ -347,7 +347,9 @@ async function beginStream() {
         currentPage = await browser.newPage();
         
         let queryParam = '?view=landscape&stream=true&headless=true';
-        if (currentSettings.activeEngine === 'points-race') {
+        if (currentSettings.activeEngine === 'hero-tournament' || currentSettings.activeEngine === 'multiverse') {
+            queryParam = '?view=hero-tournament&stream=true&headless=true';
+        } else if (currentSettings.activeEngine === 'points-race') {
             queryParam = '?view=points-race&stream=true&headless=true';
         } else if (currentSettings.activeEngine === 'vertical') {
             queryParam = '?view=vertical&stream=true&headless=true';
@@ -668,7 +670,9 @@ app.post('/api/start-record', checkAuth, async (req, res) => {
         currentPage = await browser.newPage();
         
         let queryParam = '?view=landscape&stream=true';
-        if (currentSettings.activeEngine === 'points-race') {
+        if (currentSettings.activeEngine === 'hero-tournament' || currentSettings.activeEngine === 'multiverse') {
+            queryParam = '?view=hero-tournament&stream=true';
+        } else if (currentSettings.activeEngine === 'points-race') {
             queryParam = '?view=points-race&stream=true';
         } else if (currentSettings.activeEngine === 'vertical') {
             queryParam = '?view=vertical&stream=true';
@@ -1018,7 +1022,7 @@ app.use('/recordings', express.static(path.join(__dirname, 'recordings')));
 
 // Root route serves dashboard, or game if view param is set
 app.get('/', (req, res) => {
-    if (req.query.view === 'landscape' || req.query.view === 'vertical' || req.query.view === 'points-race') {
+    if (req.query.view === 'landscape' || req.query.view === 'vertical' || req.query.view === 'points-race' || req.query.view === 'hero-tournament' || req.query.view === 'multiverse') {
         res.sendFile(path.join(__dirname, 'react-game', 'dist', 'index.html'));
     } else {
         res.sendFile(path.join(__dirname, 'dashboard.html'));

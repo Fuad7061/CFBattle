@@ -4,11 +4,13 @@ import './index.css';
 import App from './App.jsx';
 import VerticalApp from './vertical/VerticalApp.jsx';
 import PointsRaceApp from './points-race/PointsRaceApp.jsx';
+import HeroTournamentApp from './multiverse/HeroTournamentApp.jsx';
 
 const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
 
 const renderApp = () => {
+  if (view === 'hero-tournament' || view === 'multiverse') return <HeroTournamentApp />;
   if (view === 'points-race') return <PointsRaceApp />;
   if (view === 'vertical') return <VerticalApp />;
   return <App />;

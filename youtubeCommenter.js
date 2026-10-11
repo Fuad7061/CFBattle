@@ -13,7 +13,11 @@ const AUDIENCE_PRESETS = {
     "Finland", "Romania", "Czech Republic", "Portugal", "New Zealand", "Peru", "Greece", "Iraq", "Ukraine", "Morocco", "Algeria"
   ],
   latam: ["Brazil", "Mexico", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Guatemala", "Cuba", "Bolivia", "Dominican Republic", "Honduras", "Paraguay", "El Salvador", "Nicaragua", "Costa Rica", "Panama", "Uruguay"],
-  asia: ["India", "Indonesia", "Vietnam", "Philippines", "Japan", "South Korea", "Pakistan", "Bangladesh", "Thailand", "Malaysia", "Singapore", "Nepal", "Sri Lanka", "Myanmar", "Cambodia", "Taiwan"]
+  asia: ["India", "Indonesia", "Vietnam", "Philippines", "Japan", "South Korea", "Pakistan", "Bangladesh", "Thailand", "Malaysia", "Singapore", "Nepal", "Sri Lanka", "Myanmar", "Cambodia", "Taiwan"],
+  heroes: [
+    "Spidey", "Batman", "Deadpool", "Iron Man", "Wolverine", "Thor", "Superman", "Joker",
+    "Thanos", "Doctor Strange", "Venom", "Hulk", "Captain America", "Black Panther", "Flash", "Loki"
+  ]
 };
 
 const DEFAULT_PREFIXES = ["", "", "", "Go ", "Vote ", "Team ", "Come on ", "Win ", "Let's go "];
