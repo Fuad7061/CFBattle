@@ -530,6 +530,9 @@
 
                 <button class="btn btn-success" id="btn-start" onclick="startStream()" style="height: 38px; padding: 0 15px; font-weight: 500; display: flex; align-items: center; gap: 6px;">▶ Start Stream</button>
                 <button class="btn btn-danger" id="btn-stop" style="display:none; height: 38px; padding: 0 15px; font-weight: 500;" onclick="stopStream()">⏹ Stop Engine</button>
+                <button type="button" class="btn" id="topbar-modify-dur-btn" onclick="openModifyDurationModal()" style="display:none; height: 38px; padding: 0 12px; background: rgba(234, 179, 8, 0.16); border: 1px solid rgba(234, 179, 8, 0.45); color: #fef08a; font-weight: 600; align-items: center; gap: 6px;" title="Modify or extend running stream duration">
+                    ⏱️ <span id="topbar-live-remaining-txt">Stops in --</span> · ✏️ Modify
+                </button>
                 <button class="btn btn-primary" id="btn-record" onclick="startRecording()" style="height: 38px; padding: 0 15px; font-weight: 500; background:var(--accent); border-color:var(--accent);">⏺ Record Gameplay Offline</button>
             </div>
             
@@ -898,6 +901,21 @@
                                 <span id="sched-status-text">OFFLINE</span>
                             </span>
                             <span id="sched-status-detail" style="font-size:13px; color:var(--text-muted);">No schedule set.</span>
+                        </div>
+                        <!-- Running Broadcast Timer Quick Modifier -->
+                        <div id="sched-live-modify-box" style="display:none; margin-top:12px; padding:12px 14px; border-radius:8px; background:rgba(234,179,8,0.09); border:1px solid rgba(234,179,8,0.3);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                                <strong style="font-size:12.5px; color:#fef08a;">⏱️ Running Broadcast Timer Controls</strong>
+                                <span style="font-size:11px; color:#cbd5e1;">Extend or modify on-the-fly without stopping stream:</span>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(56,189,248,0.15); border-color:rgba(56,189,248,0.4); color:#38bdf8;" onclick="quickExtendActiveStream(15)">+15m</button>
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(56,189,248,0.15); border-color:rgba(56,189,248,0.4); color:#38bdf8;" onclick="quickExtendActiveStream(30)">+30m</button>
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(56,189,248,0.2); border-color:rgba(56,189,248,0.5); color:#7dd3fc;" onclick="quickExtendActiveStream(60)">+1 Hour</button>
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(56,189,248,0.2); border-color:rgba(56,189,248,0.5); color:#7dd3fc;" onclick="quickExtendActiveStream(120)">+2 Hours</button>
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(234,179,8,0.2); border-color:rgba(234,179,8,0.5); color:#fde047;" onclick="openModifyDurationModal()">✏️ Custom Duration...</button>
+                                <button type="button" class="btn" style="padding:5px 11px; font-size:11.5px; font-weight:600; background:rgba(239,68,68,0.15); border-color:rgba(239,68,68,0.4); color:#fca5a5;" onclick="clearStreamAutoStop()">♾️ Cancel Auto-Stop</button>
+                            </div>
                         </div>
                         <div id="sched-last-result" style="margin-top:10px; font-size:12px; color:var(--text-muted); display:none;"></div>
                     </div>
@@ -1642,6 +1660,80 @@
         </div>
     </div>
 
+    <!-- MODIFY DURATION MODAL — Change or extend running livestream runtime on the fly -->
+    <div id="modify-duration-modal" class="modal-overlay" onclick="if (event.target === this) closeModifyDurationModal()">
+        <div class="modal-card" style="max-width: 520px;" role="dialog" aria-modal="true" aria-label="Modify Livestream Duration">
+            <div class="sp-header">
+                <h3 style="color: #fbbf24; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">
+                    <span>⏱️</span> Modify Livestream Duration &amp; Auto-Stop
+                </h3>
+                <button onclick="closeModifyDurationModal()" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: #cbd5e1;">✕ Close</button>
+            </div>
+
+            <div class="sp-body" style="padding: 16px 18px 20px; overflow-y: auto;">
+                <input type="hidden" id="mod-dur-profile-id" value="">
+
+                <div id="mod-dur-status-box" style="padding: 12px 14px; border-radius: 8px; background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.35); margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 12px; font-weight: 700; color: #fef08a;" id="mod-dur-target-channel">Channel 1 - Primary</span>
+                        <span id="mod-dur-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(34, 197, 94, 0.2); color: #86efac; font-weight: 600;">STREAMING LIVE</span>
+                    </div>
+                    <div style="font-size: 13px; color: white; font-weight: 500;" id="mod-dur-countdown-line">
+                        ⏱️ Stops in: <strong id="mod-dur-remaining-txt">Loading...</strong>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;" id="mod-dur-ends-at-txt">
+                        Scheduled auto-stop: —
+                    </div>
+                </div>
+
+                <div class="sp-section-label" style="color: #38bdf8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    1. Quick Extend (Add More Streaming Time)
+                </div>
+                <p style="font-size: 11.5px; color: var(--text-muted); margin: 0 0 8px 0;">Add extra time immediately without restarting or interrupting the active YouTube stream.</p>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px;">
+                    <button type="button" class="btn" style="padding: 7px 4px; font-size: 12px; font-weight: 600; background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.35); color: #7dd3fc;" onclick="quickExtendActiveStream(15)">+15 Min</button>
+                    <button type="button" class="btn" style="padding: 7px 4px; font-size: 12px; font-weight: 600; background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.35); color: #7dd3fc;" onclick="quickExtendActiveStream(30)">+30 Min</button>
+                    <button type="button" class="btn" style="padding: 7px 4px; font-size: 12px; font-weight: 600; background: rgba(56, 189, 248, 0.18); border-color: rgba(56, 189, 248, 0.45); color: #38bdf8;" onclick="quickExtendActiveStream(60)">+1 Hour</button>
+                    <button type="button" class="btn" style="padding: 7px 4px; font-size: 12px; font-weight: 600; background: rgba(56, 189, 248, 0.18); border-color: rgba(56, 189, 248, 0.45); color: #38bdf8;" onclick="quickExtendActiveStream(120)">+2 Hours</button>
+                </div>
+
+                <hr class="sp-hr" style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 14px 0;">
+
+                <div class="sp-section-label" style="color: #38bdf8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    2. Set Exact Remaining Duration (Minutes From Now)
+                </div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <input type="number" id="mod-dur-remaining-input" min="1" max="10080" placeholder="e.g. 120 (for 2 hours)" style="flex: 1; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 13px;">
+                    <button type="button" class="btn btn-primary" onclick="applyRemainingMinutesFromModal()" style="padding: 0 16px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+                        ✓ Set Timer
+                    </button>
+                </div>
+
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <button type="button" class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="document.getElementById('mod-dur-remaining-input').value = 30;">30m from now</button>
+                    <button type="button" class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="document.getElementById('mod-dur-remaining-input').value = 60;">1h from now</button>
+                    <button type="button" class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="document.getElementById('mod-dur-remaining-input').value = 120;">2h from now</button>
+                    <button type="button" class="btn" style="font-size: 11px; padding: 3px 8px;" onclick="document.getElementById('mod-dur-remaining-input').value = 180;">3h from now</button>
+                </div>
+
+                <hr class="sp-hr" style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 14px 0;">
+
+                <div class="sp-section-label" style="color: #e2e8f0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                    3. Continuous Broadcast (No Auto-Stop)
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border);">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 600; color: white;">♾️ Remove Auto-Stop Timer</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Stream will keep running continuously until you click "Stop".</div>
+                    </div>
+                    <button type="button" class="btn" onclick="applyClearAutoStopFromModal()" style="font-size: 11.5px; padding: 6px 12px; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 600;">
+                        Remove Timer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- VPS BOT ACCOUNT MODAL -->
     <div id="bot-account-modal" class="modal-overlay" onclick="if (event.target === this) closeBotAccountModal()">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="YouTube Bot Account Setup">
@@ -2167,9 +2259,14 @@
                     <!-- Actions Row -->
                     <div style="display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap;">
                         ${isLive 
-                            ? `<button class="btn btn-danger" onclick="stopStreamForProfile('${p.id}')" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                                ⏹ Stop Broadcast
-                               </button>`
+                            ? `<div style="display:flex; gap:6px; width:100%;">
+                                <button class="btn btn-danger" onclick="stopStreamForProfile('${p.id}')" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                                    ⏹ Stop
+                                </button>
+                                <button class="btn" onclick="openModifyDurationModal('${p.id}')" style="padding: 7px 10px; font-size: 12px; font-weight: 600; background: rgba(234, 179, 8, 0.16); border-color: rgba(234, 179, 8, 0.45); color: #fef08a;" title="Modify or extend duration for this livestream">
+                                    ⏱️ Modify Time
+                                </button>
+                               </div>`
                             : `<button class="btn btn-success" onclick="startStreamForProfile('${p.id}')" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px;">
                                 ▶ Go Live
                                </button>`
@@ -2335,6 +2432,8 @@
             const isLive = data.isStreaming || data.isRecording;
             document.getElementById('btn-start').style.display = isLive ? 'none' : 'flex';
             document.getElementById('btn-stop').style.display = isLive ? 'flex' : 'none';
+            const topbarModBtn = document.getElementById('topbar-modify-dur-btn');
+            if (topbarModBtn) topbarModBtn.style.display = data.isStreaming ? 'inline-flex' : 'none';
 
             const badge = document.getElementById('status-badge');
             const txt = document.getElementById('status-text');
@@ -2425,23 +2524,33 @@
             badge.classList.remove('is-live');
             badge.style.color = ''; badge.style.borderColor = '';
 
+            const modBox = document.getElementById('sched-live-modify-box');
+            const topbarRemTxt = document.getElementById('topbar-live-remaining-txt');
+
             if (sched.status === 'live') {
                 badge.classList.add('is-live');
                 text.textContent = 'LIVE (AUTO-STOP)';
                 detail.textContent = `Streaming now · stops in ${fmtCountdown(sched.remainingMs)}`;
+                if (modBox) modBox.style.display = 'block';
+                if (topbarRemTxt && sched.remainingMs != null) topbarRemTxt.textContent = `Stops in ${fmtCountdown(sched.remainingMs)}`;
             } else if (sched.status === 'running') {
                 badge.classList.add('is-live');
                 text.textContent = 'LIVE (MANUAL)';
                 detail.textContent = 'Streaming, started by hand. Clearing a schedule will not stop it.';
-            } else if (sched.status === 'scheduled') {
-                badge.style.color = '#38bdf8'; badge.style.borderColor = 'rgba(56, 189, 248, 0.35)';
-                text.textContent = 'SCHEDULED';
-                detail.textContent = `Next go-live in ${fmtCountdown(sched.nextRunInMs)} · ${describeSchedule(sched.config)}`;
+                if (modBox) modBox.style.display = 'block';
+                if (topbarRemTxt) topbarRemTxt.textContent = `Set Auto-Stop`;
             } else {
-                text.textContent = 'OFFLINE';
-                detail.textContent = sched.config && sched.config.enabled
-                    ? 'Schedule is set but has no upcoming slot.'
-                    : 'No schedule set.';
+                if (modBox) modBox.style.display = 'none';
+                if (sched.status === 'scheduled') {
+                    badge.style.color = '#38bdf8'; badge.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+                    text.textContent = 'SCHEDULED';
+                    detail.textContent = `Next go-live in ${fmtCountdown(sched.nextRunInMs)} · ${describeSchedule(sched.config)}`;
+                } else {
+                    text.textContent = 'OFFLINE';
+                    detail.textContent = sched.config && sched.config.enabled
+                        ? 'Schedule is set but has no upcoming slot.'
+                        : 'No schedule set.';
+                }
             }
 
             if (sched.lastResult) {
@@ -2963,7 +3072,7 @@
                 const res = await fetch('/api/schedule/start-now', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ durationMinutes: duration })
+                    body: JSON.stringify({ durationMinutes: duration, profileId: selectedProfileId || activeProfileId })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
@@ -2974,6 +3083,144 @@
                     showAlert(data.error || 'Could not start stream', true);
                 }
             } catch (e) { showAlert('Network Error', true); }
+        }
+
+        // --- Livestream Duration Modification & Extension Helpers ---
+        function openModifyDurationModal(targetProfileId = null) {
+            const pid = targetProfileId || selectedProfileId || activeProfileId;
+            const modal = document.getElementById('modify-duration-modal');
+            if (!modal) return;
+
+            const prof = (profilesList || []).find(p => p.id === pid) || { name: 'Active Channel' };
+            document.getElementById('mod-dur-profile-id').value = pid;
+            const chNameEl = document.getElementById('mod-dur-target-channel');
+            if (chNameEl) chNameEl.textContent = prof.name;
+
+            // Fetch latest schedule state for this profile
+            fetch(`/api/schedule?profileId=${encodeURIComponent(pid)}`, { headers: API_HEADERS() })
+                .then(r => r.json())
+                .then(st => {
+                    const remEl = document.getElementById('mod-dur-remaining-txt');
+                    const endsEl = document.getElementById('mod-dur-ends-at-txt');
+                    const badge = document.getElementById('mod-dur-badge');
+
+                    if (st.status === 'live' && st.endsAt) {
+                        if (remEl) remEl.textContent = fmtCountdown(st.remainingMs);
+                        if (endsEl) endsEl.textContent = `Auto-stop scheduled for: ${new Date(st.endsAt).toLocaleTimeString()}`;
+                        if (badge) { badge.textContent = 'AUTO-STOP TIMER ACTIVE'; badge.style.color = '#86efac'; }
+                    } else if (st.status === 'running' || st.status === 'live') {
+                        if (remEl) remEl.textContent = 'Continuous (No Auto-Stop)';
+                        if (endsEl) endsEl.textContent = 'Stream will run indefinitely until manually stopped.';
+                        if (badge) { badge.textContent = 'MANUAL CONTINUOUS'; badge.style.color = '#fde047'; }
+                    } else if (st.status === 'scheduled') {
+                        if (remEl) remEl.textContent = `Starts in ${fmtCountdown(st.nextRunInMs)} (Duration: ${st.config?.durationMinutes || 60}m)`;
+                        if (endsEl) endsEl.textContent = `Next slot: ${st.nextRunAt ? new Date(st.nextRunAt).toLocaleString() : '—'}`;
+                        if (badge) { badge.textContent = 'SCHEDULED'; badge.style.color = '#38bdf8'; }
+                    } else {
+                        if (remEl) remEl.textContent = 'Offline';
+                        if (endsEl) endsEl.textContent = `Default duration: ${st.config?.durationMinutes || 60} minutes`;
+                        if (badge) { badge.textContent = 'IDLE'; badge.style.color = '#94a3b8'; }
+                    }
+                })
+                .catch(() => {});
+
+            modal.classList.add('open');
+        }
+
+        function closeModifyDurationModal() {
+            const modal = document.getElementById('modify-duration-modal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        async function quickExtendActiveStream(deltaMinutes) {
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            try {
+                const res = await fetch('/api/schedule/modify-duration', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: pid, deltaMinutes: Number(deltaMinutes) })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert(`⏱️ Broadcast extended by +${deltaMinutes} minutes!`);
+                    closeModifyDurationModal();
+                    updateStatusAndLogs();
+                } else {
+                    showAlert(data.error || 'Could not extend stream', true);
+                }
+            } catch (e) {
+                showAlert('Network error extending stream duration', true);
+            }
+        }
+
+        async function applyRemainingMinutesFromModal() {
+            const input = document.getElementById('mod-dur-remaining-input');
+            const mins = Number(input?.value);
+            if (!mins || mins <= 0) return showAlert('Please enter a valid duration in minutes.', true);
+
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            try {
+                const res = await fetch('/api/schedule/modify-duration', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: pid, remainingMinutes: mins })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert(`⏱️ Livestream duration set to ${fmtDurationWords(mins)} from now!`);
+                    closeModifyDurationModal();
+                    updateStatusAndLogs();
+                } else {
+                    showAlert(data.error || 'Could not update duration', true);
+                }
+            } catch (e) {
+                showAlert('Network error updating duration', true);
+            }
+        }
+
+        async function applyClearAutoStopFromModal() {
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            try {
+                const res = await fetch('/api/schedule/modify-duration', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: pid, clearAutoStop: true })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert('♾️ Auto-stop timer cleared. Stream will run continuously.');
+                    closeModifyDurationModal();
+                    updateStatusAndLogs();
+                } else {
+                    showAlert(data.error || 'Could not clear auto-stop', true);
+                }
+            } catch (e) {
+                showAlert('Network error clearing auto-stop', true);
+            }
+        }
+
+        async function clearStreamAutoStop(targetProfileId = null) {
+            const pid = targetProfileId || selectedProfileId || activeProfileId;
+            try {
+                const res = await fetch('/api/schedule/modify-duration', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: pid, clearAutoStop: true })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (data.state) applyScheduleState(data.state);
+                    showAlert('♾️ Auto-stop removed. Stream will run until manually stopped.');
+                    updateStatusAndLogs();
+                } else {
+                    showAlert(data.error || 'Could not remove auto-stop', true);
+                }
+            } catch (e) {
+                showAlert('Network error', true);
+            }
         }
 
         // --- Chat Bot & Documentation Tab Helpers ---
@@ -4090,6 +4337,20 @@
             if (s.nextRunAt && s.nextRunInMs != null) {
                 base.nextRunInMs = new Date(s.nextRunAt).getTime() - Date.now();
             }
+
+            // Keep topbar modify button remaining text fresh
+            const topbarRemTxt = document.getElementById('topbar-live-remaining-txt');
+            if (topbarRemTxt && s.status === 'live' && base.remainingMs != null) {
+                topbarRemTxt.textContent = `Stops in ${fmtCountdown(base.remainingMs)}`;
+            }
+
+            // Keep modal remaining text fresh if modal is currently open
+            const modRemTxt = document.getElementById('mod-dur-remaining-txt');
+            const modModal = document.getElementById('modify-duration-modal');
+            if (modModal && modModal.classList.contains('open') && modRemTxt && s.status === 'live' && base.remainingMs != null) {
+                modRemTxt.textContent = fmtCountdown(base.remainingMs);
+            }
+
             // Repaint the status card + topbar badge text without touching the form.
             const badge = document.getElementById('sched-status-badge');
             if (badge && document.getElementById('tab-schedule').classList.contains('active')) {

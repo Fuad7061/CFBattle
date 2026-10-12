@@ -466,6 +466,7 @@ export class Renderer {
   /* ------------------------------------------------------------------ */
 
   addFallingFlag(country, x, y, vx, vy, angle, img) {
+    if (this.fallingFlags.length > 40) this.fallingFlags.shift();
     this.fallingFlags.push({
       country,
       x, y,
@@ -504,9 +505,11 @@ export class Renderer {
       ctx.translate(f.x, f.y);
       ctx.rotate(f.angle);
 
-      // Glowing aura for falling eliminated flags (scorched by the wire)
-      ctx.shadowBlur  = 8;
-      ctx.shadowColor = 'rgba(255, 168, 88, 0.65)';
+      // Lightweight glow only when small count to avoid heavy software blur churn
+      if (this.fallingFlags.length <= 4) {
+        ctx.shadowBlur  = 6;
+        ctx.shadowColor = 'rgba(255, 168, 88, 0.65)';
+      }
 
       if (f.img && f.img.complete && f.img.naturalWidth > 0) {
         ctx.drawImage(f.img, -fw / 2, -fh / 2, fw, fh);
@@ -527,7 +530,12 @@ export class Renderer {
   /* ------------------------------------------------------------------ */
 
   addBurst(x, y, color = null) {
-    const COUNT = 16;
+    // Keep particle pool bounded to prevent CPU spikes in high-elimination moments
+    if (this.particles.length > 90) {
+      this.particles.splice(0, this.particles.length - 50);
+    }
+
+    const COUNT = 12;
     for (let i = 0; i < COUNT; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 1.5 + Math.random() * 4.5;
@@ -536,15 +544,15 @@ export class Renderer {
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
         life: 1,
-        decay: 0.024 + Math.random() * 0.025,
-        r: 2 + Math.random() * 4,
+        decay: 0.026 + Math.random() * 0.028,
+        r: 2 + Math.random() * 3.5,
         color: color || `hsl(${Math.random() < 0.6 ? 25 : 45}, 100%, 55%)`,
       });
     }
 
-    // Electric spark streaks — reads as the flag shorting out on the wire wall.
+    // Electric spark streaks
     const sparkCol = color || 'rgba(255, 232, 180, 1)';
-    const SPARKS = 9;
+    const SPARKS = 6;
     for (let i = 0; i < SPARKS; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 3 + Math.random() * 6;
@@ -555,7 +563,7 @@ export class Renderer {
         life: 1,
         decay: 0.05 + Math.random() * 0.05,
         r: 1,
-        len: 6 + Math.random() * 10,
+        len: 6 + Math.random() * 9,
         spark: true,
         color: sparkCol,
       });
@@ -581,8 +589,7 @@ export class Renderer {
         const ux = p.vx / d, uy = p.vy / d;
         ctx.strokeStyle = p.color;
         ctx.lineWidth   = 1.8 * p.life;
-        ctx.shadowBlur  = 8;
-        ctx.shadowColor = p.color;
+        // Avoid per-particle shadowBlur filter loop in Skia software renderer
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x - ux * p.len * p.life, p.y - uy * p.len * p.life);

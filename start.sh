@@ -7,14 +7,15 @@ rm -rf /tmp/pulse-* /var/run/pulse /root/.config/pulse 2>/dev/null || true
 pulseaudio -D --exit-idle-time=-1 --system=false --disallow-exit
 sleep 2
 
+# Unload module-suspend-on-idle so virtual sinks stay active 24/7 without burning CPU
+pactl unload-module module-suspend-on-idle 2>/dev/null || true
+
 # Enable TCP native protocol for localhost so all processes can connect cleanly
 pactl load-module module-native-protocol-tcp auth-anonymous=1 port=4713 2>/dev/null || true
 
 # Load virtual null-sinks for multi-channel isolated audio capture (v1, v2, v3, v4)
 for i in 1 2 3 4; do
     pactl load-module module-null-sink sink_name=v$i sink_properties=device.description="Virtual_Sink_$i" 2>/dev/null || true
-    # Keep PulseAudio null-sink clock active 24/7 by streaming silence from /dev/zero
-    pacat --playback --device=v$i --rate=44100 --channels=2 --format=s16le < /dev/zero &
 done
 
 pactl set-default-sink v1
@@ -23,7 +24,7 @@ export PULSE_SERVER=127.0.0.1:4713
 
 # Start X Virtual Framebuffers (Xvfb) for multi-channel isolated headless Chrome displays (:99, :100, :101, :102)
 for disp in 99 100 101 102; do
-    Xvfb :$disp -screen 0 1080x1920x24 -ac &
+    Xvfb :$disp -screen 0 1080x1920x24 -ac -noreset +extension RANDR &
 done
 export DISPLAY=:99
 

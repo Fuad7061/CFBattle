@@ -210,6 +210,102 @@ class StreamScheduler {
         });
     }
 
+    /**
+     * Modify or extend a running livestream's duration or auto-stop timer.
+     * Can also adjust the duration of an upcoming scheduled broadcast.
+     *
+     * @param {Object} opts
+     * @param {number} [opts.deltaMinutes] - Add (+) or subtract (-) minutes to current endsAt
+     * @param {number} [opts.remainingMinutes] - Set remaining minutes from now
+     * @param {number} [opts.totalMinutes] - Set total minutes duration from startedAt
+     * @param {string} [opts.endsAt] - Set explicit ISO end time
+     * @param {boolean} [opts.clearAutoStop] - Cancel auto-stop timer (run continuously)
+     */
+    modifyRunningDuration(opts = {}) {
+        const now = this.now();
+        const streaming = this.isStreaming();
+
+        // 1. Remove auto-stop (stream will run indefinitely until stopped by operator)
+        if (opts.clearAutoStop) {
+            if (this.activeRun) {
+                this.activeRun.endsAt = null;
+            }
+            this.config.durationMinutes = 0;
+            this.lastResult = 'Auto-stop timer removed. Stream will run indefinitely until stopped.';
+            this.save();
+            this.onLog(`Scheduler: Auto-stop timer cleared for running stream.`);
+            return { ok: true, state: this.getState(), message: this.lastResult };
+        }
+
+        // 2. If stream is not currently running, update the schedule's durationMinutes
+        if (!streaming) {
+            const requestedMinutes = Number(opts.remainingMinutes || opts.totalMinutes || (opts.deltaMinutes ? this.config.durationMinutes + Number(opts.deltaMinutes) : null));
+            if (requestedMinutes && requestedMinutes > 0) {
+                this.config.durationMinutes = Math.min(10080, Math.max(1, Math.round(requestedMinutes)));
+                this.save();
+                this.lastResult = `Scheduled duration updated to ${this.config.durationMinutes} minutes.`;
+                this.onLog(`Scheduler: ${this.lastResult}`);
+                return { ok: true, state: this.getState(), message: this.lastResult };
+            }
+            return { ok: false, error: 'No stream is currently running, and no valid duration was provided to update.' };
+        }
+
+        // 3. Stream IS currently running
+        if (!this.activeRun) {
+            // Adopt the running stream if not already tracked
+            this.activeRun = { startedAt: now.toISOString(), endsAt: null };
+        }
+
+        const startedTime = this.activeRun.startedAt ? new Date(this.activeRun.startedAt).getTime() : now.getTime();
+        // Current endsTime (defaulting to 60 min from startedTime if it was null)
+        let currentEndsTime = this.activeRun.endsAt ? new Date(this.activeRun.endsAt).getTime() : (startedTime + 60 * 60000);
+
+        let newEndsTime;
+        if (opts.deltaMinutes != null) {
+            // Add or subtract minutes from now or current endsAt (whichever is later)
+            const base = Math.max(now.getTime(), currentEndsTime);
+            newEndsTime = base + Number(opts.deltaMinutes) * 60000;
+        } else if (opts.remainingMinutes != null) {
+            // Set exact remaining minutes from this very moment
+            newEndsTime = now.getTime() + Number(opts.remainingMinutes) * 60000;
+        } else if (opts.totalMinutes != null) {
+            // Set total duration from the moment the stream started
+            newEndsTime = startedTime + Number(opts.totalMinutes) * 60000;
+        } else if (opts.endsAt) {
+            newEndsTime = new Date(opts.endsAt).getTime();
+        } else {
+            return { ok: false, error: 'Please specify deltaMinutes, remainingMinutes, or totalMinutes.' };
+        }
+
+        if (!Number.isFinite(newEndsTime) || newEndsTime <= now.getTime()) {
+            return { ok: false, error: 'New end time must be in the future (minimum 1 minute from now).' };
+        }
+
+        const maxFutureMs = now.getTime() + (7 * 24 * 60 * 60000);
+        if (newEndsTime > maxFutureMs) {
+            return { ok: false, error: 'Duration cannot exceed 7 days.' };
+        }
+
+        this.activeRun.endsAt = new Date(newEndsTime).toISOString();
+        const remainingMins = Math.round((newEndsTime - now.getTime()) / 60000);
+        const totalMins = Math.round((newEndsTime - startedTime) / 60000);
+        this.config.durationMinutes = Math.max(1, totalMins);
+
+        const stopTimeStr = new Date(newEndsTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        this.lastResult = `Livestream timer adjusted: stops at ${stopTimeStr} (${remainingMins}m remaining).`;
+        this.save();
+        this.onLog(`Scheduler: ${this.lastResult}`);
+
+        return {
+            ok: true,
+            state: this.getState(),
+            message: this.lastResult,
+            endsAt: this.activeRun.endsAt,
+            remainingMinutes: remainingMins,
+            totalMinutes: totalMins
+        };
+    }
+
     /** Human-readable one-liner for logs and the UI. */
     describe() {
         const c = this.config;

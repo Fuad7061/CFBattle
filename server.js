@@ -663,14 +663,15 @@ function getPuppeteerArgs(slot = 0) {
         '--window-position=0,0',
         '--autoplay-policy=no-user-gesture-required',
         '--kiosk',
-        '--js-flags="--max-old-space-size=1024"',
+        '--js-flags="--max-old-space-size=512 --expose-gc"',
+        '--renderer-process-limit=4',
         '--enable-features=CanvasOopRasterization',
         '--force-device-scale-factor=1',
         '--force-color-profile=srgb',
         '--disable-breakpad',
         '--disable-component-update',
         '--disable-ipc-flooding-protection',
-        '--disable-features=CalculateNativeWinOcclusion,TranslateUI,Translate,MediaRouter,OptimizationHints,AudioServiceSandbox,InterestFeedContentSuggestions',
+        '--disable-features=CalculateNativeWinOcclusion,TranslateUI,Translate,MediaRouter,OptimizationHints,AudioServiceSandbox,InterestFeedContentSuggestions,BackForwardCache,MediaEngagementBypassAutoplayPolicies,PreloadMediaEngagementData,Autofill',
         '--enable-audio-service-sandbox=false',
         '--no-first-run',
         '--no-default-browser-check',
@@ -684,9 +685,11 @@ function getPuppeteerArgs(slot = 0) {
         '--disable-hang-monitor',
         '--disable-domain-reliability',
         '--disable-client-side-phishing-detection',
+        '--disable-speech-api',
         '--metrics-recording-only',
         '--password-store=basic',
-        '--use-mock-keychain'
+        '--use-mock-keychain',
+        '--disable-software-rasterizer'
     ];
 
     if (process.platform !== 'darwin' && !process.env.USE_GPU) {
@@ -751,6 +754,7 @@ async function beginStream(targetProfileId = null) {
         });
 
         sessionPage = await sessionBrowser.newPage();
+        try { await sessionPage.setCacheEnabled(true); } catch(e) {}
 
         let queryParam = `?view=landscape&stream=true&headless=true&profile=${encodeURIComponent(profile.id)}`;
         if (profile.activeEngine === 'hero-tournament' || profile.activeEngine === 'multiverse') {
@@ -877,6 +881,9 @@ async function beginStream(targetProfileId = null) {
         const presetVal = profile.preset || 'ultrafast';
         const rtmpUrl = (profile.streamUrl.endsWith('/') ? profile.streamUrl : profile.streamUrl + '/') + profile.streamKey;
 
+        const totalCores = require('os').cpus()?.length || 4;
+        const ffmpegThreads = Math.max(1, Math.min(3, Math.floor(totalCores / Math.max(1, activeSessions.size + 1)) || 2));
+
         let ffmpegArgs = [];
         if (process.platform === 'darwin') {
             ffmpegArgs = [
@@ -885,7 +892,9 @@ async function beginStream(targetProfileId = null) {
                 '-i', '1:none',
                 '-c:v', 'libx264',
                 '-preset', presetVal,
-                '-threads', '2',
+                '-tune', 'zerolatency',
+                '-threads', String(ffmpegThreads),
+                '-x264opts', 'no-scenecut=1:rc-lookahead=0:ref=1:bframes=0',
                 '-b:v', bitrateStr,
                 '-maxrate', bitrateStr,
                 '-bufsize', bufsizeStr,
@@ -913,7 +922,8 @@ async function beginStream(targetProfileId = null) {
                 '-c:v', 'libx264',
                 '-preset', presetVal,
                 '-tune', 'zerolatency',
-                '-threads', '0',
+                '-threads', String(ffmpegThreads),
+                '-x264opts', 'no-scenecut=1:rc-lookahead=0:ref=1:bframes=0:subme=1:me=dia',
                 '-b:v', bitrateStr,
                 '-maxrate', bitrateStr,
                 '-bufsize', bufsizeStr,
@@ -1847,6 +1857,15 @@ app.post('/api/schedule/clear', checkAuth, (req, res) => {
     const sched = getSchedulerForProfile(targetId);
     sched.clear();
     res.json({ success: true, state: sched.getState(), profileId: targetId });
+});
+
+// Modify or extend duration of a running (or scheduled) livestream
+app.post('/api/schedule/modify-duration', checkAuth, (req, res) => {
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const sched = getSchedulerForProfile(targetId);
+    const result = sched.modifyRunningDuration(req.body || {});
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ success: true, message: result.message, state: sched.getState(), profileId: targetId });
 });
 
 // --------------------------------
