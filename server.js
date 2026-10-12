@@ -35,13 +35,7 @@ function logMsg(msg, isError = false) {
     }
 }
 
-let streamProcess = null;
-let browser = null;
-let currentPage = null;
-let isStreaming = false;
-let isRecording = false;
-let recordingProgress = null;
-let liveViewerCount = null;
+const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
 
 // Telemetry for real-time encoder health & speed (detects CPU bottlenecks early)
 let streamTelemetry = {
@@ -57,33 +51,272 @@ if (process.platform !== 'darwin' && !process.env.PULSE_SERVER) {
     process.env.PULSE_SERVER = '127.0.0.1:4713';
 }
 
-// Default Settings
-let currentSettings = {
-    streamUrl: '',
-    streamKey: '',
-    bitrate: 4500, // 4500k sweet spot for 1080p30 / 1080p60 on YouTube Live
-    fps: 30, // 30 FPS recommended for smooth real-time cloud VPS; 60 FPS for high-core dedicated VPS
-    preset: 'ultrafast', // ultrafast guarantees speed >= 1.0x on VPS CPU without frame drops
-    resolution: '1080x1920', // '1080x1920' (Full HD Vertical) or '720x1280' (Ultra-Lightweight Vertical)
-    crop: { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
-    activeEngine: 'vertical', // 'vertical' for Super HD Vertical, 'landscape' for React
-    youtubeChatMode: 'player', // 'player' (Zero-Quota Web Player, Unlimited 24/7) | 'hybrid' | 'api'
-    youtubePollInterval: 500 // 500ms fast-reaction polling
+function createDefaultProfile(id = 'profile-default', name = 'Channel 1 - Primary', existing = {}) {
+    return {
+        id,
+        name,
+        color: existing.color || '#38bdf8',
+        streamUrl: existing.streamUrl || '',
+        streamKey: existing.streamKey || '',
+        bitrate: existing.bitrate !== undefined ? Number(existing.bitrate) : 4500,
+        fps: existing.fps !== undefined ? Number(existing.fps) : 30,
+        preset: existing.preset || 'ultrafast',
+        resolution: existing.resolution || '1080x1920',
+        crop: existing.crop || { enabled: false, x: 0, y: 0, w: 1080, h: 1920 },
+        activeEngine: existing.activeEngine || 'vertical',
+        youtubeChatMode: existing.youtubeChatMode || 'player',
+        youtubePollInterval: existing.youtubePollInterval !== undefined ? Number(existing.youtubePollInterval) : 500,
+        youtubeApiKey: existing.youtubeApiKey || '',
+        youtubeLiveId: existing.youtubeLiveId || '',
+        youtubeChannelId: existing.youtubeChannelId || '',
+        gameSettings: existing.gameSettings || {
+            watermark: '@FlagBattleLive',
+            speed: 1,
+            rotSpeed: 0.015,
+            gravity: 0.15,
+            bias: false
+        },
+        schedulerConfig: existing.schedulerConfig || {
+            enabled: false,
+            mode: 'schedule',
+            startAt: null,
+            durationMinutes: 60,
+            repeat: 'none',
+            repeatDays: [],
+            graceMinutes: 5
+        },
+        createdAt: existing.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+}
+
+let profilesState = {
+    activeProfileId: 'profile-default',
+    profiles: []
 };
 
-// Load settings on boot
-if (fs.existsSync(SETTINGS_FILE)) {
-    try {
-        const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-        currentSettings = { ...currentSettings, ...JSON.parse(data) };
-        logMsg("Loaded settings from persistent storage.");
-        if (currentSettings.youtubeLiveId && !commenter.state.settings.targetVideoId) {
-            const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
-            if (liveVideoId) commenter.updateSettings({ targetVideoId: liveVideoId });
+function loadProfiles() {
+    if (fs.existsSync(PROFILES_FILE)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(PROFILES_FILE, 'utf8'));
+            if (Array.isArray(data.profiles) && data.profiles.length > 0) {
+                profilesState = data;
+                if (!profilesState.activeProfileId || !profilesState.profiles.find(p => p.id === profilesState.activeProfileId)) {
+                    profilesState.activeProfileId = profilesState.profiles[0].id;
+                }
+                logMsg(`Loaded ${profilesState.profiles.length} stream profile(s) from persistent storage.`);
+                return;
+            }
+        } catch (e) {
+            logMsg(`Failed reading profiles.json: ${e.message}`, true);
         }
-    } catch (err) {
-        logMsg("Failed to load settings: " + err.message, true);
     }
+
+    // Migration from legacy settings.json
+    let legacySettings = {};
+    if (fs.existsSync(SETTINGS_FILE)) {
+        try {
+            legacySettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+        } catch (e) {}
+    }
+    const def = createDefaultProfile('profile-default', 'Channel 1 - Primary', legacySettings);
+    profilesState = {
+        activeProfileId: 'profile-default',
+        profiles: [def]
+    };
+    saveProfiles();
+    logMsg("Initialized default stream profile from settings.json.");
+}
+
+function saveProfiles() {
+    try {
+        fs.writeFileSync(PROFILES_FILE, JSON.stringify(profilesState, null, 2));
+        const active = getActiveProfile();
+        if (active) {
+            fs.writeFileSync(SETTINGS_FILE, JSON.stringify(active, null, 2));
+        }
+    } catch (e) {
+        logMsg(`Failed saving profiles.json: ${e.message}`, true);
+    }
+}
+
+function getActiveProfile() {
+    return profilesState.profiles.find(p => p.id === profilesState.activeProfileId) || profilesState.profiles[0];
+}
+
+function getProfileById(id) {
+    if (!id) return getActiveProfile();
+    return profilesState.profiles.find(p => p.id === id) || null;
+}
+
+loadProfiles();
+let currentSettings = getActiveProfile();
+
+// Active multi-stream runtime sessions (profileId -> session)
+const activeSessions = new Map();
+
+// Helper to provide active live stream target video IDs to Auto-Commenter
+commenter.getActiveLiveTargets = () => {
+    const targets = [];
+    for (const [id, s] of activeSessions.entries()) {
+        if (s.isStreaming && s.profile?.youtubeLiveId) {
+            const { liveVideoId } = parseYoutubeTarget(s.profile.youtubeLiveId);
+            if (liveVideoId && !targets.includes(liveVideoId)) targets.push(liveVideoId);
+        }
+    }
+    return targets;
+};
+
+// Global legacy references proxy to active session for backwards compatibility
+let streamProcess = null;
+let browser = null;
+let currentPage = null;
+let isStreaming = false;
+let isRecording = false;
+let recordingProgress = null;
+let liveViewerCount = null;
+
+const schedulersMap = new Map();
+const chatPollersMap = new Map();
+const youtubeChatStatusMap = new Map();
+
+function updateGlobalLegacyState() {
+    isStreaming = Array.from(activeSessions.values()).some(s => s.isStreaming);
+    isRecording = Array.from(activeSessions.values()).some(s => s.isRecording);
+    const activeSess = activeSessions.get(profilesState.activeProfileId) || activeSessions.values().next().value;
+    if (activeSess) {
+        streamProcess = activeSess.streamProcess;
+        browser = activeSess.browser;
+        currentPage = activeSess.currentPage;
+        streamTelemetry = activeSess.telemetry;
+        liveViewerCount = activeSess.liveViewerCount;
+    } else {
+        streamProcess = null;
+        browser = null;
+        currentPage = null;
+        streamTelemetry = { fps: 0, bitrate: '', speed: '0x', health: 'offline', lastUpdate: 0 };
+        liveViewerCount = null;
+    }
+}
+
+function getSchedulerForProfile(profileId) {
+    const pid = profileId || profilesState.activeProfileId;
+    if (!schedulersMap.has(pid)) {
+        const schedFile = pid === 'default'
+            ? path.join(DATA_DIR, 'schedule.json')
+            : path.join(DATA_DIR, `schedule_${pid}.json`);
+        const sched = new StreamScheduler({
+            filePath: schedFile,
+            tickMs: 15000,
+            isStreaming: () => {
+                const s = activeSessions.get(pid);
+                return !!(s && (s.isStreaming || s.isRecording));
+            },
+            onStart: () => beginStream(pid),
+            onStop: (reason) => endStream(pid, reason),
+            onLog: (msg, isErr) => {
+                const prof = getProfileById(pid);
+                logMsg(`[${prof ? prof.name : pid}] ${msg}`, isErr);
+            }
+        });
+        sched.load();
+        sched.start();
+        schedulersMap.set(pid, sched);
+    }
+    return schedulersMap.get(pid);
+}
+
+function getYoutubeChatStatusForProfile(profileId) {
+    const pid = profileId || profilesState.activeProfileId;
+    return youtubeChatStatusMap.get(pid) || { state: 'idle', mode: 'player', videoId: null, channelId: null, liveChatId: null, error: null, at: null };
+}
+
+function restartYoutubeChatForProfile(profile) {
+    if (!profile) profile = getActiveProfile();
+    if (!profile) return;
+    const pid = profile.id;
+    const existing = chatPollersMap.get(pid);
+    if (existing) {
+        try { existing.stop(); } catch(e){}
+        chatPollersMap.delete(pid);
+    }
+    const chatMode = profile.youtubeChatMode || 'player';
+    const pollInterval = Number(profile.youtubePollInterval) || 1000;
+    const apiKey = profile.youtubeApiKey || process.env.YOUTUBE_API_KEY || '';
+    const rawTarget = profile.youtubeLiveId || profile.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '';
+    const { liveVideoId, channelId } = parseYoutubeTarget(rawTarget);
+
+    const initialStatus = { state: 'starting', mode: chatMode, videoId: liveVideoId, channelId, liveChatId: null, error: null, at: Date.now() };
+    youtubeChatStatusMap.set(pid, initialStatus);
+
+    if (!liveVideoId && !channelId) {
+        youtubeChatStatusMap.set(pid, {
+            state: 'no-target',
+            mode: chatMode,
+            videoId: null,
+            channelId: null,
+            liveChatId: null,
+            error: 'Please enter a Live Video ID, Video URL, or Channel ID in settings.',
+            at: Date.now()
+        });
+        return;
+    }
+
+    if (chatMode === 'api' && !apiKey) {
+        youtubeChatStatusMap.set(pid, {
+            state: 'no-api-key',
+            mode: chatMode,
+            videoId: null,
+            channelId: null,
+            liveChatId: null,
+            error: 'No YouTube API key configured. Switch to Zero-Quota Web Player for free unlimited mode.',
+            at: Date.now()
+        });
+        return;
+    }
+
+    const profileBus = {
+        emit: (event, data) => {
+            if (event === 'chat') {
+                const msgWithProfile = { ...data, profileId: pid };
+                broadcastChat(msgWithProfile, pid);
+                if (pid === profilesState.activeProfileId) bus.emit('chat', data);
+            } else if (event === 'vote') {
+                broadcastChat({ type: 'VOTE', ...data, profileId: pid }, pid);
+                if (pid === profilesState.activeProfileId) bus.emit('vote', data);
+            } else if (event === 'power') {
+                broadcastChat({ type: 'POWER', ...data, profileId: pid, timestamp: new Date().toISOString() }, pid);
+                if (pid === profilesState.activeProfileId) bus.emit('power', data);
+            } else if (event === 'viewers') {
+                const count = data?.count;
+                const s = activeSessions.get(pid);
+                if (s && typeof count === 'number') s.liveViewerCount = count;
+                broadcastChat({ type: 'VIEWER_COUNT', count, profileId: pid }, pid);
+                if (pid === profilesState.activeProfileId) bus.emit('viewers', data);
+            }
+        }
+    };
+
+    const poller = startYoutubeChatPolling({
+        apiKey,
+        liveVideoId,
+        channelId,
+        chatMode,
+        pollInterval,
+        bus: profileBus,
+        onStatus: (s) => {
+            const st = { ...s, mode: chatMode };
+            youtubeChatStatusMap.set(pid, st);
+            const sess = activeSessions.get(pid);
+            if (sess) sess.youtubeChatStatus = st;
+        },
+        log: {
+            info: msg => logMsg(`[${profile.name}] ${msg}`),
+            warn: msg => logMsg(`[${profile.name}] ${msg}`, true),
+            error: (msg, err) => logMsg(`[${profile.name}] ${msg} ${err || ''}`, true)
+        }
+    });
+    chatPollersMap.set(pid, poller);
 }
 
 // Clean up stale temp recordings on boot to optimize storage
@@ -130,61 +363,194 @@ app.post('/api/login', (req, res) => {
 });
 
 app.get('/api/status', checkAuth, (req, res) => {
+    const targetId = req.query.profileId || profilesState.activeProfileId;
+    const profile = getProfileById(targetId) || getActiveProfile();
+    const session = activeSessions.get(profile.id);
+    const sched = getSchedulerForProfile(profile.id);
+
     let progress = null;
-    if (isRecording && recordingProgress) {
-        const elapsed = Date.now() - recordingProgress.startTime;
-        progress = Math.min(100, Math.round((elapsed / recordingProgress.durationMs) * 100));
-        
-        // Failsafe: if it's stuck 30 seconds past the expected end time, kill it
-        if (elapsed > recordingProgress.durationMs + 30000) {
-            logMsg("Failsafe triggered: FFmpeg hung past expected duration. Force killing...");
-            if (streamProcess) {
-                try { streamProcess.kill('SIGKILL'); } catch(e){}
-                streamProcess = null;
+    if (session && session.isRecording && session.recordingProgress) {
+        const elapsed = Date.now() - session.recordingProgress.startTime;
+        progress = Math.min(100, Math.round((elapsed / session.recordingProgress.durationMs) * 100));
+        if (elapsed > session.recordingProgress.durationMs + 30000) {
+            logMsg(`[${profile.name}] Failsafe triggered: FFmpeg recording hung. Force killing...`);
+            if (session.streamProcess) {
+                try { session.streamProcess.kill('SIGKILL'); } catch(e){}
             }
-            isRecording = false;
-            recordingProgress = null;
-            if (browser) { browser.close(); browser = null; }
-            currentPage = null;
-            progress = null; // Reset
+            if (session.browser) { session.browser.close().catch(()=>{}); }
+            activeSessions.delete(profile.id);
+            progress = null;
         }
     }
-    res.json({ isStreaming, isRecording, streamTelemetry, progress, viewerCount: liveViewerCount, settings: currentSettings, schedule: scheduler.getState(), youtubeChat: youtubeChatStatus });
+
+    const isStreaming = !!(session && session.isStreaming);
+    const isRecording = !!(session && session.isRecording);
+    const streamTelemetry = session ? session.telemetry : { fps: 0, bitrate: '', speed: '0x', health: 'offline', lastUpdate: 0 };
+    const liveViewerCount = session ? session.liveViewerCount : null;
+
+    res.json({
+        activeProfileId: profilesState.activeProfileId,
+        selectedProfileId: profile.id,
+        isStreaming,
+        isRecording,
+        streamTelemetry,
+        progress,
+        viewerCount: liveViewerCount,
+        settings: profile,
+        schedule: sched ? sched.getState() : { enabled: false },
+        youtubeChat: session ? session.youtubeChatStatus : getYoutubeChatStatusForProfile(profile.id),
+        profiles: profilesState.profiles.map(p => {
+            const s = activeSessions.get(p.id);
+            return {
+                id: p.id,
+                name: p.name,
+                color: p.color,
+                activeEngine: p.activeEngine,
+                youtubeLiveId: p.youtubeLiveId,
+                watermark: p.gameSettings?.watermark,
+                isStreaming: !!(s && s.isStreaming),
+                isRecording: !!(s && s.isRecording),
+                telemetry: s ? s.telemetry : { health: 'offline', speed: '0x', fps: 0 },
+                viewerCount: s ? s.liveViewerCount : null,
+                startedAt: s ? s.startedAt : null
+            };
+        }),
+        allSessions: Array.from(activeSessions.values()).map(s => ({
+            profileId: s.profileId,
+            profileName: s.profileName,
+            isStreaming: s.isStreaming,
+            isRecording: s.isRecording,
+            startedAt: s.startedAt,
+            slot: s.slot,
+            telemetry: s.telemetry,
+            viewerCount: s.liveViewerCount,
+            engine: s.profile?.activeEngine
+        }))
+    });
 });
 
 app.post('/api/settings', checkAuth, (req, res) => {
-    const oldSettings = { ...currentSettings };
-    currentSettings = { ...currentSettings, ...req.body };
-    try {
-        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2));
-        logMsg("Settings updated and saved to disk.");
-        
-        if (oldSettings.youtubeApiKey !== currentSettings.youtubeApiKey ||
-            oldSettings.youtubeLiveId !== currentSettings.youtubeLiveId ||
-            oldSettings.youtubeChannelId !== currentSettings.youtubeChannelId ||
-            oldSettings.youtubeChatMode !== currentSettings.youtubeChatMode ||
-            oldSettings.youtubePollInterval !== currentSettings.youtubePollInterval) {
-            restartYoutubeChat(currentSettings);
-            if (currentSettings.youtubeLiveId) {
-                const { liveVideoId } = parseYoutubeTarget(currentSettings.youtubeLiveId);
-                if (liveVideoId) commenter.updateSettings({ targetVideoId: liveVideoId });
-            }
+    const targetId = req.body.profileId || profilesState.activeProfileId;
+    let profile = getProfileById(targetId) || getActiveProfile();
+    const oldSettings = { ...profile };
+    Object.assign(profile, req.body);
+    delete profile.profileId;
+    profile.updatedAt = new Date().toISOString();
+    currentSettings = getActiveProfile();
+    saveProfiles();
+    logMsg(`[${profile.name}] Settings updated and saved to disk.`);
+
+    const activeSession = activeSessions.get(profile.id);
+    if (activeSession && (
+        oldSettings.youtubeApiKey !== profile.youtubeApiKey ||
+        oldSettings.youtubeLiveId !== profile.youtubeLiveId ||
+        oldSettings.youtubeChannelId !== profile.youtubeChannelId ||
+        oldSettings.youtubeChatMode !== profile.youtubeChatMode ||
+        oldSettings.youtubePollInterval !== profile.youtubePollInterval
+    )) {
+        restartYoutubeChatForProfile(profile);
+        if (profile.youtubeLiveId) {
+            const { liveVideoId } = parseYoutubeTarget(profile.youtubeLiveId);
+            if (liveVideoId) commenter.updateSettings({ targetVideoId: liveVideoId });
         }
-        
-        bus.emit('chat', { type: 'SETTINGS_UPDATE', settings: currentSettings.gameSettings || currentSettings });
-        
-        res.json({ success: true, settings: currentSettings });
-    } catch (err) {
-        logMsg("Failed to save settings: " + err.message, true);
-        res.status(500).json({ error: 'Failed to save settings' });
     }
+
+    broadcastChat({ type: 'SETTINGS_UPDATE', settings: profile.gameSettings || profile }, profile.id);
+    res.json({ success: true, settings: profile });
+});
+
+// --- Multi-Stream Profiles Management API Routes ---
+app.get('/api/profiles', checkAuth, (req, res) => {
+    res.json({
+        activeProfileId: profilesState.activeProfileId,
+        profiles: profilesState.profiles,
+        allSessions: Array.from(activeSessions.values()).map(s => ({
+            profileId: s.profileId,
+            profileName: s.profileName,
+            isStreaming: s.isStreaming,
+            isRecording: s.isRecording,
+            startedAt: s.startedAt,
+            slot: s.slot,
+            telemetry: s.telemetry,
+            viewerCount: s.liveViewerCount,
+            engine: s.profile?.activeEngine
+        }))
+    });
+});
+
+app.post('/api/profiles', checkAuth, (req, res) => {
+    const { id, name, color, ...rest } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Profile name is required' });
+
+    let profile = id ? getProfileById(id) : null;
+    if (profile) {
+        Object.assign(profile, rest, { name: name.trim(), color: color || profile.color || '#38bdf8', updatedAt: new Date().toISOString() });
+    } else {
+        const newId = id || `profile-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        profile = createDefaultProfile(newId, name.trim(), rest);
+        if (color) profile.color = color;
+        profilesState.profiles.push(profile);
+    }
+    saveProfiles();
+    currentSettings = getActiveProfile();
+    res.json({ success: true, profile, profiles: profilesState.profiles, activeProfileId: profilesState.activeProfileId });
+});
+
+app.post('/api/profiles/switch', checkAuth, (req, res) => {
+    const { profileId } = req.body;
+    const found = getProfileById(profileId);
+    if (!found) return res.status(404).json({ error: 'Profile not found' });
+    profilesState.activeProfileId = found.id;
+    currentSettings = found;
+    saveProfiles();
+    logMsg(`Switched active profile to "${found.name}" (${found.id}).`);
+    res.json({ success: true, activeProfileId: found.id, profile: found });
+});
+
+app.post('/api/profiles/:id/duplicate', checkAuth, (req, res) => {
+    const source = getProfileById(req.params.id);
+    if (!source) return res.status(404).json({ error: 'Source profile not found' });
+    const newId = `profile-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const newProfile = JSON.parse(JSON.stringify(source));
+    newProfile.id = newId;
+    newProfile.name = `${source.name} (Copy)`;
+    const colors = ['#38bdf8', '#e11d48', '#eab308', '#10b981', '#a855f7', '#ec4899', '#f97316'];
+    newProfile.color = colors[profilesState.profiles.length % colors.length];
+    newProfile.createdAt = new Date().toISOString();
+    newProfile.updatedAt = new Date().toISOString();
+    profilesState.profiles.push(newProfile);
+    saveProfiles();
+    logMsg(`Duplicated profile "${source.name}" -> "${newProfile.name}".`);
+    res.json({ success: true, profile: newProfile, profiles: profilesState.profiles });
+});
+
+app.delete('/api/profiles/:id', checkAuth, async (req, res) => {
+    if (profilesState.profiles.length <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the only remaining profile.' });
+    }
+    const idx = profilesState.profiles.findIndex(p => p.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Profile not found' });
+
+    if (activeSessions.has(req.params.id)) {
+        await endStream(req.params.id, 'profile deleted');
+    }
+
+    const removed = profilesState.profiles.splice(idx, 1)[0];
+    if (profilesState.activeProfileId === removed.id) {
+        profilesState.activeProfileId = profilesState.profiles[0].id;
+        currentSettings = profilesState.profiles[0];
+    }
+    saveProfiles();
+    logMsg(`Deleted profile "${removed.name}". Active profile is now "${profilesState.activeProfileId}".`);
+    res.json({ success: true, removed, profiles: profilesState.profiles, activeProfileId: profilesState.activeProfileId });
 });
 
 // Let the director verify the chat pipeline with precise mode testing
 app.post('/api/youtube-chat-test', checkAuth, async (req, res) => {
-    const chatMode = req.body.chatMode || currentSettings.youtubeChatMode || 'player';
-    const apiKey = (req.body.apiKey !== undefined && req.body.apiKey !== '') ? req.body.apiKey : (currentSettings.youtubeApiKey || process.env.YOUTUBE_API_KEY || '');
-    const rawTarget = (req.body.target !== undefined && req.body.target !== '') ? req.body.target : (currentSettings.youtubeLiveId || currentSettings.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '');
+    const profile = (req.body.profileId ? getProfileById(req.body.profileId) : null) || getActiveProfile();
+    const chatMode = req.body.chatMode || profile.youtubeChatMode || 'player';
+    const apiKey = (req.body.apiKey !== undefined && req.body.apiKey !== '') ? req.body.apiKey : (profile.youtubeApiKey || process.env.YOUTUBE_API_KEY || '');
+    const rawTarget = (req.body.target !== undefined && req.body.target !== '') ? req.body.target : (profile.youtubeLiveId || profile.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '');
     const { liveVideoId, channelId } = parseYoutubeTarget(rawTarget);
     try {
         const result = await testYoutubeChatConnection({ apiKey, liveVideoId, channelId, chatMode });
@@ -195,7 +561,8 @@ app.post('/api/youtube-chat-test', checkAuth, async (req, res) => {
 });
 
 app.get('/api/youtube-chat-status', checkAuth, (req, res) => {
-    res.json(youtubeChatStatus);
+    const targetId = req.query.profileId || profilesState.activeProfileId;
+    res.json(getYoutubeChatStatusForProfile(targetId));
 });
 
 // --- VPS YouTube Live Auto-Commenter API Routes ---
@@ -269,7 +636,22 @@ app.post('/api/logs/clear', checkAuth, (req, res) => {
  * Returns optimized, ultra-lightweight Puppeteer arguments for headless Linux/VPS execution.
  * Strips out unnecessary Chromium background services to minimize CPU usage.
  */
-function getPuppeteerArgs() {
+function allocateSlotForProfile(profileId) {
+    const usedSlots = new Set();
+    for (const [id, s] of activeSessions.entries()) {
+        if (s.slot !== undefined && s.slot !== null) usedSlots.add(s.slot);
+    }
+    for (let i = 0; i < 4; i++) {
+        if (!usedSlots.has(i)) return i;
+    }
+    return -1;
+}
+
+/**
+ * Returns optimized, ultra-lightweight Puppeteer arguments for headless Linux/VPS execution.
+ * Strips out unnecessary Chromium background services to minimize CPU usage.
+ */
+function getPuppeteerArgs(slot = 0) {
     const args = [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -311,88 +693,95 @@ function getPuppeteerArgs() {
         args.push('--disable-gpu');
     }
 
-    if (process.env.DISPLAY) {
-        args.push(`--display=${process.env.DISPLAY}`);
-    } else if (process.platform !== 'darwin') {
-        args.push('--display=:99');
+    if (process.platform !== 'darwin') {
+        const displayNum = 99 + slot;
+        args.push(`--display=:${displayNum}`);
     }
 
     return args;
 }
 
 /**
- * Boot the game in Chrome and push it to the RTMP endpoint.
- * Extracted from the /api/start-stream route so the scheduler can start a run
- * on a timer through exactly the same path a manual click uses.
+ * Boot the game in Chrome and push it to the RTMP endpoint for a specific profile.
+ * Supports running multiple profiles concurrently with isolated virtual displays & PulseAudio sinks.
  */
-async function beginStream() {
-    if (isStreaming || isRecording) {
-        return { ok: false, error: 'Engine is already running (Stop it first)' };
+async function beginStream(targetProfileId = null) {
+    const profile = (targetProfileId ? getProfileById(targetProfileId) : null) || getActiveProfile();
+    if (!profile) return { ok: false, error: 'Target profile not found' };
+
+    if (activeSessions.has(profile.id)) {
+        return { ok: false, error: `Channel "${profile.name}" is already streaming live.` };
     }
-    if (!currentSettings.streamUrl || !currentSettings.streamKey) {
-        return { ok: false, error: 'Stream URL and Secret Key are required. Please set them in the Stream Config tab.' };
+    if (!profile.streamUrl || !profile.streamKey) {
+        return { ok: false, error: `Stream URL and Secret Key are required for "${profile.name}". Please set them in Stream Config.` };
     }
+
+    const slot = allocateSlotForProfile(profile.id);
+    if (slot === -1) {
+        return { ok: false, error: 'Maximum concurrent streams (4) reached. Please stop an active channel first.' };
+    }
+
+    const displayStr = process.platform === 'darwin' ? ':0' : `:${99 + slot}`;
+    const pulseSinkStr = `v${slot + 1}`;
+    logMsg(`[${profile.name}] Starting broadcast session (Slot: ${slot}, Display: ${displayStr}, Audio: ${pulseSinkStr})...`);
+
+    let sessionBrowser = null;
+    let sessionPage = null;
 
     try {
-        isStreaming = true;
-        logMsg("Starting stream process...");
-
-        // Detect Chrome executable
         const defaultChrome = process.platform === 'darwin'
             ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
             : '/usr/bin/chromium';
         const chromeExecutable = process.env.CHROME_BIN || defaultChrome;
 
-        const puppeteerArgs = getPuppeteerArgs();
+        const puppeteerArgs = getPuppeteerArgs(slot);
+        const customEnv = {
+            ...process.env,
+            DISPLAY: displayStr,
+            PULSE_SINK: pulseSinkStr
+        };
 
-        // Launch Puppeteer (Optimized for minimal CPU)
-        browser = await puppeteer.launch({
+        sessionBrowser = await puppeteer.launch({
             executablePath: chromeExecutable,
-            headless: process.platform === 'darwin' ? false : false, 
+            headless: false,
             defaultViewport: { width: 1080, height: 1920 },
             args: puppeteerArgs,
+            env: customEnv,
             ignoreDefaultArgs: ['--enable-automation']
         });
 
-        currentPage = await browser.newPage();
-        
-        let queryParam = '?view=landscape&stream=true&headless=true';
-        if (currentSettings.activeEngine === 'hero-tournament' || currentSettings.activeEngine === 'multiverse') {
-            queryParam = '?view=hero-tournament&stream=true&headless=true';
-        } else if (currentSettings.activeEngine === 'points-race') {
-            queryParam = '?view=points-race&stream=true&headless=true';
-        } else if (currentSettings.activeEngine === 'vertical') {
-            queryParam = '?view=vertical&stream=true&headless=true';
+        sessionPage = await sessionBrowser.newPage();
+
+        let queryParam = `?view=landscape&stream=true&headless=true&profile=${encodeURIComponent(profile.id)}`;
+        if (profile.activeEngine === 'hero-tournament' || profile.activeEngine === 'multiverse') {
+            queryParam = `?view=hero-tournament&stream=true&headless=true&profile=${encodeURIComponent(profile.id)}`;
+        } else if (profile.activeEngine === 'points-race') {
+            queryParam = `?view=points-race&stream=true&headless=true&profile=${encodeURIComponent(profile.id)}`;
+        } else if (profile.activeEngine === 'vertical') {
+            queryParam = `?view=vertical&stream=true&headless=true&profile=${encodeURIComponent(profile.id)}`;
         }
+
         const internalHost = process.env.INTERNAL_HOST || '127.0.0.1';
         const internalPort = process.env.PORT || 3000;
-        let gameUrl = `http://${internalHost}:${internalPort}/${queryParam}`;
-        logMsg(`Puppeteer navigating to ${gameUrl}`);
-        // Use domcontentloaded: networkidle2 hangs forever because of the active SSE live chat stream (/api/chat-stream)
-        await currentPage.goto(gameUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const gameUrl = `http://${internalHost}:${internalPort}/${queryParam}`;
+        logMsg(`[${profile.name}] Puppeteer navigating to ${gameUrl}`);
+
+        await sessionPage.goto(gameUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         try {
-            await currentPage.waitForSelector('#game-canvas, canvas, #game-wrapper, #app', { timeout: 8000 });
+            await sessionPage.waitForSelector('#game-canvas, canvas, #game-wrapper, #app', { timeout: 8000 });
         } catch (e) {}
         await new Promise(r => setTimeout(r, 800));
 
-        if (currentSettings.gameSettings) {
-            await currentPage.evaluate((s) => {
-                // Single source of truth for "what does a setting mean". The
-                // same mapping is mirrored in dashboard.html
-                // (applyGameToPreview) and in both engines' live-settings
-                // handlers, so the preview, the in-game drawer and the on-air
-                // stream can never disagree.
+        if (profile.gameSettings) {
+            await sessionPage.evaluate((s) => {
                 window.applyGameSettings = function (gi, s) {
                     if (!gi || !s) return;
                     gi.cfg = { ...(gi.cfg || {}), ...s };
                     gi.settings = { ...(gi.settings || {}), ...s };
-
-                    // `speed` is GAMEPLAY speed (1-5), never arena rotation.
                     const speed = s.speed !== undefined ? Number(s.speed) : 1;
                     const rot = s.rotSpeed !== undefined ? Number(s.rotSpeed) : undefined;
                     const grav = s.gravity !== undefined ? Number(s.gravity) : undefined;
 
-                    // Landscape engine reads these off `settings`.
                     if (gi.settings) {
                         gi.settings.speedMult = speed;
                         if (rot !== undefined) gi.settings.rotSpeed = rot;
@@ -400,7 +789,6 @@ async function beginStream() {
                     }
                     if (rot !== undefined && 'GATE_SPIN' in gi) gi.GATE_SPIN = rot;
 
-                    // Vertical engine drives its own physics object.
                     if (gi.physics) {
                         if (gi.physics.setStepsPerFrame) gi.physics.setStepsPerFrame(speed);
                         if (rot !== undefined && gi.physics.setRotSpeed) gi.physics.setRotSpeed(rot);
@@ -415,10 +803,6 @@ async function beginStream() {
                 };
 
                 window.__liveSettings = s;
-                // Mirror the values into the vertical settings form so its
-                // "APPLY" button reads sane values. NOTE: speed and rotation
-                // are separate settings - writing `speed` into the rotation
-                // field used to spin the arena orders of magnitude too fast.
                 const setVal = (id, val) => {
                     const el = document.getElementById(id);
                     if (el && val !== undefined) {
@@ -448,19 +832,18 @@ async function beginStream() {
                 if (window.pointsRace && typeof window.pointsRace.setSettings === 'function') {
                     window.pointsRace.setSettings(s);
                 }
-            }, currentSettings.gameSettings);
-            logMsg("Applied saved game settings on stream boot.");
+            }, profile.gameSettings);
+            logMsg(`[${profile.name}] Applied saved game settings.`);
         }
 
-        // Auto-start gameplay and sound engine (fallback if not auto-started by engine)
-        await currentPage.evaluate(() => {
+        // Auto-start gameplay and sound engine
+        await sessionPage.evaluate(() => {
             const btn = document.getElementById('btn-start');
             if (btn && !btn.disabled) {
                 btn.click();
             } else if (window.gameInstance && !window.gameInstance.running && typeof window.gameInstance.start === 'function') {
                 window.gameInstance.start();
             }
-            // Ensure audio context and procedural music are active so sound feeds to PulseAudio
             try {
                 if (window.gameInstance && window.gameInstance.audio) {
                     if (typeof window.gameInstance.audio.playBgMusic === 'function') {
@@ -473,39 +856,33 @@ async function beginStream() {
                 }
             } catch (e) {}
         });
-        logMsg("Auto-started gameplay and sound engine for the stream.");
+        logMsg(`[${profile.name}] Auto-started gameplay and sound engine.`);
 
-        logMsg("Starting FFmpeg streaming...");
-
-        // Construct FFmpeg video filter chain based on crop and resolution
+        // Setup FFmpeg
         const filterParts = [];
-        if (currentSettings.crop && currentSettings.crop.enabled) {
-            const { w, h, x, y } = currentSettings.crop;
+        if (profile.crop && profile.crop.enabled) {
+            const { w, h, x, y } = profile.crop;
             filterParts.push(`crop=${w}:${h}:${x}:${y}`);
-            logMsg(`Applying crop filter: crop=${w}:${h}:${x}:${y}`);
         }
-        if (currentSettings.resolution === '720x1280') {
+        if (profile.resolution === '720x1280') {
             filterParts.push('scale=720:1280');
-            logMsg(`Applying 720x1280 ultra-low CPU scaling filter`);
         }
         filterParts.push('format=yuv420p');
         const videoFilter = filterParts.join(',');
 
-        const bitrateVal = Number(currentSettings.bitrate) || 4500;
+        const bitrateVal = Number(profile.bitrate) || 4500;
         const bitrateStr = `${bitrateVal}k`;
         const bufsizeStr = `${bitrateVal * 2}k`;
-        const fpsVal = Number(currentSettings.fps) || 30;
-        const presetVal = currentSettings.preset || 'ultrafast';
-        const rtmpUrl = (currentSettings.streamUrl.endsWith('/') ? currentSettings.streamUrl : currentSettings.streamUrl + '/') + currentSettings.streamKey;
+        const fpsVal = Number(profile.fps) || 30;
+        const presetVal = profile.preset || 'ultrafast';
+        const rtmpUrl = (profile.streamUrl.endsWith('/') ? profile.streamUrl : profile.streamUrl + '/') + profile.streamKey;
 
-        // Build FFmpeg Args conditionally based on OS
         let ffmpegArgs = [];
         if (process.platform === 'darwin') {
-            logMsg("macOS detected: using avfoundation for local testing capture.");
             ffmpegArgs = [
                 '-f', 'avfoundation',
                 '-framerate', String(fpsVal),
-                '-i', '1:none', // Disable audio capture on Mac to avoid device errors
+                '-i', '1:none',
                 '-c:v', 'libx264',
                 '-preset', presetVal,
                 '-threads', '2',
@@ -515,13 +892,12 @@ async function beginStream() {
                 '-pix_fmt', 'yuv420p',
                 '-vf', videoFilter,
                 '-g', String(fpsVal * 2),
-                '-an', // Disable audio completely for local mac tests
+                '-an',
                 '-f', 'flv',
                 rtmpUrl
             ];
         } else {
-            // Linux/VPS mode (Xvfb + Pulse) - Broadcast Grade Low-Latency Real-Time
-            const gopVal = String(fpsVal * 2); // Strict 2.0-second GOP (YouTube Live specification)
+            const gopVal = String(fpsVal * 2);
             const keyintMinVal = String(fpsVal);
             ffmpegArgs = [
                 '-thread_queue_size', '1024',
@@ -530,10 +906,10 @@ async function beginStream() {
                 '-framerate', String(fpsVal),
                 '-draw_mouse', '0',
                 '-use_wallclock_as_timestamps', '1',
-                '-i', process.env.DISPLAY || ':99',
+                '-i', displayStr,
                 '-thread_queue_size', '1024',
                 '-f', 'pulse',
-                '-i', 'v1.monitor',
+                '-i', `${pulseSinkStr}.monitor`,
                 '-c:v', 'libx264',
                 '-preset', presetVal,
                 '-tune', 'zerolatency',
@@ -548,7 +924,7 @@ async function beginStream() {
                 '-sc_threshold', '0',
                 '-vsync', 'cfr',
                 '-c:a', 'aac',
-                '-b:a', '128k', // YouTube recommended live audio bitrate
+                '-b:a', '128k',
                 '-ar', '44100',
                 '-af', 'aresample=async=1000:min_hard_comp=0.100000:first_pts=0,apad',
                 '-flvflags', 'no_duration_filesize',
@@ -557,100 +933,132 @@ async function beginStream() {
             ];
         }
 
-        streamProcess = spawn('ffmpeg', ffmpegArgs);
+        const proc = spawn('ffmpeg', ffmpegArgs);
 
-        streamProcess.stderr.on('data', (data) => {
+        const session = {
+            profileId: profile.id,
+            profileName: profile.name,
+            profile,
+            slot,
+            display: displayStr,
+            pulseSink: pulseSinkStr,
+            browser: sessionBrowser,
+            currentPage: sessionPage,
+            streamProcess: proc,
+            isStreaming: true,
+            isRecording: false,
+            startedAt: Date.now(),
+            telemetry: { fps: 0, bitrate: '', speed: '0x', health: 'starting', lastUpdate: Date.now() },
+            liveViewerCount: null,
+            youtubeChatStatus: getYoutubeChatStatusForProfile(profile.id)
+        };
+        activeSessions.set(profile.id, session);
+        updateGlobalLegacyState();
+
+        // Boot chat poller for this profile
+        restartYoutubeChatForProfile(profile);
+
+        proc.stderr.on('data', (data) => {
             const msg = data.toString();
-            // Parse FFmpeg telemetry for encoder speed & stream health
             const statsMatch = msg.match(/fps=\s*([\d.]+).*?bitrate=\s*([\d.]+\s*\w*bits\/s).*?speed=\s*([\d.]+)x/i);
             if (statsMatch) {
                 const curFps = parseFloat(statsMatch[1]) || 0;
                 const curBitrate = statsMatch[2].trim();
                 const curSpeed = parseFloat(statsMatch[3]) || 0;
                 let health = 'excellent';
-                if (curSpeed < 0.90) {
-                    health = 'struggling'; // VPS CPU bottleneck detected
-                } else if (curSpeed < 0.98) {
-                    health = 'fair';
-                }
-                streamTelemetry = {
+                if (curSpeed < 0.90) health = 'struggling';
+                else if (curSpeed < 0.98) health = 'fair';
+
+                session.telemetry = {
                     fps: curFps,
                     bitrate: curBitrate,
                     speed: `${curSpeed.toFixed(2)}x`,
                     health,
                     lastUpdate: Date.now()
                 };
+                updateGlobalLegacyState();
             }
-            // Suppress verbose output, only log errors/warnings to file
             if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
-                logMsg(`FFmpeg ERR: ${msg.trim()}`, true);
+                logMsg(`[${profile.name}] FFmpeg ERR: ${msg.trim()}`, true);
             }
         });
 
-        streamProcess.on('close', (code) => {
-            logMsg(`FFmpeg exited with code ${code}`);
-            isStreaming = false;
-            streamTelemetry = { fps: 0, bitrate: '', speed: '0x', health: 'offline', lastUpdate: 0 };
-            currentPage = null;
-            if (browser) {
-                browser.close();
-                browser = null;
+        proc.on('close', (code) => {
+            logMsg(`[${profile.name}] FFmpeg exited with code ${code}`);
+            if (activeSessions.has(profile.id)) {
+                activeSessions.delete(profile.id);
             }
-            // Tell the scheduler the run ended on its own so it does not later
-            // try to "stop" something that is already gone.
-            if (scheduler) {
-                scheduler.handleStreamStopped('Stream ended unexpectedly (FFmpeg exited).');
+            updateGlobalLegacyState();
+            if (sessionBrowser) {
+                try { sessionBrowser.close(); } catch (e) {}
+            }
+            const s = getSchedulerForProfile(profile.id);
+            if (s) {
+                s.handleStreamStopped('Stream ended unexpectedly (FFmpeg exited).');
             }
         });
 
-        return { ok: true, message: 'Stream started successfully' };
+        return { ok: true, message: `Stream started for "${profile.name}"` };
 
     } catch (error) {
-        logMsg(`Failed to start stream: ${error.message}`, true);
-        isStreaming = false;
-        if (browser) { browser.close(); browser = null; }
+        logMsg(`[${profile.name}] Failed to start stream: ${error.message}`, true);
+        if (sessionBrowser) {
+            try { sessionBrowser.close(); } catch(e){}
+        }
+        activeSessions.delete(profile.id);
+        updateGlobalLegacyState();
         return { ok: false, error: error.message };
     }
 }
 
 app.post('/api/start-stream', checkAuth, async (req, res) => {
-    const result = await beginStream();
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const result = await beginStream(targetId);
     if (!result.ok) return res.status(400).json({ error: result.error });
-    res.json({ success: true, message: result.message });
+    res.json({ success: true, message: result.message, profileId: targetId });
 });
 
 /**
- * Tear the engine down. Shared by the stop route and the scheduler's auto-stop
- * so a scheduled end is indistinguishable from a manual one.
+ * Tear a stream session down. Supports stopping a specific channel by profileId.
  */
-async function endStream(reason = 'user request') {
-    if (!isStreaming && !isRecording) {
-        return { ok: false, error: 'Engine is not running' };
+async function endStream(targetProfileId = null, reason = 'user request') {
+    const pid = targetProfileId || profilesState.activeProfileId;
+    const session = activeSessions.get(pid);
+    if (!session) {
+        // Fallback: if single session running, stop it
+        if (activeSessions.size === 1) {
+            const only = activeSessions.values().next().value;
+            return endStream(only.profileId, reason);
+        }
+        return { ok: false, error: 'Engine is not running for this channel' };
     }
 
-    logMsg(`Stopping engine (${reason})...`);
-    isStreaming = false;
-    isRecording = false;
-    recordingProgress = null;
+    logMsg(`[${session.profileName}] Stopping engine (${reason})...`);
+    session.isStreaming = false;
+    session.isRecording = false;
 
-    if (streamProcess) {
-        try { streamProcess.kill('SIGINT'); } catch (e) { /* already gone */ }
-        streamProcess = null;
+    if (session.streamProcess) {
+        try { session.streamProcess.kill('SIGINT'); } catch (e) {}
+        session.streamProcess = null;
     }
 
-    if (browser) {
-        try { await browser.close(); } catch (e) { /* already closed */ }
-        browser = null;
+    if (session.browser) {
+        try { await session.browser.close(); } catch (e) {}
+        session.browser = null;
     }
-    currentPage = null;
+    session.currentPage = null;
 
-    return { ok: true, message: 'Stream stopped' };
+    activeSessions.delete(pid);
+    updateGlobalLegacyState();
+
+    return { ok: true, message: `Stream stopped for "${session.profileName}"` };
 }
 
 app.post('/api/stop-stream', checkAuth, async (req, res) => {
-    const result = await endStream('user request');
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const result = await endStream(targetId, 'user request');
     if (!result.ok) return res.status(400).json({ error: result.error });
-    res.json({ success: true, message: result.message });
+    res.json({ success: true, message: result.message, profileId: targetId });
 });
 
 // Recording Feature
@@ -867,14 +1275,17 @@ app.post('/api/recordings/delete', checkAuth, (req, res) => {
 
 // Remote Control for the Game inside the stream
 app.post('/api/control', checkAuth, async (req, res) => {
-    if ((!isStreaming && !isRecording) || !currentPage) {
-        return res.status(400).json({ error: 'Engine is not running. Start the stream or recording first.' });
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const session = activeSessions.get(targetId);
+    const targetPage = session ? session.currentPage : currentPage;
+    if ((!isStreaming && !isRecording) || !targetPage) {
+        return res.status(400).json({ error: 'Engine is not running for this channel. Start the stream or recording first.' });
     }
     
     const { action, payload } = req.body;
     try {
         if (action === 'new-round' || action === 'reset') {
-            await currentPage.evaluate(() => {
+            await targetPage.evaluate(() => {
                 if (window.heroTournament && typeof window.heroTournament.reset === 'function') {
                     window.heroTournament.reset();
                 } else if (window.pointsRace && typeof window.pointsRace.reset === 'function') {
@@ -886,25 +1297,25 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     if (btn && !btn.disabled) btn.click();
                 }
             });
-            logMsg("Game new-round / reset triggered remotely.");
+            logMsg(`[${targetId}] Game new-round / reset triggered remotely.`);
         } else if (action === 'next-stage') {
-            await currentPage.evaluate(() => {
+            await targetPage.evaluate(() => {
                 if (window.heroTournament && typeof window.heroTournament.nextStage === 'function') {
                     window.heroTournament.nextStage();
                 } else if (window.pointsRace && typeof window.pointsRace.nextStage === 'function') {
                     window.pointsRace.nextStage();
                 }
             });
-            logMsg("Game next-stage triggered remotely.");
+            logMsg(`[${targetId}] Game next-stage triggered remotely.`);
         } else if (action === 'shrink-arena') {
-            await currentPage.evaluate(() => {
+            await targetPage.evaluate(() => {
                 if (window.gameInstance && typeof window.gameInstance.shrinkArena === 'function') {
                     window.gameInstance.shrinkArena();
                 }
             });
-            logMsg("Game shrink-arena triggered remotely.");
+            logMsg(`[${targetId}] Game shrink-arena triggered remotely.`);
         } else if (action === 'toggle-sound') {
-            await currentPage.evaluate(() => {
+            await targetPage.evaluate(() => {
                 if (window.heroAudio && typeof window.heroAudio.toggleMute === 'function') {
                     window.heroAudio.toggleMute();
                 }
@@ -916,9 +1327,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     window.gameInstance.setSoundEnabled(!window.gameInstance.soundEnabled);
                 }
             });
-            logMsg("Game toggle-sound triggered remotely.");
+            logMsg(`[${targetId}] Game toggle-sound triggered remotely.`);
         } else if (action === 'speed') {
-            await currentPage.evaluate((spd) => {
+            await targetPage.evaluate((spd) => {
                 if (window.heroTournament && typeof window.heroTournament.setSpeed === 'function') {
                     window.heroTournament.setSpeed(spd);
                 }
@@ -933,9 +1344,9 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     window.gameInstance.settings.speedMult = spd;
                 }
             }, payload?.speed || 1);
-            logMsg(`Game speed set to ${payload?.speed || 1} remotely.`);
+            logMsg(`[${targetId}] Game speed set to ${payload?.speed || 1} remotely.`);
         } else if (action === 'pause' || action === 'toggle-pause' || action === 'resume') {
-            await currentPage.evaluate((act) => {
+            await targetPage.evaluate((act) => {
                 if (window.heroTournament) {
                     if (act === 'pause') window.heroTournament.pause?.();
                     else if (act === 'resume') window.heroTournament.resume?.();
@@ -961,11 +1372,11 @@ app.post('/api/control', checkAuth, async (req, res) => {
                     }
                 }
             }, action);
-            logMsg(`Game ${action} triggered remotely.`);
+            logMsg(`[${targetId}] Game ${action} triggered remotely.`);
         } else if (action === 'clear-supporters' || action === 'reset-supporters') {
             bus.emit('chat', { type: 'RESET_SUPPORTERS' });
-            if (currentPage) {
-                await currentPage.evaluate(() => {
+            if (targetPage) {
+                await targetPage.evaluate(() => {
                     try {
                         localStorage.removeItem('fb_top_supporters_map');
                         localStorage.removeItem('fb_top_supporters_vertical');
@@ -1128,7 +1539,7 @@ bus.on('viewers', ({ count }) => {
   if (typeof count === 'number' && count >= 0) liveViewerCount = count;
 });
 
-const sseClients = new Set();
+const sseClients = new Map();
 app.get('/api/chat-stream', (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -1138,28 +1549,34 @@ app.get('/api/chat-stream', (req, res) => {
   });
   if (res.flushHeaders) res.flushHeaders();
   res.write('\n');
-  sseClients.add(res);
+  const clientProfile = req.query.profile || null;
+  sseClients.set(res, clientProfile);
 
   req.on('close', () => {
     sseClients.delete(res);
   });
 });
 
-function broadcastChat(msg) {
+function broadcastChat(msg, targetProfileId = null) {
   const payload = `data: ${JSON.stringify(msg)}\n\n`;
-  for (const client of sseClients) {
+  for (const [client, clientProfile] of sseClients.entries()) {
     try {
-      client.write(payload);
-      if (typeof client.flush === 'function') client.flush();
+      // Deliver if client did not specify a profile filter, or targetProfileId is null (global), or matches client's profile
+      if (!clientProfile || !targetProfileId || clientProfile === targetProfileId) {
+        client.write(payload);
+        if (typeof client.flush === 'function') client.flush();
+      }
     } catch (e) {}
   }
 }
-bus.on('chat', broadcastChat);
-bus.on('power', (p) => broadcastChat({ type: 'POWER', ...p, timestamp: new Date().toISOString() }));
-bus.on('viewers', ({ count }) => broadcastChat({ type: 'VIEWER_COUNT', count }));
+bus.on('chat', (m) => broadcastChat(m, m.profileId || null));
+bus.on('power', (p) => broadcastChat({ type: 'POWER', ...p, timestamp: new Date().toISOString() }, p.profileId || null));
+bus.on('viewers', ({ count, profileId }) => broadcastChat({ type: 'VIEWER_COUNT', count }, profileId || null));
 
 setInterval(() => {
-  for (const client of sseClients) client.write(': ping\n\n');
+  for (const [client] of sseClients.entries()) {
+    try { client.write(': ping\n\n'); } catch (e) {}
+  }
 }, 25000);
 
 app.get('/api/votes', (req, res) => res.json(voteTally));
@@ -1368,6 +1785,11 @@ app.post('/api/test-chat', express.json(), (req, res) => {
     tier: scTier,
   };
 
+  const targetPid = req.body.profileId || (profilesState && profilesState.activeProfileId) || null;
+  msg.profileId = targetPid;
+  if (vote) vote.profileId = targetPid;
+  if (power) power.profileId = targetPid;
+
   bus.emit('chat', msg);
   if (vote) bus.emit('vote', vote);
   if (power) bus.emit('power', power);
@@ -1375,89 +1797,8 @@ app.post('/api/test-chat', express.json(), (req, res) => {
   res.json({ ok: true, msg });
 });
 
-let chatPoller = null;
-let youtubeChatStatus = { state: 'idle', mode: 'player', videoId: null, channelId: null, liveChatId: null, error: null, at: null };
 function restartYoutubeChat(settings = currentSettings) {
-    if (chatPoller) {
-        chatPoller.stop();
-        chatPoller = null;
-    }
-    const chatMode = settings.youtubeChatMode || 'player';
-    const pollInterval = Number(settings.youtubePollInterval) || 1000;
-    const apiKey = settings.youtubeApiKey || process.env.YOUTUBE_API_KEY || '';
-    const rawTarget = settings.youtubeLiveId || settings.youtubeChannelId || process.env.YOUTUBE_LIVE_VIDEO_ID || process.env.YOUTUBE_CHANNEL_ID || '';
-    const { liveVideoId, channelId } = parseYoutubeTarget(rawTarget);
-
-    youtubeChatStatus = { state: 'starting', mode: chatMode, videoId: liveVideoId, channelId, liveChatId: null, error: null, at: Date.now() };
-
-    if (chatMode === 'player' || chatMode === 'hybrid') {
-        if (!liveVideoId && !channelId) {
-            youtubeChatStatus = {
-                state: 'no-target',
-                mode: chatMode,
-                videoId: null,
-                channelId: null,
-                liveChatId: null,
-                error: 'Please enter a Live Video ID, Video URL, or Channel ID in settings.',
-                at: Date.now()
-            };
-            return;
-        }
-        chatPoller = startYoutubeChatPolling({
-            apiKey,
-            liveVideoId,
-            channelId,
-            chatMode,
-            pollInterval,
-            bus,
-            onStatus: (s) => { youtubeChatStatus = { ...s, mode: chatMode }; },
-            log: {
-                info: msg => logMsg(msg),
-                warn: msg => logMsg(msg, true),
-                error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
-            }
-        });
-    } else {
-        // 'api' mode
-        if (!apiKey) {
-            youtubeChatStatus = {
-                state: 'no-api-key',
-                mode: chatMode,
-                videoId: null,
-                channelId: null,
-                liveChatId: null,
-                error: 'No YouTube API key configured. Switch to Zero-Quota Web Player for free unlimited mode.',
-                at: Date.now()
-            };
-            return;
-        }
-        if (!liveVideoId && !channelId) {
-            youtubeChatStatus = {
-                state: 'no-target',
-                mode: chatMode,
-                videoId: null,
-                channelId: null,
-                liveChatId: null,
-                error: 'No Live Video ID or Channel ID configured.',
-                at: Date.now()
-            };
-            return;
-        }
-        chatPoller = startYoutubeChatPolling({
-            apiKey,
-            liveVideoId,
-            channelId,
-            chatMode,
-            pollInterval,
-            bus,
-            onStatus: (s) => { youtubeChatStatus = { ...s, mode: chatMode }; },
-            log: {
-                info: msg => logMsg(msg),
-                warn: msg => logMsg(msg, true),
-                error: (msg, err) => logMsg(`${msg} ${err || ''}`, true)
-            }
-        });
-    }
+    restartYoutubeChatForProfile(settings);
 }
 
 // Normalise the ID fields using parseYoutubeTarget
@@ -1466,55 +1807,63 @@ function youtubeTargets(settings = currentSettings) {
     return parseYoutubeTarget(rawTarget);
 }
 
-
-// --------------------------------
-// Stream scheduler
-// --------------------------------
-
-const SCHEDULE_FILE = path.join(DATA_DIR, 'schedule.json');
-
-const scheduler = new StreamScheduler({
-    filePath: SCHEDULE_FILE,
-    tickMs: 15000,
-    isStreaming: () => isStreaming || isRecording,
-    onStart: (reason) => beginStream(),
-    onStop: (reason) => endStream(reason),
-    onLog: (msg, isError) => logMsg(msg, isError)
-});
-scheduler.load();
+// Global proxy scheduler object for backward compatibility
+const scheduler = {
+    getState: () => getSchedulerForProfile(profilesState.activeProfileId).getState(),
+    set: (cfg) => getSchedulerForProfile(profilesState.activeProfileId).set(cfg),
+    startNow: (dur) => getSchedulerForProfile(profilesState.activeProfileId).startNow(dur),
+    clear: () => getSchedulerForProfile(profilesState.activeProfileId).clear(),
+    handleStreamStopped: (r) => getSchedulerForProfile(profilesState.activeProfileId).handleStreamStopped(r),
+    describe: () => getSchedulerForProfile(profilesState.activeProfileId).describe()
+};
 
 app.get('/api/schedule', checkAuth, (req, res) => {
-    res.json(scheduler.getState());
+    const targetId = req.query.profileId || profilesState.activeProfileId;
+    const sched = getSchedulerForProfile(targetId);
+    res.json(sched.getState());
 });
 
-// Create or replace the schedule. Does not start anything by itself.
+// Create or replace the schedule for a specific profile. Does not start anything by itself.
 app.post('/api/schedule', checkAuth, (req, res) => {
-    const result = scheduler.set(req.body || {});
+    const targetId = req.body.profileId || profilesState.activeProfileId;
+    const sched = getSchedulerForProfile(targetId);
+    const result = sched.set(req.body || {});
     if (!result.ok) return res.status(400).json({ error: result.error });
-    res.json({ success: true, state: scheduler.getState() });
+    res.json({ success: true, state: sched.getState(), profileId: targetId });
 });
 
-// "Go live now, auto-stop after N minutes" - starts immediately and arms the
-// stop timer, so the operator never has to come back and press stop.
+// "Go live now, auto-stop after N minutes" for a specific profile
 app.post('/api/schedule/start-now', checkAuth, async (req, res) => {
-    const result = await scheduler.startNow(req.body?.durationMinutes);
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const sched = getSchedulerForProfile(targetId);
+    const result = await sched.startNow(req.body?.durationMinutes);
     if (!result.ok) return res.status(400).json({ error: result.error });
-    res.json({ success: true, state: scheduler.getState() });
+    res.json({ success: true, state: sched.getState(), profileId: targetId });
 });
 
-// Turn the schedule off. Deliberately leaves a running stream alone.
+// Turn the schedule off for a specific profile. Leaves a running stream alone.
 app.post('/api/schedule/clear', checkAuth, (req, res) => {
-    scheduler.clear();
-    res.json({ success: true, state: scheduler.getState() });
+    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const sched = getSchedulerForProfile(targetId);
+    sched.clear();
+    res.json({ success: true, state: sched.getState(), profileId: targetId });
 });
 
 // --------------------------------
 
 app.listen(PORT, () => {
     logMsg(`Server booted. Listening on port ${PORT}`);
-    const settings = fs.existsSync(SETTINGS_FILE) ? JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) : {};
-    restartYoutubeChat(settings);
-    // Start the scheduler tick loop (recovers the persisted schedule on boot).
-    scheduler.start();
-    logMsg(`Scheduler: ${scheduler.describe()}`);
+    // Boot scheduler for all configured profiles
+    for (const p of profilesState.profiles) {
+        try {
+            const s = getSchedulerForProfile(p.id);
+            logMsg(`[${p.name}] Scheduler active: ${s.describe()}`);
+        } catch (e) {
+            logMsg(`[${p.name}] Error loading scheduler: ${e.message}`, true);
+        }
+    }
+    const active = getActiveProfile();
+    if (active) {
+        restartYoutubeChatForProfile(active);
+    }
 });

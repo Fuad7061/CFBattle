@@ -742,7 +742,9 @@ export default function PointsRaceApp() {
 
   // SSE Live Chat Stream Listener
   useEffect(() => {
-    const sse = new EventSource('/api/chat-stream');
+    const profileParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('profile') : null;
+    const streamUrl = profileParam ? `/api/chat-stream?profile=${encodeURIComponent(profileParam)}` : '/api/chat-stream';
+    const sse = new EventSource(streamUrl);
     sse.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);

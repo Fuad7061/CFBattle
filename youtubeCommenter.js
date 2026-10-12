@@ -370,10 +370,24 @@ class YouTubeCommenterService {
     this.activeAccountIndex = (this.activeAccountIndex + 1) % enabledAccounts.length;
     const account = enabledAccounts[this.activeAccountIndex];
 
-    const targetVideoId = this.state.settings.targetVideoId;
-    if (!targetVideoId) {
-      return; // Waiting for stream ID
+    let targets = [];
+    if (this.state.settings.targetVideoId) {
+      targets.push(this.state.settings.targetVideoId);
     }
+    if (typeof this.getActiveLiveTargets === 'function') {
+      try {
+        const extraTargets = this.getActiveLiveTargets();
+        if (Array.isArray(extraTargets)) {
+          for (const t of extraTargets) {
+            if (t && !targets.includes(t)) targets.push(t);
+          }
+        }
+      } catch (e) {}
+    }
+    if (targets.length === 0) return;
+
+    this.activeTargetIndex = ((this.activeTargetIndex || 0) + 1) % targets.length;
+    const targetVideoId = targets[this.activeTargetIndex];
 
     const message = this.getRandomMessage();
     await this.postComment(account, targetVideoId, message);

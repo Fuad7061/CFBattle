@@ -491,6 +491,18 @@
             </div>
             
             <div style="display:flex; align-items:center; gap: 8px; flex-grow: 1; flex-wrap: wrap;">
+                <!-- Channel Profile Switcher (Multi-Stream) -->
+                <div class="topbar-channel-group" style="display:flex; align-items:center; gap: 6px; background: rgba(56, 189, 248, 0.09); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 0 8px; height: 38px;" title="Switch active channel profile">
+                    <span id="topbar-profile-color-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #38bdf8; display: inline-block; box-shadow: 0 0 6px rgba(56,189,248,0.6);"></span>
+                    <select id="active-profile-select" style="background: transparent; border: none; color: white; font-size: 13px; font-weight: 600; padding: 2px 4px; outline: none; cursor: pointer; max-width: 170px;" onchange="onSwitchProfileDropdown(this.value)" title="Select active YouTube channel profile">
+                        <option value="default">Default Channel</option>
+                    </select>
+                    <div style="width: 1px; height: 16px; background: rgba(56,189,248,0.25);"></div>
+                    <button type="button" class="btn" onclick="openChannelProfileModal()" style="padding: 2px 7px; font-size: 11px; height: 24px; border-radius: 4px; background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.4); color: #bae6fd; font-weight: 600;" title="Manage Channel Profiles">
+                        ➕ Channels
+                    </button>
+                </div>
+
                 <select id="live-engine-select" style="padding: 8px 12px; font-size: 13px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 4px; color: white; cursor: pointer;" onchange="updatePreviewSrc()">
                     <option value="hero-tournament">🦸 Multiverse 16-Hero Tournament (Spiddyfacts)</option>
                     <option value="points-race">Points Race: Teamup Tournament (First to 50)</option>
@@ -535,6 +547,10 @@
             <!-- SIDEBAR -->
             <div class="sidebar">
                 <button class="tab-btn active" onclick="switchTab('tab-overview')">📺 Overview &amp; Controls</button>
+                <button class="tab-btn" onclick="switchTab('tab-channels')" style="position: relative;">
+                    🌐 Multi-Channel Hub
+                    <span id="sidebar-live-channels-count" style="display:none; margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 10px; background: #ef4444; color: white; font-weight: 700;">0 LIVE</span>
+                </button>
                 <button class="tab-btn" onclick="openSettingsModal()">⚙️ Match Settings</button>
                 <button class="tab-btn" onclick="switchTab('tab-stream')">📡 Stream Config</button>
                 <button class="tab-btn" onclick="switchTab('tab-schedule')">⏰ Stream Schedule</button>
@@ -598,7 +614,22 @@
                     <div class="panel" style="padding: 0; display: flex; flex-direction: column; height: calc(100vh - 140px);">
                         <div class="preview-container" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 10px 0;">
                             <div class="preview-col" style="height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                                <div class="preview-wrapper" style="height: 100%; max-height: calc(100vh - 220px); width: auto; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
+                                <!-- Mini Multi-Stream Broadcast Ribbon -->
+                                <div id="multi-stream-quick-bar" style="width: 100%; max-width: 900px; display: flex; align-items: center; justify-content: space-between; padding: 6px 14px; margin-bottom: 8px; background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border); border-radius: 6px; gap: 8px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">📡 BROADCAST CHANNELS:</span>
+                                        <div id="overview-channel-pills" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                            <!-- Dynamically populated -->
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <button class="btn btn-primary" onclick="switchTab('tab-channels')" style="font-size: 11px; padding: 4px 10px; height: 26px; font-weight: 600;">
+                                            🌐 Broadcast Hub ➔
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="preview-wrapper" style="height: 100%; max-height: calc(100vh - 250px); width: auto; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
                                     <iframe id="preview-frame" src="/?view=landscape&clean=true" style="width: 100%; height: 100%; border: none; display: block;"></iframe>
                                 </div>
                                 <!-- Separate Director Controls Bar (Outside of stream preview) -->
@@ -638,6 +669,62 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: MULTI-CHANNEL BROADCAST HUB -->
+                <div id="tab-channels" class="tab-pane">
+                    <div class="panel" style="max-width: 1200px; margin: 0 auto;">
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 14px;">
+                            <div>
+                                <h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px;">
+                                    <span>🌐</span> Multi-Channel Broadcast Command Center
+                                </h2>
+                                <p class="panel-desc" style="margin: 4px 0 0 0;">
+                                    Stream isolated gameplays to multiple YouTube channels concurrently. Each channel possesses its own credentials, live chat listener, watermark, auto-commenter, and encoder slot.
+                                </p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <button class="btn btn-success" onclick="startAllStreams()" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                    ▶ Start ALL Streams
+                                </button>
+                                <button class="btn btn-danger" onclick="stopAllStreams()" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                    ⏹ Stop ALL Streams
+                                </button>
+                                <button class="btn btn-primary" onclick="openChannelProfileModal()" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #0ea5e9, #3b82f6);">
+                                    ➕ Add Channel Profile
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Metrics Overview Row -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0 24px 0;">
+                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Configured Channels</div>
+                                <div id="metric-total-channels" style="font-size: 24px; font-weight: 800; color: #fff; margin-top: 4px;">1</div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Profiles saved in database</div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #ef4444; text-transform: uppercase;">Currently Live On-Air</div>
+                                <div id="metric-live-channels" style="font-size: 24px; font-weight: 800; color: #ef4444; margin-top: 4px;">0</div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Simultaneous RTMP broadcasts</div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Available VPS Slots</div>
+                                <div id="metric-available-slots" style="font-size: 24px; font-weight: 800; color: #38bdf8; margin-top: 4px;">4 of 4</div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Xvfb &amp; PulseAudio isolated slots</div>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px;">
+                                <div style="font-size: 11px; font-weight: 700; color: #a855f7; text-transform: uppercase;">Total Live Viewers</div>
+                                <div id="metric-total-viewers" style="font-size: 24px; font-weight: 800; color: #c084fc; margin-top: 4px;">—</div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Aggregated YouTube concurrents</div>
+                            </div>
+                        </div>
+
+                        <!-- Channel Cards Grid -->
+                        <div id="channel-matrix-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;">
+                            <!-- Populated dynamically via renderChannelMatrix() -->
                         </div>
                     </div>
                 </div>
@@ -1620,6 +1707,87 @@
                     <button type="button" class="btn btn-primary" onclick="saveBotAccount()" style="font-weight: 600; padding: 8px 18px; font-size: 12.5px;">💾 Save Account</button>
                 </div>
             </div>
+    <!-- CHANNEL PROFILE MODAL (Add / Edit / Clone) -->
+    <div id="channel-profile-modal" class="modal-overlay" onclick="if (event.target === this) closeChannelProfileModal()">
+        <div class="modal-card" style="max-width: 580px; width: 92%; max-height: 90vh; overflow-y: auto; background: #0b0f19; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 20px 60px rgba(0,0,0,0.85); border-radius: 12px; padding: 22px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">📺</span>
+                    <h3 id="channel-modal-title" style="margin: 0; font-size: 17px; font-weight: 700; color: #fff;">Configure Channel Profile</h3>
+                </div>
+                <button type="button" class="btn" onclick="closeChannelProfileModal()" style="padding: 4px 10px; font-size: 13px;">✕</button>
+            </div>
+
+            <input type="hidden" id="cmodal-id" value="">
+
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">Channel / Profile Name *</label>
+                <input type="text" id="cmodal-name" placeholder="e.g. Main Shorts Channel or 2nd Points Race" style="width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 13px; box-sizing: border-box;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                <div class="form-group">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">Badge Color Accent</label>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="color" id="cmodal-color" value="#38bdf8" style="width: 38px; height: 38px; border: none; border-radius: 6px; cursor: pointer; background: transparent;">
+                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                            <button type="button" onclick="setProfileColor('#38bdf8')" style="width: 22px; height: 22px; border-radius: 4px; background: #38bdf8; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;" title="Sky Blue"></button>
+                            <button type="button" onclick="setProfileColor('#e11d48')" style="width: 22px; height: 22px; border-radius: 4px; background: #e11d48; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;" title="Crimson Red"></button>
+                            <button type="button" onclick="setProfileColor('#eab308')" style="width: 22px; height: 22px; border-radius: 4px; background: #eab308; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;" title="Amber Yellow"></button>
+                            <button type="button" onclick="setProfileColor('#10b981')" style="width: 22px; height: 22px; border-radius: 4px; background: #10b981; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;" title="Emerald Green"></button>
+                            <button type="button" onclick="setProfileColor('#a855f7')" style="width: 22px; height: 22px; border-radius: 4px; background: #a855f7; border: 1px solid rgba(255,255,255,0.4); cursor: pointer;" title="Purple"></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">Default Game Engine</label>
+                    <select id="cmodal-engine" style="width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 13px; box-sizing: border-box;">
+                        <option value="hero-tournament">🦸 Multiverse 16-Hero Tournament</option>
+                        <option value="points-race">⚡ Points Race (First to 50)</option>
+                        <option value="vertical">📱 Vertical (Original)</option>
+                        <option value="landscape">🖥️ Landscape (React V2)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">📡 YouTube RTMP Stream Credentials</div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px;">Stream URL</label>
+                    <input type="text" id="cmodal-stream-url" placeholder="rtmp://a.rtmp.youtube.com/live2" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                </div>
+                <div class="form-group" style="margin-bottom: 4px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px;">Secret Stream Key (Private)</label>
+                    <input type="password" id="cmodal-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <div style="font-size: 11px; font-weight: 700; color: #eab308; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">💬 YouTube Live Chat &amp; Branding</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                    <div class="form-group">
+                        <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px;">Live Video ID or Channel ID</label>
+                        <input type="text" id="cmodal-youtube-live-id" placeholder="Video ID or @ChannelHandle" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                    </div>
+                    <div class="form-group">
+                        <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px;">In-Game Watermark / Handle</label>
+                        <input type="text" id="cmodal-watermark" placeholder="@YourChannel" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px;">Chat Reader Mode</label>
+                    <select id="cmodal-chat-mode" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px; box-sizing: border-box;">
+                        <option value="player">⚡ Zero-Quota Web Player (Free &amp; Unlimited)</option>
+                        <option value="hybrid">🌟 Hybrid Mode (Player + SuperChat Parsing)</option>
+                        <option value="api">🔑 YouTube Official Data API (Requires API Key)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn" onclick="closeChannelProfileModal()" style="padding: 8px 16px;">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveChannelProfile()" style="padding: 8px 20px; font-weight: 700; background: #0284c7;">💾 Save Channel Profile</button>
+            </div>
         </div>
     </div>
     <script>
@@ -1630,6 +1798,400 @@
         
         let authKey = localStorage.getItem('fb_login_key');
         const alertBox = document.getElementById('alert-box');
+
+        // Multi-Channel Profile State
+        let profilesList = [];
+        let activeProfileId = 'default';
+        let selectedProfileId = 'default';
+        let allSessionsList = [];
+
+        function setProfileColor(hex) {
+            const el = document.getElementById('cmodal-color');
+            if (el) el.value = hex;
+        }
+
+        function openChannelProfileModal(profileId = null) {
+            const modal = document.getElementById('channel-profile-modal');
+            const title = document.getElementById('channel-modal-title');
+            const idInput = document.getElementById('cmodal-id');
+            const nameInput = document.getElementById('cmodal-name');
+            const colorInput = document.getElementById('cmodal-color');
+            const engineInput = document.getElementById('cmodal-engine');
+            const streamUrlInput = document.getElementById('cmodal-stream-url');
+            const streamKeyInput = document.getElementById('cmodal-stream-key');
+            const liveIdInput = document.getElementById('cmodal-youtube-live-id');
+            const watermarkInput = document.getElementById('cmodal-watermark');
+            const chatModeInput = document.getElementById('cmodal-chat-mode');
+
+            if (profileId) {
+                const p = profilesList.find(x => x.id === profileId);
+                if (p) {
+                    title.textContent = `Edit Channel: ${p.name}`;
+                    idInput.value = p.id;
+                    nameInput.value = p.name || '';
+                    colorInput.value = p.color || '#38bdf8';
+                    engineInput.value = p.activeEngine || 'hero-tournament';
+                    streamUrlInput.value = p.streamUrl || 'rtmp://a.rtmp.youtube.com/live2';
+                    streamKeyInput.value = p.streamKey || '';
+                    liveIdInput.value = p.youtubeLiveId || '';
+                    watermarkInput.value = p.gameSettings?.watermark || p.watermark || '';
+                    chatModeInput.value = p.youtubeChatMode || 'player';
+                }
+            } else {
+                title.textContent = 'Add New Channel Profile';
+                idInput.value = '';
+                nameInput.value = `Channel ${profilesList.length + 1}`;
+                const colors = ['#38bdf8', '#e11d48', '#eab308', '#10b981', '#a855f7', '#ec4899', '#f97316'];
+                colorInput.value = colors[profilesList.length % colors.length];
+                engineInput.value = document.getElementById('live-engine-select')?.value || 'hero-tournament';
+                streamUrlInput.value = 'rtmp://a.rtmp.youtube.com/live2';
+                streamKeyInput.value = '';
+                liveIdInput.value = '';
+                watermarkInput.value = `@Channel${profilesList.length + 1}`;
+                chatModeInput.value = 'player';
+            }
+
+            if (modal) modal.classList.add('open');
+        }
+
+        function closeChannelProfileModal() {
+            const modal = document.getElementById('channel-profile-modal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        async function saveChannelProfile() {
+            const id = document.getElementById('cmodal-id').value;
+            const name = document.getElementById('cmodal-name').value.trim();
+            if (!name) return showAlert('Channel name is required', true);
+
+            const payload = {
+                name,
+                color: document.getElementById('cmodal-color').value,
+                activeEngine: document.getElementById('cmodal-engine').value,
+                streamUrl: document.getElementById('cmodal-stream-url').value.trim(),
+                streamKey: document.getElementById('cmodal-stream-key').value.trim(),
+                youtubeLiveId: document.getElementById('cmodal-youtube-live-id').value.trim(),
+                youtubeChatMode: document.getElementById('cmodal-chat-mode').value,
+                gameSettings: {
+                    watermark: document.getElementById('cmodal-watermark').value.trim()
+                }
+            };
+            if (id) payload.id = id;
+
+            try {
+                const res = await fetch('/api/profiles', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(`Channel "${name}" saved!`);
+                    closeChannelProfileModal();
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Failed to save channel', true);
+                }
+            } catch (e) {
+                showAlert('Network error saving channel', true);
+            }
+        }
+
+        async function duplicateChannelProfile(id) {
+            if (!confirm('Clone this channel profile?')) return;
+            try {
+                const res = await fetch(`/api/profiles/${id}/duplicate`, {
+                    method: 'POST',
+                    headers: API_HEADERS()
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(`Channel duplicated as "${data.profile?.name}"!`);
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Failed to duplicate channel', true);
+                }
+            } catch (e) {
+                showAlert('Network error duplicating channel', true);
+            }
+        }
+
+        async function deleteChannelProfile(id) {
+            const p = profilesList.find(x => x.id === id);
+            if (!confirm(`Are you sure you want to delete profile "${p ? p.name : id}"?`)) return;
+            try {
+                const res = await fetch(`/api/profiles/${id}`, {
+                    method: 'DELETE',
+                    headers: API_HEADERS()
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert('Channel profile removed.');
+                    if (selectedProfileId === id) selectedProfileId = data.activeProfileId;
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Failed to delete channel', true);
+                }
+            } catch (e) {
+                showAlert('Network error deleting channel', true);
+            }
+        }
+
+        async function onSwitchProfileDropdown(newId) {
+            if (!newId || newId === selectedProfileId) return;
+            try {
+                const res = await fetch('/api/profiles/switch', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: newId })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    selectedProfileId = newId;
+                    activeProfileId = newId;
+                    showAlert(`Switched active channel to "${data.profile?.name}"`);
+                    checkAuth();
+                }
+            } catch (e) {}
+        }
+
+        async function selectProfileForView(id) {
+            selectedProfileId = id;
+            await onSwitchProfileDropdown(id);
+            switchTab('tab-overview');
+        }
+
+        async function startStreamForProfile(profileId) {
+            const p = profilesList.find(x => x.id === profileId);
+            try {
+                const res = await fetch('/api/start-stream', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(`🚀 Live broadcast started on "${p ? p.name : profileId}"!`);
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Could not start stream', true);
+                }
+            } catch (e) {
+                showAlert('Network error starting stream', true);
+            }
+        }
+
+        async function stopStreamForProfile(profileId) {
+            const p = profilesList.find(x => x.id === profileId);
+            try {
+                const res = await fetch('/api/stop-stream', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showAlert(`⏹ Broadcast stopped on "${p ? p.name : profileId}".`);
+                    checkAuth();
+                } else {
+                    showAlert(data.error || 'Could not stop stream', true);
+                }
+            } catch (e) {
+                showAlert('Network error stopping stream', true);
+            }
+        }
+
+        async function startAllStreams() {
+            const offlineProfiles = profilesList.filter(p => !p.isStreaming);
+            if (!offlineProfiles.length) return showAlert('All configured channels are already streaming live!');
+            showAlert(`Starting ${offlineProfiles.length} streams...`);
+            for (const p of offlineProfiles) {
+                await startStreamForProfile(p.id);
+                await new Promise(r => setTimeout(r, 1200));
+            }
+        }
+
+        async function stopAllStreams() {
+            const onlineProfiles = profilesList.filter(p => p.isStreaming);
+            if (!onlineProfiles.length) return showAlert('No channels are currently streaming.');
+            if (!confirm(`Stop all ${onlineProfiles.length} active live streams?`)) return;
+            for (const p of onlineProfiles) {
+                await stopStreamForProfile(p.id);
+            }
+        }
+
+        function renderProfileSwitcher(profiles, activeId, sessions = []) {
+            const select = document.getElementById('active-profile-select');
+            const dot = document.getElementById('topbar-profile-color-dot');
+            if (!select || !profiles || !profiles.length) return;
+
+            const currentVal = select.value || activeId;
+            select.innerHTML = '';
+            profiles.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                const s = sessions.find(x => x.profileId === p.id);
+                const isLive = p.isStreaming || (s && s.isStreaming);
+                opt.textContent = `${isLive ? '🔴' : '⚪'} ${p.name}`;
+                if (p.id === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            const activeProfile = profiles.find(p => p.id === currentVal) || profiles[0];
+            if (dot && activeProfile) {
+                dot.style.background = activeProfile.color || '#38bdf8';
+                dot.style.boxShadow = `0 0 8px ${activeProfile.color || '#38bdf8'}`;
+            }
+
+            // Update Overview quick bar pills
+            const pillsContainer = document.getElementById('overview-channel-pills');
+            if (pillsContainer) {
+                pillsContainer.innerHTML = '';
+                profiles.forEach(p => {
+                    const s = sessions.find(x => x.profileId === p.id);
+                    const isLive = p.isStreaming || (s && s.isStreaming);
+                    const pill = document.createElement('button');
+                    pill.type = 'button';
+                    pill.className = 'btn';
+                    pill.style.cssText = `font-size: 11px; padding: 2px 8px; height: 24px; border-radius: 4px; display: flex; align-items: center; gap: 5px; font-weight: 600; background: ${p.id === activeId ? 'rgba(56, 189, 248, 0.25)' : 'rgba(0,0,0,0.4)'}; border: 1px solid ${p.id === activeId ? (p.color || '#38bdf8') : 'var(--border)'}; color: #fff; cursor: pointer;`;
+                    pill.innerHTML = `
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: ${isLive ? '#ef4444' : '#64748b'}; display: inline-block;"></span>
+                        <span>${escapeHtml(p.name)}</span>
+                        ${isLive ? `<span style="font-size: 9px; color: #fca5a5; background: rgba(239,68,68,0.25); padding: 1px 4px; border-radius: 3px;">ON AIR</span>` : ''}
+                    `;
+                    pill.onclick = () => onSwitchProfileDropdown(p.id);
+                    pillsContainer.appendChild(pill);
+                });
+            }
+
+            // Update Sidebar badge
+            const liveCount = profiles.filter(p => p.isStreaming).length;
+            const sideBadge = document.getElementById('sidebar-live-channels-count');
+            if (sideBadge) {
+                if (liveCount > 0) {
+                    sideBadge.style.display = 'inline-block';
+                    sideBadge.textContent = `${liveCount} LIVE`;
+                } else {
+                    sideBadge.style.display = 'none';
+                }
+            }
+        }
+
+        function renderChannelMatrix(profiles, activeId, sessions = []) {
+            const grid = document.getElementById('channel-matrix-grid');
+            if (!grid || !profiles) return;
+
+            const totalEl = document.getElementById('metric-total-channels');
+            const liveEl = document.getElementById('metric-live-channels');
+            const slotsEl = document.getElementById('metric-available-slots');
+            const viewersEl = document.getElementById('metric-total-viewers');
+
+            const liveCount = profiles.filter(p => p.isStreaming).length;
+            if (totalEl) totalEl.textContent = profiles.length;
+            if (liveEl) liveEl.textContent = liveCount;
+            if (slotsEl) slotsEl.textContent = `${Math.max(0, 4 - liveCount)} of 4`;
+
+            let totalViewers = 0;
+            sessions.forEach(s => { if (typeof s.viewerCount === 'number') totalViewers += s.viewerCount; });
+            if (viewersEl) viewersEl.textContent = liveCount > 0 ? (totalViewers > 0 ? `${totalViewers} concurrent` : 'Connecting...') : '—';
+
+            grid.innerHTML = '';
+            profiles.forEach(p => {
+                const s = sessions.find(x => x.profileId === p.id);
+                const isLive = p.isStreaming || (s && s.isStreaming);
+                const isActive = p.id === activeId;
+                const color = p.color || '#38bdf8';
+
+                let engineLabel = '🦸 Multiverse 16-Hero';
+                if (p.activeEngine === 'points-race') engineLabel = '⚡ Points Race';
+                else if (p.activeEngine === 'vertical') engineLabel = '📱 Vertical (9:16)';
+                else if (p.activeEngine === 'landscape') engineLabel = '🖥️ Landscape';
+
+                const card = document.createElement('div');
+                card.style.cssText = `background: rgba(15, 23, 42, 0.7); border: 1px solid ${isActive ? color : 'var(--border)'}; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; position: relative; box-shadow: ${isActive ? `0 0 15px rgba(56, 189, 248, 0.15)` : 'none'};`;
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="width: 12px; height: 12px; border-radius: 50%; background: ${color}; display: inline-block; box-shadow: 0 0 8px ${color};"></span>
+                            <div>
+                                <div style="font-weight: 700; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 6px;">
+                                    ${escapeHtml(p.name)}
+                                    ${isActive ? `<span style="font-size: 10px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 600;">ACTIVE VIEW</span>` : ''}
+                                </div>
+                                <div style="font-size: 11px; color: #94a3b8; margin-top: 1px;">${engineLabel}</div>
+                            </div>
+                        </div>
+                        <div>
+                            ${isLive 
+                                ? `<span style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; display: flex; align-items: center; gap: 5px;">
+                                    <span class="status-dot" style="background: #ef4444;"></span> ON AIR
+                                   </span>` 
+                                : `<span style="background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); color: #94a3b8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px;">IDLE / READY</span>`
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Telemetry / Details Row -->
+                    <div style="background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 10px 12px; font-size: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        ${isLive && s ? `
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; margin-bottom: 2px;">
+                                <div>
+                                    <div style="font-size: 10px; color: #94a3b8;">FPS</div>
+                                    <div style="font-weight: 700; color: #38bdf8;">${s.telemetry?.fps || 0}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: #94a3b8;">SPEED</div>
+                                    <div style="font-weight: 700; color: #10b981;">${s.telemetry?.speed || '1.0x'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: #94a3b8;">VIEWERS</div>
+                                    <div style="font-weight: 700; color: #eab308;">${typeof s.viewerCount === 'number' ? s.viewerCount : '—'}</div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        <div style="display: flex; justify-content: space-between; color: #cbd5e1; font-size: 11.5px;">
+                            <span style="color: #94a3b8;">RTMP Stream:</span>
+                            <span style="font-family: monospace; color: #e2e8f0;">${p.streamKey ? '••••••••' + p.streamKey.slice(-4) : '<span style="color:#f87171;">Not Set</span>'}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #cbd5e1; font-size: 11.5px;">
+                            <span style="color: #94a3b8;">YouTube Target:</span>
+                            <span style="font-family: monospace; color: #38bdf8;">${p.youtubeLiveId ? escapeHtml(p.youtubeLiveId) : '<span style="color:#94a3b8;">Auto/None</span>'}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: #cbd5e1; font-size: 11.5px;">
+                            <span style="color: #94a3b8;">Watermark:</span>
+                            <span style="color: #eab308; font-weight: 600;">${escapeHtml(p.gameSettings?.watermark || p.watermark || '—')}</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions Row -->
+                    <div style="display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap;">
+                        ${isLive 
+                            ? `<button class="btn btn-danger" onclick="stopStreamForProfile('${p.id}')" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                                ⏹ Stop Broadcast
+                               </button>`
+                            : `<button class="btn btn-success" onclick="startStreamForProfile('${p.id}')" style="flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                                ▶ Go Live
+                               </button>`
+                        }
+                        <button class="btn" onclick="selectProfileForView('${p.id}')" style="padding: 7px 10px; font-size: 11px;" title="Switch dashboard view & preview to this channel">
+                            👁 View
+                        </button>
+                        <button class="btn" onclick="openChannelProfileModal('${p.id}')" style="padding: 7px 10px; font-size: 11px;" title="Edit credentials & settings">
+                            ⚙ Edit
+                        </button>
+                        <button class="btn" onclick="duplicateChannelProfile('${p.id}')" style="padding: 7px 10px; font-size: 11px;" title="Clone this channel profile">
+                            📋
+                        </button>
+                        ${profiles.length > 1 && !isLive 
+                            ? `<button class="btn btn-danger" onclick="deleteChannelProfile('${p.id}')" style="padding: 7px 10px; font-size: 11px;" title="Delete channel profile">🗑</button>` 
+                            : ''
+                        }
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
 
         function showAlert(msg, isError = false) {
             alertBox.querySelector('.text').textContent = msg;
@@ -1678,7 +2240,9 @@
         // from the persisted defaults first so what you see is what's stored.
         // Opening settings must not change the currently selected preview.
         function openSettingsModal() {
-            fetch('/api/status', { headers: API_HEADERS() })
+            const targetProfile = selectedProfileId || activeProfileId;
+            const url = targetProfile ? `/api/status?profileId=${encodeURIComponent(targetProfile)}` : '/api/status';
+            fetch(url, { headers: API_HEADERS() })
                 .then(r => (r.ok ? r.json() : null))
                 .then(data => { if (data) populateSettings(data.settings, { updatePreview: false }); })
                 .catch(() => {});
@@ -1729,7 +2293,7 @@
         async function checkAuth() {
             if (!authKey) return showView('login-view');
             try {
-                const res = await fetch('/api/status', { headers: API_HEADERS() });
+                const res = await fetch(`/api/status?profileId=${encodeURIComponent(selectedProfileId)}`, { headers: API_HEADERS() });
                 if (res.status === 401) {
                     logout();
                     return;
@@ -1759,6 +2323,15 @@
         }
 
         function applyStatus(data) {
+            if (data.profiles) {
+                profilesList = data.profiles;
+                activeProfileId = data.activeProfileId || 'default';
+                if (!selectedProfileId) selectedProfileId = activeProfileId;
+                allSessionsList = data.allSessions || [];
+                renderProfileSwitcher(profilesList, selectedProfileId, allSessionsList);
+                renderChannelMatrix(profilesList, selectedProfileId, allSessionsList);
+            }
+
             const isLive = data.isStreaming || data.isRecording;
             document.getElementById('btn-start').style.display = isLive ? 'none' : 'flex';
             document.getElementById('btn-stop').style.display = isLive ? 'flex' : 'none';
@@ -1982,11 +2555,12 @@
         async function goLiveNow() {
             const dur = Number(document.getElementById('now-duration').value);
             if (!dur || dur <= 0) return showAlert('Enter a duration in minutes', true);
+            const targetProfile = selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/start-now', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ durationMinutes: dur })
+                    body: JSON.stringify({ durationMinutes: dur, profileId: targetProfile })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
@@ -2013,6 +2587,7 @@
             }
 
             const body = {
+                profileId: selectedProfileId || activeProfileId,
                 mode: 'schedule',
                 // No timezone suffix: this is parsed in the browser's local zone,
                 // which is what the operator sees in the picker.
@@ -2168,7 +2743,7 @@
                 const res = await fetch('/api/schedule/clear', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ profileId: selectedProfileId || activeProfileId })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
@@ -2182,18 +2757,22 @@
         async function startStream() {
             const durSelect = document.getElementById('topbar-stream-duration');
             const dur = durSelect ? Number(durSelect.value) : 0;
+            const targetProfile = selectedProfileId || activeProfileId;
+            const prof = (profilesList || []).find(p => p.id === targetProfile);
+            const profName = prof ? prof.name : 'Channel';
+
             document.getElementById('btn-start').disabled = true;
             try {
                 if (dur > 0) {
                     const res = await fetch('/api/schedule/start-now', {
                         method: 'POST',
                         headers: API_HEADERS(),
-                        body: JSON.stringify({ durationMinutes: dur })
+                        body: JSON.stringify({ durationMinutes: dur, profileId: targetProfile })
                     });
                     const data = await res.json();
                     if (res.ok && data.success) {
                         if (data.state) applyScheduleState(data.state);
-                        showAlert(`🚀 Stream started! Auto-stop timer set to ${fmtDurationWords(dur)}`);
+                        showAlert(`🚀 Stream started on [${profName}]! Auto-stop timer set to ${fmtDurationWords(dur)}`);
                         checkAuth();
                     } else {
                         showAlert(data.error || 'Could not start scheduled stream', true);
@@ -2202,11 +2781,11 @@
                     const res = await fetch('/api/start-stream', { 
                         method: 'POST', 
                         headers: API_HEADERS(),
-                        body: JSON.stringify({})
+                        body: JSON.stringify({ profileId: targetProfile })
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert('Stream booting! Server starting headless engine...');
+                        showAlert(`Stream booting on [${profName}]! Server starting headless engine on isolated display & audio...`);
                         checkAuth();
                     } else showAlert(data.error || 'Error', true);
                 }
@@ -2720,9 +3299,16 @@
 
         async function stopStream() {
             document.getElementById('btn-stop').disabled = true;
+            const targetProfile = selectedProfileId || activeProfileId;
+            const prof = (profilesList || []).find(p => p.id === targetProfile);
+            const profName = prof ? prof.name : 'Channel';
             try {
-                const res = await fetch('/api/stop-stream', { method: 'POST', headers: API_HEADERS() });
-                if (res.ok) { showAlert('Engine stopped safely'); checkAuth(); }
+                const res = await fetch('/api/stop-stream', {
+                    method: 'POST',
+                    headers: API_HEADERS(),
+                    body: JSON.stringify({ profileId: targetProfile })
+                });
+                if (res.ok) { showAlert(`Engine stopped safely for [${profName}]`); checkAuth(); }
             } catch (e) {}
             document.getElementById('btn-stop').disabled = false;
         }
@@ -3038,12 +3624,14 @@
                 }
             };
 
+            const targetProfile = selectedProfileId || activeProfileId;
+
             // 1. Save persistently
             try {
                 await fetch('/api/settings', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ ...rtmpPayload, gameSettings: gamePayload })
+                    body: JSON.stringify({ profileId: targetProfile, ...rtmpPayload, gameSettings: gamePayload })
                 });
             } catch(e) {}
             
@@ -3055,7 +3643,7 @@
                     const res = await fetch('/api/control', {
                         method: 'POST',
                         headers: API_HEADERS(),
-                        body: JSON.stringify({ action: 'settings', payload: gamePayload })
+                        body: JSON.stringify({ profileId: targetProfile, action: 'settings', payload: gamePayload })
                     });
                     const data = await res.json();
                     if (res.ok) {
@@ -3082,10 +3670,11 @@
             }
             
             try {
+                const targetProfile = selectedProfileId || activeProfileId;
                 const res = await fetch('/api/test-chat', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ author, text, superChat, tier })
+                    body: JSON.stringify({ profileId: targetProfile, author, text, superChat, tier })
                 });
                 if (res.ok) {
                     document.getElementById('demo-text').value = '';
@@ -3101,13 +3690,14 @@
         async function controlGame(action) {
             const badge = document.getElementById('status-badge');
             const isLive = badge.textContent.includes('STREAMING') || badge.textContent.includes('RECORDING');
+            const targetProfile = selectedProfileId || activeProfileId;
             
             if (isLive) {
                 try {
                     const res = await fetch('/api/control', {
                         method: 'POST',
                         headers: API_HEADERS(),
-                        body: JSON.stringify({ action })
+                        body: JSON.stringify({ profileId: targetProfile, action })
                     });
                     const data = await res.json();
                     if (!res.ok) showAlert(data.error || 'Control error', true);
@@ -3414,7 +4004,7 @@
                 fetch('/api/control', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ action: 'clear-supporters' })
+                    body: JSON.stringify({ profileId: selectedProfileId || activeProfileId, action: 'clear-supporters' })
                 }).catch(() => {});
             }
 
@@ -3424,7 +4014,7 @@
                     fetch('/api/control', {
                         method: 'POST',
                         headers: API_HEADERS(),
-                        body: JSON.stringify({ action: apiAction })
+                        body: JSON.stringify({ profileId: selectedProfileId || activeProfileId, action: apiAction })
                     }).catch(() => {});
                 }
             }
@@ -3462,18 +4052,21 @@
                 fetch('/api/control', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ action: 'speed', payload: { speed: Number(val) } })
+                    body: JSON.stringify({ profileId: selectedProfileId || activeProfileId, action: 'speed', payload: { speed: Number(val) } })
                 }).catch(() => {});
             }
         }
 
         async function updateStatusAndLogs() {
             try {
-                const res = await fetch('/api/status', { headers: API_HEADERS() });
+                const targetProfile = selectedProfileId || '';
+                const url = targetProfile ? `/api/status?profileId=${encodeURIComponent(targetProfile)}` : '/api/status';
+                const res = await fetch(url, { headers: API_HEADERS() });
                 if (res.ok) {
                     const data = await res.json();
                     applyStatus(data);
                 }
+                if (typeof fetchProfiles === 'function') fetchProfiles();
                 if (document.getElementById('tab-logs').classList.contains('active')) fetchLogs();
                 if (document.getElementById('tab-records').classList.contains('active')) fetchRecordings();
             } catch (e) {}

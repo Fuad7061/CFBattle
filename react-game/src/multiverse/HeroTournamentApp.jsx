@@ -786,7 +786,9 @@ export default function HeroTournamentApp() {
   useEffect(() => {
     let sse;
     try {
-      sse = new EventSource('/api/chat-stream');
+      const profileParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('profile') : null;
+      const streamUrl = profileParam ? `/api/chat-stream?profile=${encodeURIComponent(profileParam)}` : '/api/chat-stream';
+      sse = new EventSource(streamUrl);
       sse.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);

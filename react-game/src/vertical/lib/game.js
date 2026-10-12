@@ -198,7 +198,9 @@ export class FlagBattle {
   /* ================================================================== */
 
   _initYoutubeChat() {
-    const source = new EventSource('/api/chat-stream');
+    const profileParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('profile') : null;
+    const streamUrl = profileParam ? `/api/chat-stream?profile=${encodeURIComponent(profileParam)}` : '/api/chat-stream';
+    const source = new EventSource(streamUrl);
     source.onmessage = (e) => {
       if (e.data === ': ping') return;
       try {

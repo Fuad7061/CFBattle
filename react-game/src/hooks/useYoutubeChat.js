@@ -50,7 +50,9 @@ export function useYoutubeChat({ onMessage, onVoteTally, onTopSupporters } = {})
   useEffect(() => {
     let es;
     try {
-      es = new EventSource(`${SERVER_URL}/api/chat-stream`);
+      const profileParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('profile') : null;
+      const streamUrl = profileParam ? `${SERVER_URL}/api/chat-stream?profile=${encodeURIComponent(profileParam)}` : `${SERVER_URL}/api/chat-stream`;
+      es = new EventSource(streamUrl);
     } catch (e) {
       console.warn('[useYoutubeChat] Could not open chat stream:', e);
       return undefined;
