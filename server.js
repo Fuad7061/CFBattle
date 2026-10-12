@@ -155,13 +155,21 @@ let currentSettings = getActiveProfile();
 // Active multi-stream runtime sessions (profileId -> session)
 const activeSessions = new Map();
 
-// Helper to provide active live stream target video IDs to Auto-Commenter
+// Helper to provide active live stream targets to Auto-Commenter
 commenter.getActiveLiveTargets = () => {
     const targets = [];
     for (const [id, s] of activeSessions.entries()) {
-        if (s.isStreaming && s.profile?.youtubeLiveId) {
-            const { liveVideoId } = parseYoutubeTarget(s.profile.youtubeLiveId);
-            if (liveVideoId && !targets.includes(liveVideoId)) targets.push(liveVideoId);
+        const ytTarget = s.profile?.youtubeLiveId || (id === profilesState.activeProfileId ? currentSettings.youtubeLiveId : null);
+        if (s.isStreaming && ytTarget) {
+            const { liveVideoId } = parseYoutubeTarget(ytTarget);
+            if (liveVideoId && !targets.some(t => t.videoId === liveVideoId)) {
+                targets.push({
+                    videoId: liveVideoId,
+                    profileId: id,
+                    profileName: s.profileName || s.profile?.name || id,
+                    engine: s.profile?.activeEngine || 'points-race'
+                });
+            }
         }
     }
     return targets;
@@ -401,13 +409,15 @@ app.get('/api/status', checkAuth, (req, res) => {
         youtubeChat: session ? session.youtubeChatStatus : getYoutubeChatStatusForProfile(profile.id),
         profiles: profilesState.profiles.map(p => {
             const s = activeSessions.get(p.id);
+            const sc = getSchedulerForProfile(p.id);
             return {
                 ...p,
                 isStreaming: !!(s && s.isStreaming),
                 isRecording: !!(s && s.isRecording),
                 telemetry: s ? s.telemetry : { health: 'offline', speed: '0x', fps: 0 },
                 viewerCount: s ? s.liveViewerCount : null,
-                startedAt: s ? s.startedAt : null
+                startedAt: s ? s.startedAt : null,
+                schedule: sc ? sc.getState() : { enabled: false }
             };
         }),
         allSessions: Array.from(activeSessions.values()).map(s => ({
@@ -1830,14 +1840,14 @@ const scheduler = {
 };
 
 app.get('/api/schedule', checkAuth, (req, res) => {
-    const targetId = req.query.profileId || profilesState.activeProfileId;
+    const targetId = req.query.profileId || req.query.profile || profilesState.activeProfileId;
     const sched = getSchedulerForProfile(targetId);
     res.json(sched.getState());
 });
 
 // Create or replace the schedule for a specific profile. Does not start anything by itself.
 app.post('/api/schedule', checkAuth, (req, res) => {
-    const targetId = req.body.profileId || profilesState.activeProfileId;
+    const targetId = req.body?.profileId || req.body?.profile || profilesState.activeProfileId;
     const sched = getSchedulerForProfile(targetId);
     const result = sched.set(req.body || {});
     if (!result.ok) return res.status(400).json({ error: result.error });
@@ -1846,7 +1856,7 @@ app.post('/api/schedule', checkAuth, (req, res) => {
 
 // "Go live now, auto-stop after N minutes" for a specific profile
 app.post('/api/schedule/start-now', checkAuth, async (req, res) => {
-    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const targetId = req.body?.profileId || req.body?.profile || profilesState.activeProfileId;
     const sched = getSchedulerForProfile(targetId);
     const result = await sched.startNow(req.body?.durationMinutes);
     if (!result.ok) return res.status(400).json({ error: result.error });
@@ -1855,7 +1865,7 @@ app.post('/api/schedule/start-now', checkAuth, async (req, res) => {
 
 // Turn the schedule off for a specific profile. Leaves a running stream alone.
 app.post('/api/schedule/clear', checkAuth, (req, res) => {
-    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const targetId = req.body?.profileId || req.body?.profile || profilesState.activeProfileId;
     const sched = getSchedulerForProfile(targetId);
     sched.clear();
     res.json({ success: true, state: sched.getState(), profileId: targetId });
@@ -1863,7 +1873,7 @@ app.post('/api/schedule/clear', checkAuth, (req, res) => {
 
 // Modify or extend duration of a running (or scheduled) livestream
 app.post('/api/schedule/modify-duration', checkAuth, (req, res) => {
-    const targetId = req.body?.profileId || profilesState.activeProfileId;
+    const targetId = req.body?.profileId || req.body?.profile || profilesState.activeProfileId;
     const sched = getSchedulerForProfile(targetId);
     const result = sched.modifyRunningDuration(req.body || {});
     if (!result.ok) return res.status(400).json({ error: result.error });

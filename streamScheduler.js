@@ -156,7 +156,7 @@ class StreamScheduler {
 
     // ----------------------------------------------------------------- public
 
-    /** Replace the schedule. Does not start anything by itself. */
+    /** Replace the schedule. Does not interrupt or stop a running stream. */
     set(input) {
         const res = StreamScheduler.validate(input, this.now());
         if (!res.ok) return res;
@@ -166,17 +166,41 @@ class StreamScheduler {
         // or its very first slot would be silently skipped.
         this.lastAttemptAt = null;
         this.lastResult = null;
-        // A schedule edit invalidates any in-flight run we were tracking.
-        this.activeRun = null;
+
+        // If a stream is already running, preserve the broadcast!
+        // Seamlessly adjust endsAt based on the new duration without dropping the live stream.
+        if (this.isStreaming()) {
+            const now = this.now();
+            const startedTime = this.activeRun?.startedAt ? new Date(this.activeRun.startedAt).getTime() : now.getTime();
+            if (this.config.durationMinutes > 0) {
+                this.activeRun = {
+                    startedAt: this.activeRun?.startedAt || now.toISOString(),
+                    endsAt: new Date(startedTime + this.config.durationMinutes * 60000).toISOString()
+                };
+            } else {
+                this.activeRun = {
+                    startedAt: this.activeRun?.startedAt || now.toISOString(),
+                    endsAt: null
+                };
+            }
+        } else {
+            this.activeRun = null;
+        }
+
         this.save();
         this.onLog(`Scheduler updated: ${this.describe()}`);
         return { ok: true, config: this.config };
     }
 
-    /** Turn the schedule off entirely. Never touches a running stream. */
+    /** Turn the schedule off entirely. Never stops or interrupts a running stream. */
     clear() {
         this.config = { ...DEFAULTS };
-        this.activeRun = null;
+        if (this.isStreaming() && this.activeRun) {
+            // Keep the broadcast running continuously, just clear the auto-stop timer
+            this.activeRun.endsAt = null;
+        } else {
+            this.activeRun = null;
+        }
         this.lastFiredAt = null;
         this.lastAttemptAt = null;
         this.lastResult = null;

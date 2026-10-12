@@ -224,6 +224,7 @@ class YouTubeCommenterService {
         return {
           id: acc.id,
           name: acc.name,
+          targetChannel: acc.targetChannel || 'all',
           authUser: acc.authUser !== undefined && acc.authUser !== null ? Number(acc.authUser) : 0,
           pageId: acc.pageId || '',
           channelName: acc.channelName || null,
@@ -255,7 +256,7 @@ class YouTubeCommenterService {
     return this.getStateSanitized();
   }
 
-  upsertAccount({ id, name, cookies, authUser, pageId, enabled }) {
+  upsertAccount({ id, name, cookies, authUser, pageId, targetChannel, enabled }) {
     const existingIdx = this.state.accounts.findIndex(a => a.id === id);
     const norm = normalizeCookies(cookies);
 
@@ -270,6 +271,7 @@ class YouTubeCommenterService {
       id: id || 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       name: (name || 'Account ' + (this.state.accounts.length + 1)).trim(),
       cookies: String(cookies || '').trim(),
+      targetChannel: targetChannel ? String(targetChannel).trim() : (existingIdx >= 0 && this.state.accounts[existingIdx].targetChannel ? this.state.accounts[existingIdx].targetChannel : 'all'),
       authUser: authUser !== undefined && authUser !== null && String(authUser).trim() !== '' ? parseInt(authUser, 10) || 0 : 0,
       pageId: pageId ? String(pageId).trim() : '',
       channelName: existingIdx >= 0 ? this.state.accounts[existingIdx].channelName : null,
@@ -345,8 +347,11 @@ class YouTubeCommenterService {
     }, delayMs);
   }
 
-  getRandomMessage() {
-    const audienceKey = this.state.settings.audience || 'viral';
+  getRandomMessage(engine = null) {
+    let audienceKey = this.state.settings.audience || 'viral';
+    if (engine === 'multiverse' || engine === 'hero-tournament') {
+      audienceKey = 'heroes';
+    }
     const countries = AUDIENCE_PRESETS[audienceKey] || AUDIENCE_PRESETS.viral;
     const country = countries[Math.floor(Math.random() * countries.length)];
 
@@ -370,27 +375,53 @@ class YouTubeCommenterService {
     this.activeAccountIndex = (this.activeAccountIndex + 1) % enabledAccounts.length;
     const account = enabledAccounts[this.activeAccountIndex];
 
-    let targets = [];
-    if (this.state.settings.targetVideoId) {
-      targets.push(this.state.settings.targetVideoId);
-    }
+    // Collect all candidate live targets
+    let candidateTargets = [];
     if (typeof this.getActiveLiveTargets === 'function') {
       try {
-        const extraTargets = this.getActiveLiveTargets();
-        if (Array.isArray(extraTargets)) {
-          for (const t of extraTargets) {
-            if (t && !targets.includes(t)) targets.push(t);
+        const liveTargets = this.getActiveLiveTargets();
+        if (Array.isArray(liveTargets)) {
+          for (const lt of liveTargets) {
+            if (typeof lt === 'string') {
+              candidateTargets.push({ videoId: lt, profileId: 'unknown', profileName: 'Live Stream', engine: 'points-race' });
+            } else if (lt && lt.videoId) {
+              candidateTargets.push(lt);
+            }
           }
         }
       } catch (e) {}
     }
-    if (targets.length === 0) return;
 
-    this.activeTargetIndex = ((this.activeTargetIndex || 0) + 1) % targets.length;
-    const targetVideoId = targets[this.activeTargetIndex];
+    // If onlyWhenStreaming is true and no streams are actively live, skip commenting
+    if (this.state.settings.onlyWhenStreaming && candidateTargets.length === 0) {
+      return;
+    }
 
-    const message = this.getRandomMessage();
-    await this.postComment(account, targetVideoId, message);
+    // Also include manual targetVideoId if configured and not already present
+    if (this.state.settings.targetVideoId) {
+      const vid = this.state.settings.targetVideoId;
+      if (!candidateTargets.some(t => t.videoId === vid)) {
+        candidateTargets.push({ videoId: vid, profileId: 'manual', profileName: 'Configured Video', engine: 'points-race' });
+      }
+    }
+
+    if (candidateTargets.length === 0) return;
+
+    // Filter candidate targets based on account's bound targetChannel
+    let matchingTargets = candidateTargets;
+    if (account.targetChannel && account.targetChannel !== 'all') {
+      matchingTargets = candidateTargets.filter(t => t.profileId === account.targetChannel);
+      if (matchingTargets.length === 0) {
+        // Account is dedicated to a specific channel that is not currently running
+        return;
+      }
+    }
+
+    this.activeTargetIndex = ((this.activeTargetIndex || 0) + 1) % matchingTargets.length;
+    const target = matchingTargets[this.activeTargetIndex];
+
+    const message = this.getRandomMessage(target.engine);
+    await this.postComment(account, target.videoId, message, target);
   }
 
   /**
@@ -518,7 +549,7 @@ class YouTubeCommenterService {
   /**
    * Sends a live chat message using pure Node.js HTTP InnerTube POST
    */
-  async postComment(account, videoId, message) {
+  async postComment(account, videoId, message, target = null) {
     try {
       const session = await this.getLiveChatSession(account, videoId);
       const authHeader = generateSapisidHash(session.sapisid);
@@ -572,8 +603,9 @@ class YouTubeCommenterService {
         this.saveState();
 
         const channelLabel = account.channelName ? ` [${account.channelName}]` : '';
-        addLog(account.name + channelLabel, `Sent: "${message}"`, 'success', `HTTP 200 OK`);
-        return { ok: true, message, account: account.name, channelName: account.channelName, data };
+        const targetDesc = target?.profileName ? `[${target.profileName}]` : videoId;
+        addLog(account.name + channelLabel, `Sent to ${targetDesc}: "${message}"`, 'success', `HTTP 200 OK`);
+        return { ok: true, message, account: account.name, channelName: account.channelName, target, data };
       } else {
         const errMsg = data.error?.message || `YouTube API error (HTTP ${res.status})`;
         account.status = 'error';
@@ -582,7 +614,8 @@ class YouTubeCommenterService {
 
         // Invalidate session cache if token issue
         sessionCache.delete(`${account.id}_${videoId}`);
-        addLog(account.name, `Failed: "${message}"`, 'error', errMsg);
+        const targetDesc = target?.profileName ? `[${target.profileName}]` : videoId;
+        addLog(account.name, `Failed on ${targetDesc}: "${message}"`, 'error', errMsg);
         return { ok: false, error: errMsg };
       }
     } catch (err) {
@@ -602,7 +635,18 @@ class YouTubeCommenterService {
     const account = this.state.accounts.find(a => a.id === accountId);
     if (!account) return { ok: false, error: 'Account not found' };
 
-    const videoId = sampleVideoId || this.state.settings.targetVideoId;
+    let videoId = sampleVideoId || this.state.settings.targetVideoId;
+    if (!videoId && typeof this.getActiveLiveTargets === 'function') {
+      try {
+        const liveTargets = this.getActiveLiveTargets();
+        if (Array.isArray(liveTargets) && liveTargets.length > 0) {
+          const match = (account.targetChannel && account.targetChannel !== 'all')
+            ? liveTargets.find(t => t.profileId === account.targetChannel)
+            : liveTargets[0];
+          if (match) videoId = match.videoId || match;
+        }
+      } catch (e) {}
+    }
     if (!videoId) return { ok: false, error: 'Please set a YouTube Live Video ID first in the settings.' };
 
     try {
@@ -631,11 +675,26 @@ class YouTubeCommenterService {
     const account = this.state.accounts.find(a => a.id === accountId);
     if (!account) return { ok: false, error: 'Account not found' };
 
-    const videoId = this.state.settings.targetVideoId;
-    if (!videoId) return { ok: false, error: 'Please set a YouTube Live Video ID first in the settings.' };
+    let videoId = this.state.settings.targetVideoId;
+    let target = null;
+    if (typeof this.getActiveLiveTargets === 'function') {
+      try {
+        const liveTargets = this.getActiveLiveTargets();
+        if (Array.isArray(liveTargets) && liveTargets.length > 0) {
+          const match = (account.targetChannel && account.targetChannel !== 'all')
+            ? liveTargets.find(t => t.profileId === account.targetChannel)
+            : liveTargets[0];
+          if (match) {
+            target = match;
+            videoId = match.videoId || match;
+          }
+        }
+      } catch (e) {}
+    }
+    if (!videoId) return { ok: false, error: 'Please set a YouTube Live Video ID first in the settings or start a live stream.' };
 
-    const msg = customMessage || this.getRandomMessage();
-    return await this.postComment(account, videoId, msg);
+    const msg = customMessage || this.getRandomMessage(target?.engine);
+    return await this.postComment(account, videoId, msg, target);
   }
 }
 

@@ -931,9 +931,34 @@
 
                 <!-- TAB: STREAM SCHEDULE -->
                 <div id="tab-schedule" class="tab-pane">
+                    <!-- Channel Schedule Selector Bar -->
+                    <div class="panel" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(56, 189, 248, 0.3); padding: 14px 18px; margin-bottom: 16px; border-radius: 10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:24px;">📅</span>
+                                <div>
+                                    <h3 style="margin:0; font-size:15px; font-weight:700; color:#f8fafc; display:flex; align-items:center; gap:8px;">
+                                        Channel Schedule &amp; Broadcast Manager
+                                        <span id="sched-channel-badge" style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px; background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4);">Channel 1</span>
+                                    </h3>
+                                    <div style="font-size:12px; color:#94a3b8; margin-top:2px;">
+                                        Configure unique start times, run durations, and recurring broadcast slots independently for each channel.
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <label style="font-size:12px; font-weight:600; color:#cbd5e1; margin:0;">Active Channel:</label>
+                                <select id="sched-channel-select" onchange="onSelectScheduleChannel(this.value)" style="padding:8px 12px; font-weight:700; border-radius:6px; background:#0f172a; border:1px solid rgba(56,189,248,0.4); color:#38bdf8; min-width:210px; cursor:pointer;">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="panel">
-                        <div class="panel-header">
-                            <h2>Live Status</h2>
+                        <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                            <h2>Channel Broadcast &amp; Schedule Status</h2>
+                            <span id="sched-current-channel-label" style="font-size:12px; font-weight:700; color:#38bdf8; background:rgba(56,189,248,0.15); padding:3px 10px; border-radius:6px; border:1px solid rgba(56,189,248,0.3);">Channel 1</span>
                         </div>
                         <div id="sched-status" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px; border-radius:8px; background:rgba(0,0,0,0.25); border:1px solid var(--border);">
                             <span id="sched-status-badge" class="status-badge" style="margin:0;">
@@ -1176,6 +1201,10 @@
                                         <option value="asia">🌏 Asia-Pacific (IN, ID, VN, PH, JP, KR, BD, PK)</option>
                                     </select>
                                 </div>
+                            </div>
+                            <div id="vps-bot-live-targets-summary" style="margin-top:10px; padding:8px 12px; background:rgba(15,23,42,0.6); border-radius:6px; border:1px solid rgba(56,189,248,0.2); font-size:11.5px; color:#cbd5e1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <div><b style="color:#38bdf8;">📡 Active Multi-Channel Streams:</b> <span id="vps-bot-active-targets-list">Auto-detecting...</span></div>
+                                <span style="font-size:10.5px; color:#94a3b8;">Auto-detects live streams &amp; adapts comments to active engine (Superheroes vs Flags)</span>
                             </div>
                         </div>
 
@@ -1818,6 +1847,14 @@
                     </div>
                 </div>
 
+                <div class="sg" style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 11px; color: #cbd5e1; margin-bottom: 4px; font-weight: 600;">Target Channel Profile</label>
+                    <select id="bot-acc-target-channel" style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; color: white; font-size: 12px;">
+                        <option value="all">🌐 All Channels (Comment across all active live streams)</option>
+                    </select>
+                    <span style="font-size: 10px; color: #94a3b8; display: block; margin-top: 3px;">Assign this bot to comment on a specific live channel or participate across all active streams.</span>
+                </div>
+
                 <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 12px; border-radius: 8px;">
                     <div style="font-weight: 700; color: #38bdf8; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
                         <span>🛡️</span> How to Guarantee Comments Never Use Your Main Channel:
@@ -2250,6 +2287,7 @@
         function renderChannelMatrix(profiles, activeId, sessions = []) {
             const grid = document.getElementById('channel-matrix-grid');
             if (!grid || !profiles) return;
+            updateScheduleChannelSelect(profiles);
 
             const totalEl = document.getElementById('metric-total-channels');
             const liveEl = document.getElementById('metric-live-channels');
@@ -2276,6 +2314,19 @@
                 if (p.activeEngine === 'points-race') engineLabel = '⚡ Points Race';
                 else if (p.activeEngine === 'vertical') engineLabel = '📱 Vertical (9:16)';
                 else if (p.activeEngine === 'landscape') engineLabel = '🖥️ Landscape';
+
+                let scheduleHtml = `<span style="color: #94a3b8;">None</span>`;
+                if (p.schedule) {
+                    if (p.schedule.status === 'live') {
+                        scheduleHtml = `<span style="color: #4ade80; font-weight:700;">⏱️ Stops in ${fmtCountdown(p.schedule.remainingMs)}</span>`;
+                    } else if (p.schedule.status === 'running') {
+                        scheduleHtml = `<span style="color: #fde047; font-weight:700;">♾️ Continuous Live</span>`;
+                    } else if (p.schedule.status === 'scheduled') {
+                        scheduleHtml = `<span style="color: #38bdf8; font-weight:700;">⏰ In ${fmtCountdown(p.schedule.nextRunInMs)}</span>`;
+                    } else if (p.schedule.config?.enabled) {
+                        scheduleHtml = `<span style="color: #94a3b8;">Ready (${p.schedule.config.durationMinutes || 60}m)</span>`;
+                    }
+                }
 
                 const card = document.createElement('div');
                 card.style.cssText = `background: rgba(15, 23, 42, 0.7); border: 1px solid ${isActive ? color : 'var(--border)'}; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; position: relative; box-shadow: ${isActive ? `0 0 15px rgba(56, 189, 248, 0.15)` : 'none'};`;
@@ -2305,7 +2356,7 @@
                     <!-- Telemetry / Details Row -->
                     <div style="background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 10px 12px; font-size: 12px; display: flex; flex-direction: column; gap: 6px;">
                         ${isLive && s ? `
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; margin-bottom: 2px;">
+                            <div style="grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px; margin-bottom: 2px; display: grid;">
                                 <div>
                                     <div style="font-size: 10px; color: #94a3b8;">FPS</div>
                                     <div style="font-weight: 700; color: #38bdf8;">${s.telemetry?.fps || 0}</div>
@@ -2332,6 +2383,10 @@
                             <span style="color: #94a3b8;">Watermark:</span>
                             <span style="color: #eab308; font-weight: 600;">${escapeHtml(p.gameSettings?.watermark || p.watermark || '—')}</span>
                         </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; color: #cbd5e1; font-size: 11.5px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; margin-top: 2px;">
+                            <span style="color: #94a3b8;">Broadcast Schedule:</span>
+                            <span>${scheduleHtml}</span>
+                        </div>
                     </div>
 
                     <!-- Actions Row -->
@@ -2349,6 +2404,9 @@
                                 ▶ Go Live
                                </button>`
                         }
+                        <button class="btn" onclick="openChannelSchedule('${p.id}')" style="padding: 7px 10px; font-size: 11px; background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.35); color: #7dd3fc;" title="Open &amp; edit broadcast schedule for this channel">
+                            ⏰ Schedule
+                        </button>
                         <button class="btn" onclick="selectProfileForView('${p.id}')" style="padding: 7px 10px; font-size: 11px;" title="Switch dashboard view & preview to this channel">
                             👁 View
                         </button>
@@ -2383,6 +2441,49 @@
             document.getElementById(viewId).classList.add('active-view');
         }
 
+        let selectedScheduleProfileId = null;
+
+        function updateScheduleChannelSelect(profiles, currentPid) {
+            const sel = document.getElementById('sched-channel-select');
+            if (!sel || !profiles || !profiles.length) return;
+            const target = currentPid || selectedScheduleProfileId || selectedProfileId || activeProfileId || profiles[0].id;
+            sel.innerHTML = profiles.map(p => {
+                return `<option value="${escapeHtml(p.id)}" ${p.id === target ? 'selected' : ''}>📺 ${escapeHtml(p.name)}</option>`;
+            }).join('');
+
+            const prof = profiles.find(p => p.id === target) || profiles[0];
+            const badge = document.getElementById('sched-channel-badge');
+            if (badge) badge.textContent = prof ? prof.name : target;
+            const curLbl = document.getElementById('sched-current-channel-label');
+            if (curLbl) curLbl.textContent = prof ? prof.name : target;
+        }
+
+        async function loadScheduleForProfile(pid) {
+            if (!pid) pid = selectedProfileId || activeProfileId || 'default';
+            selectedScheduleProfileId = pid;
+            updateScheduleChannelSelect(profilesList, pid);
+
+            try {
+                const res = await fetch(`/api/schedule?profileId=${encodeURIComponent(pid)}`, { headers: API_HEADERS() });
+                if (res.ok) {
+                    const sched = await res.json();
+                    applyScheduleState(sched);
+                }
+            } catch (e) {
+                console.error('Error loading schedule for profile:', e);
+            }
+        }
+
+        function onSelectScheduleChannel(pid) {
+            loadScheduleForProfile(pid);
+        }
+
+        function openChannelSchedule(profileId) {
+            selectedScheduleProfileId = profileId;
+            switchTab('tab-schedule');
+            loadScheduleForProfile(profileId);
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => {
@@ -2400,6 +2501,8 @@
                 if (startEl && !startEl.value) {
                     offsetSchedStart(30);
                 }
+                const targetPid = selectedScheduleProfileId || selectedProfileId || activeProfileId;
+                loadScheduleForProfile(targetPid);
             } else if (tabId === 'tab-doc') {
                 regenerateBotScript();
                 const setTarget = document.getElementById('set-youtube-live-id');
@@ -2742,7 +2845,7 @@
         async function goLiveNow() {
             const dur = Number(document.getElementById('now-duration').value);
             if (!dur || dur <= 0) return showAlert('Enter a duration in minutes', true);
-            const targetProfile = selectedProfileId || activeProfileId;
+            const targetProfile = selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/start-now', {
                     method: 'POST',
@@ -2773,8 +2876,9 @@
                 return showAlert('Pick at least one day for a weekly repeat', true);
             }
 
+            const targetProfile = selectedScheduleProfileId || selectedProfileId || activeProfileId;
             const body = {
-                profileId: selectedProfileId || activeProfileId,
+                profileId: targetProfile,
                 mode: 'schedule',
                 // No timezone suffix: this is parsed in the browser's local zone,
                 // which is what the operator sees in the picker.
@@ -2926,16 +3030,17 @@
         }
 
         async function clearSchedule() {
+            const targetProfile = selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/clear', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ profileId: selectedProfileId || activeProfileId })
+                    body: JSON.stringify({ profileId: targetProfile })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
                     if (data.state) applyScheduleState(data.state);
-                    showAlert('Schedule cleared. A live stream is not stopped.');
+                    showAlert('Schedule cleared. The live broadcast continues running uninterrupted.');
                 }
                 else showAlert(data.error || 'Could not clear', true);
             } catch (e) { showAlert('Network Error', true); }
@@ -3211,7 +3316,7 @@
         }
 
         async function quickExtendActiveStream(deltaMinutes) {
-            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/modify-duration', {
                     method: 'POST',
@@ -3237,7 +3342,7 @@
             const mins = Number(input?.value);
             if (!mins || mins <= 0) return showAlert('Please enter a valid duration in minutes.', true);
 
-            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/modify-duration', {
                     method: 'POST',
@@ -3259,7 +3364,7 @@
         }
 
         async function applyClearAutoStopFromModal() {
-            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedProfileId || activeProfileId;
+            const pid = document.getElementById('mod-dur-profile-id')?.value || selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/modify-duration', {
                     method: 'POST',
@@ -3281,7 +3386,7 @@
         }
 
         async function clearStreamAutoStop(targetProfileId = null) {
-            const pid = targetProfileId || selectedProfileId || activeProfileId;
+            const pid = targetProfileId || selectedScheduleProfileId || selectedProfileId || activeProfileId;
             try {
                 const res = await fetch('/api/schedule/modify-duration', {
                     method: 'POST',
@@ -4530,6 +4635,29 @@
             const accCount = document.getElementById('vps-bot-acc-count');
             if (accCount) accCount.textContent = accounts.length;
 
+            // Active Multi-Channel Streams targets summary
+            const activeTargetsListEl = document.getElementById('vps-bot-active-targets-list');
+            if (activeTargetsListEl) {
+                const liveSessions = (allSessionsList || []).filter(s => s.isStreaming && s.youtubeLiveVideoId);
+                if (liveSessions.length === 0) {
+                    const fallbackVid = (settings?.targetVideoId || '').trim();
+                    if (fallbackVid) {
+                        activeTargetsListEl.innerHTML = `<span style="color:#f59e0b; font-weight:600;">Manual Video ID: ${escapeHtml(fallbackVid)}</span>`;
+                    } else {
+                        activeTargetsListEl.innerHTML = `<span style="color:#94a3b8; font-style:italic;">No live streams active right now (Auto-starts when channels go live)</span>`;
+                    }
+                } else {
+                    activeTargetsListEl.innerHTML = liveSessions.map(s => {
+                        const prof = (profilesList || []).find(p => p.id === s.profileId);
+                        const profName = prof?.name || s.profileName || s.profileId;
+                        const engineIcon = s.engine === 'multiverse' ? '🦸' : '🚩';
+                        return `<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; background:rgba(34,197,94,0.15); color:#4ade80; font-weight:600; font-size:11px; margin-right:6px;">
+                            ${engineIcon} ${escapeHtml(profName)} (${escapeHtml(s.youtubeLiveVideoId)})
+                        </span>`;
+                    }).join('');
+                }
+            }
+
             // Render Accounts Cards
             const listEl = document.getElementById('vps-bot-accounts-list');
             if (listEl) {
@@ -4555,6 +4683,15 @@
                             ? `<span style="font-size: 9.5px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: rgba(168,85,247,0.2); color: #c084fc;">authuser=${acc.authUser}</span>`
                             : '';
 
+                        let targetChannelBadge = '';
+                        if (acc.targetChannel && acc.targetChannel !== 'all') {
+                            const targetProf = (profilesList || []).find(p => p.id === acc.targetChannel);
+                            const pName = targetProf ? targetProf.name : acc.targetChannel;
+                            targetChannelBadge = `<span style="font-size: 9.5px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: rgba(168,85,247,0.2); color: #c084fc;" title="Assigned to comment on ${escapeHtml(pName)} only">🎯 ${escapeHtml(pName)}</span>`;
+                        } else {
+                            targetChannelBadge = `<span style="font-size: 9.5px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: rgba(56,189,248,0.15); color: #38bdf8;" title="Participates across all active live channels">🌐 All Channels</span>`;
+                        }
+
                         return `
                         <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 12px; min-width: 220px;">
@@ -4566,6 +4703,7 @@
                                             ${acc.enabled ? 'ACTIVE' : 'MUTED'}
                                         </span>
                                         ${authUserBadge}
+                                        ${targetChannelBadge}
                                     </div>
                                     <div style="font-size: 11px; color: #94a3b8; margin-top: 3px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                                         ${channelDisplay}
@@ -4644,6 +4782,21 @@
             }
         }
 
+        function populateBotTargetChannelOptions(selectedVal) {
+            const selectEl = document.getElementById('bot-acc-target-channel');
+            if (!selectEl) return;
+            let html = '<option value="all">🌐 All Channels (Comment across all active live streams)</option>';
+            if (Array.isArray(profilesList)) {
+                profilesList.forEach(p => {
+                    const engineLabel = p.engine === 'multiverse' ? '🦸 Multiverse' : '🚩 Flags';
+                    const isLive = p.isStreaming ? ' [🔴 LIVE]' : '';
+                    html += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${engineLabel})${isLive}</option>`;
+                });
+            }
+            selectEl.innerHTML = html;
+            selectEl.value = selectedVal || 'all';
+        }
+
         function openAddBotAccountModal() {
             document.getElementById('bot-acc-id').value = '';
             document.getElementById('bot-acc-name').value = '';
@@ -4652,6 +4805,7 @@
             if (authUserEl) authUserEl.value = '0';
             const pageIdEl = document.getElementById('bot-acc-pageid');
             if (pageIdEl) pageIdEl.value = '';
+            populateBotTargetChannelOptions('all');
             document.getElementById('bot-modal-title').innerHTML = '<span>🍪</span> Add YouTube Bot Account';
             document.getElementById('bot-cookie-chip').textContent = 'Paste below';
             document.getElementById('bot-cookie-chip').style.color = '#94a3b8';
@@ -4669,6 +4823,7 @@
             if (authUserEl) authUserEl.value = (account.authUser !== undefined && account.authUser !== null) ? account.authUser : '0';
             const pageIdEl = document.getElementById('bot-acc-pageid');
             if (pageIdEl) pageIdEl.value = account.pageId || '';
+            populateBotTargetChannelOptions(account.targetChannel || 'all');
             document.getElementById('bot-modal-title').innerHTML = `<span>✏️</span> Edit Account: ${escapeHtml(account.name)}`;
             document.getElementById('bot-cookie-chip').textContent = 'Leave blank to keep existing';
             document.getElementById('bot-cookie-chip').style.color = '#38bdf8';
@@ -4709,6 +4864,7 @@
             const cookies = document.getElementById('bot-acc-cookies').value.trim();
             const authUser = parseInt(document.getElementById('bot-acc-authuser')?.value, 10) || 0;
             const pageId = document.getElementById('bot-acc-pageid')?.value.trim() || undefined;
+            const targetChannel = document.getElementById('bot-acc-target-channel')?.value || 'all';
 
             if (!id && !cookies) {
                 return showAlert('Please paste your YouTube cookies', true);
@@ -4718,7 +4874,7 @@
                 const res = await fetch('/api/bot/accounts', {
                     method: 'POST',
                     headers: API_HEADERS(),
-                    body: JSON.stringify({ id: id || undefined, name, cookies, authUser, pageId })
+                    body: JSON.stringify({ id: id || undefined, name, cookies, authUser, pageId, targetChannel })
                 });
                 const data = await res.json();
                 renderVpsBotState(data);
