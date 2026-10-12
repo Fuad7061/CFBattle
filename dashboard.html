@@ -577,6 +577,10 @@
             </div>
             
             <div class="header-actions">
+                <button class="btn" id="topbar-refresh-btn" onclick="manualRefreshData()" title="Sync live status and telemetry from VPS" style="display: flex; align-items: center; gap: 5px; padding: 8px 12px; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.3);">
+                    <span id="topbar-refresh-icon" style="display: inline-block; transition: transform 0.5s ease;">🔄</span>
+                    <span>Refresh</span>
+                </button>
                 <button class="btn" onclick="saveAndApplySettings()">💾 Save Settings</button>
                 <div class="status-badge" id="status-badge">
                     <div class="status-dot"></div>
@@ -728,7 +732,7 @@
                                     Stream isolated gameplays to multiple YouTube channels concurrently. Each channel possesses its own credentials, live chat listener, watermark, auto-commenter, and encoder slot.
                                 </p>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <button class="btn btn-success" onclick="startAllStreams()" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
                                     ▶ Start ALL Streams
                                 </button>
@@ -737,6 +741,9 @@
                                 </button>
                                 <button class="btn btn-primary" onclick="openChannelProfileModal()" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #0ea5e9, #3b82f6);">
                                     ➕ Add Channel Profile
+                                </button>
+                                <button id="btn-manual-refresh-matrix" class="btn" onclick="manualRefreshData()" title="Sync live status, telemetry & viewers from VPS" style="padding: 8px 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(148, 163, 184, 0.3); color: #e2e8f0; transition: all 0.2s ease;">
+                                    <span id="matrix-refresh-icon" style="display: inline-block; transition: transform 0.5s ease;">🔄</span> Refresh Data
                                 </button>
                             </div>
                         </div>
@@ -2294,14 +2301,29 @@
             const slotsEl = document.getElementById('metric-available-slots');
             const viewersEl = document.getElementById('metric-total-viewers');
 
-            const liveCount = profiles.filter(p => p.isStreaming).length;
+            const liveCount = profiles.filter(p => p.isStreaming || (sessions && sessions.some(s => s.profileId === p.id && s.isStreaming))).length;
             if (totalEl) totalEl.textContent = profiles.length;
             if (liveEl) liveEl.textContent = liveCount;
             if (slotsEl) slotsEl.textContent = `${Math.max(0, 4 - liveCount)} of 4`;
 
             let totalViewers = 0;
-            sessions.forEach(s => { if (typeof s.viewerCount === 'number') totalViewers += s.viewerCount; });
-            if (viewersEl) viewersEl.textContent = liveCount > 0 ? (totalViewers > 0 ? `${totalViewers} concurrent` : 'Connecting...') : '—';
+            let hasViewerCount = false;
+            profiles.forEach(p => {
+                const s = sessions.find(x => x.profileId === p.id);
+                const isStreamActive = p.isStreaming || (s && s.isStreaming);
+                const count = (s && typeof s.viewerCount === 'number') ? s.viewerCount : ((typeof p.viewerCount === 'number') ? p.viewerCount : null);
+                if (typeof count === 'number' && isStreamActive) {
+                    totalViewers += count;
+                    hasViewerCount = true;
+                }
+            });
+            if (viewersEl) {
+                if (liveCount > 0) {
+                    viewersEl.textContent = hasViewerCount ? `${totalViewers.toLocaleString()} concurrent` : '0 concurrent';
+                } else {
+                    viewersEl.textContent = '—';
+                }
+            }
 
             grid.innerHTML = '';
             profiles.forEach(p => {
@@ -2316,17 +2338,24 @@
                 else if (p.activeEngine === 'landscape') engineLabel = '🖥️ Landscape';
 
                 let scheduleHtml = `<span style="color: #94a3b8;">None</span>`;
-                if (p.schedule) {
-                    if (p.schedule.status === 'live') {
+                if (isLive) {
+                    if (p.schedule && p.schedule.status === 'live' && p.schedule.remainingMs != null) {
                         scheduleHtml = `<span style="color: #4ade80; font-weight:700;">⏱️ Stops in ${fmtCountdown(p.schedule.remainingMs)}</span>`;
-                    } else if (p.schedule.status === 'running') {
+                    } else if (p.schedule && p.schedule.status === 'running') {
                         scheduleHtml = `<span style="color: #fde047; font-weight:700;">♾️ Continuous Live</span>`;
-                    } else if (p.schedule.status === 'scheduled') {
+                    } else {
+                        scheduleHtml = `<span style="color: #38bdf8; font-weight:700;">🟢 On Air (Manual)</span>`;
+                    }
+                } else if (p.schedule) {
+                    if (p.schedule.status === 'scheduled' && p.schedule.nextRunInMs != null) {
                         scheduleHtml = `<span style="color: #38bdf8; font-weight:700;">⏰ In ${fmtCountdown(p.schedule.nextRunInMs)}</span>`;
                     } else if (p.schedule.config?.enabled) {
                         scheduleHtml = `<span style="color: #94a3b8;">Ready (${p.schedule.config.durationMinutes || 60}m)</span>`;
                     }
                 }
+
+                const cardViewers = (s && typeof s.viewerCount === 'number') ? s.viewerCount : ((typeof p.viewerCount === 'number') ? p.viewerCount : null);
+                const viewersDisplay = typeof cardViewers === 'number' ? cardViewers.toLocaleString() : '0';
 
                 const card = document.createElement('div');
                 card.style.cssText = `background: rgba(15, 23, 42, 0.7); border: 1px solid ${isActive ? color : 'var(--border)'}; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; position: relative; box-shadow: ${isActive ? `0 0 15px rgba(56, 189, 248, 0.15)` : 'none'};`;
@@ -2367,7 +2396,7 @@
                                 </div>
                                 <div>
                                     <div style="font-size: 10px; color: #94a3b8;">VIEWERS</div>
-                                    <div style="font-weight: 700; color: #eab308;">${typeof s.viewerCount === 'number' ? s.viewerCount : '—'}</div>
+                                    <div style="font-weight: 700; color: #eab308;">${viewersDisplay}</div>
                                 </div>
                             </div>
                         ` : ''}
@@ -2375,9 +2404,9 @@
                             <span style="color: #94a3b8;">RTMP Stream:</span>
                             <span style="font-family: monospace; color: #e2e8f0;">${p.streamKey ? '••••••••' + p.streamKey.slice(-4) : '<span style="color:#f87171;">Not Set</span>'}</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; color: #cbd5e1; font-size: 11.5px;">
-                            <span style="color: #94a3b8;">YouTube Target:</span>
-                            <span style="font-family: monospace; color: #38bdf8;">${p.youtubeLiveId ? escapeHtml(p.youtubeLiveId) : '<span style="color:#94a3b8;">Auto/None</span>'}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; color: #cbd5e1; font-size: 11.5px; gap: 8px;">
+                            <span style="color: #94a3b8; flex-shrink: 0;">YouTube Target:</span>
+                            <span title="${escapeHtml(p.youtubeLiveId || '')}" style="font-family: monospace; color: #38bdf8; max-width: 155px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;">${p.youtubeLiveId ? escapeHtml(p.youtubeLiveId) : '<span style="color:#94a3b8;">Auto/None</span>'}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; color: #cbd5e1; font-size: 11.5px;">
                             <span style="color: #94a3b8;">Watermark:</span>
@@ -4496,21 +4525,77 @@
                     const data = await res.json();
                     applyStatus(data);
                 }
-                if (typeof fetchProfiles === 'function') fetchProfiles();
                 if (document.getElementById('tab-logs').classList.contains('active')) fetchLogs();
                 if (document.getElementById('tab-records').classList.contains('active')) fetchRecordings();
             } catch (e) {}
         }
 
-        setInterval(() => {
-            if (document.getElementById('dashboard-view').classList.contains('active-view')) {
-                updateStatusAndLogs();
-            }
-        }, 3000);
+        let statusPollTimer = null;
+        let isManualRefreshing = false;
 
-        // Smooth the schedule countdowns between status polls (the 3s poll is
+        function getPollingInterval() {
+            if (document.hidden) {
+                return 15000; // 15s gentle background sync when tab is hidden to save VPS CPU
+            }
+            const anyLive = (profilesList && profilesList.some(p => p.isStreaming)) || 
+                            (allSessionsList && allSessionsList.some(s => s.isStreaming));
+            if (anyLive) {
+                return 3500; // 3.5s when streaming so telemetry/viewers stay crisp
+            }
+            return 8000; // 8s when idle/offline to preserve VPS resources
+        }
+
+        function scheduleNextStatusPoll(delayMs) {
+            if (statusPollTimer) clearTimeout(statusPollTimer);
+            const interval = delayMs != null ? delayMs : getPollingInterval();
+            statusPollTimer = setTimeout(async () => {
+                if (document.getElementById('dashboard-view').classList.contains('active-view')) {
+                    await updateStatusAndLogs();
+                }
+                scheduleNextStatusPoll();
+            }, interval);
+        }
+
+        async function manualRefreshData() {
+            if (isManualRefreshing) return;
+            isManualRefreshing = true;
+
+            const matrixIcon = document.getElementById('matrix-refresh-icon');
+            const topbarIcon = document.getElementById('topbar-refresh-icon');
+
+            if (matrixIcon) matrixIcon.style.transform = 'rotate(360deg)';
+            if (topbarIcon) topbarIcon.style.transform = 'rotate(360deg)';
+
+            try {
+                await updateStatusAndLogs();
+                showAlert('⚡ VPS Telemetry, viewers, and schedule synced!');
+            } catch (err) {
+                showAlert('Failed to refresh data from server', true);
+            } finally {
+                setTimeout(() => {
+                    if (matrixIcon) matrixIcon.style.transform = '';
+                    if (topbarIcon) topbarIcon.style.transform = '';
+                    isManualRefreshing = false;
+                }, 500);
+                scheduleNextStatusPoll();
+            }
+        }
+
+        // Fast re-sync when user returns to tab
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && document.getElementById('dashboard-view').classList.contains('active-view')) {
+                updateStatusAndLogs();
+                scheduleNextStatusPoll();
+            }
+        });
+
+        // Start adaptive status polling
+        scheduleNextStatusPoll(2000);
+
+        // Smooth the schedule countdowns between status polls (the poll is
         // enough for accuracy, but a 1s tick makes the timers feel live).
         setInterval(() => {
+            if (document.hidden) return; // Zero work when tab is backgrounded
             if (!lastScheduleState) return;
             const s = lastScheduleState;
             const base = { ...s, serverTime: new Date().toISOString() };
@@ -4935,10 +5020,12 @@
             if (e.key === 'Enter') login();
         });
 
-        // Periodic bot state polling every 6s when dashboard is open
+        // Periodic bot state polling only when user is actively viewing the bot panel
         setInterval(() => {
-            if (authKey) fetchVpsBotState();
-        }, 6000);
+            if (authKey && !document.hidden && document.getElementById('tab-doc')?.classList.contains('active')) {
+                fetchVpsBotState();
+            }
+        }, 8000);
 
         regenerateBotScript();
         checkAuth();

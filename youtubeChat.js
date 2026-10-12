@@ -451,9 +451,45 @@ function parseYoutubeTarget(input) {
  * by querying YouTube's internal Innertube web client with desktop Chrome headers.
  * Consumes 0 Google Cloud API quota units (100% Free, Unlimited 24/7).
  */
+/**
+ * Helper to parse YouTube viewer text strings (e.g. '16K watching', '1,234 watching', '45 viewers', '1.5M watching')
+ */
+function parseViewerString(str) {
+  if (!str || typeof str !== 'string') return null;
+  const clean = str.replace(/watching|viewers/gi, '').trim();
+  const kMatch = clean.match(/^([\d.,]+)\s*k$/i);
+  if (kMatch) return Math.round(parseFloat(kMatch[1].replace(/,/g, '')) * 1000);
+  const mMatch = clean.match(/^([\d.,]+)\s*m$/i);
+  if (mMatch) return Math.round(parseFloat(mMatch[1].replace(/,/g, '')) * 1000000);
+  const thouMatch = clean.match(/^([\d.,]+)\s*thousand$/i);
+  if (thouMatch) return Math.round(parseFloat(thouMatch[1].replace(/,/g, '')) * 1000);
+  const num = parseInt(clean.replace(/,/g, ''), 10);
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractViewersFromHtml(html) {
+  if (!html || typeof html !== 'string') return null;
+  const m = html.match(/"content":\s*"([^"]+?\s*(?:watching|viewers))"/i) ||
+            html.match(/"accessibilityLabel":\s*"([^"]+?\s*(?:watching|viewers))"/i) ||
+            html.match(/"simpleText":\s*"([^"]+?\s*(?:watching|viewers))"/i) ||
+            html.match(/"text":\s*"([^"]+?\s*(?:watching|viewers))"/i) ||
+            html.match(/"concurrentViewers":\s*"([^"]+)"/i);
+  if (m) {
+    return parseViewerString(m[1]);
+  }
+  return null;
+}
+
+/**
+ * Direct Innertube Web Scraper:
+ * Bypasses canonical link mismatches, consent interstitials, and datacenter IP blocks
+ * by querying YouTube's internal Innertube web client with desktop Chrome headers.
+ * Consumes 0 Google Cloud API quota units (100% Free, Unlimited 24/7).
+ */
 function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus = () => {}, pollInterval = 500 }) {
   let stopped = false;
   let timer = null;
+  let viewerPollTimer = null;
   let currentContinuation = null;
   let currentApiKey = null;
   let currentClientVersion = '2.20261009.01.00';
@@ -494,6 +530,14 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
         });
         const html = await res.text();
 
+        // Zero-Quota Live Viewer Count Extraction from YouTube watch page HTML
+        if (url.includes('watch?v=')) {
+          const vCount = extractViewersFromHtml(html);
+          if (vCount !== null) {
+            bus.emit('viewers', { count: vCount });
+          }
+        }
+
         const apiKeyMatch = html.match(/["\x27]INNERTUBE_API_KEY["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
         const verMatch = html.match(/["\x27]clientVersion["\x27]:\s*["\x27]([\d.]+?)["\x27]/);
         const contMatch = html.match(/["\x27]continuation["\x27]:\s*["\x27]([^"\x27]+)["\x27]/);
@@ -510,6 +554,31 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
     }
     return false;
   }
+
+  // Periodic gentle background viewer count refresh (every 40s, 0 quota units, unref'd)
+  async function refreshViewerCount() {
+    if (stopped || !liveVideoId) return;
+    try {
+      const res = await fetch(`https://www.youtube.com/watch?v=${liveVideoId}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html',
+          'Cookie': 'CONSENT=YES+1'
+        }
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const vCount = extractViewersFromHtml(html);
+        if (vCount !== null) {
+          bus.emit('viewers', { count: vCount });
+        }
+      }
+    } catch (e) {}
+  }
+
+  viewerPollTimer = setInterval(refreshViewerCount, 40000);
+  if (viewerPollTimer.unref) viewerPollTimer.unref();
 
   async function pollChat() {
     if (stopped) return;
@@ -693,6 +762,10 @@ function startDirectInnertubeScraper({ liveVideoId, bus, log = console, onStatus
       if (timer) {
         clearTimeout(timer);
         timer = null;
+      }
+      if (viewerPollTimer) {
+        clearInterval(viewerPollTimer);
+        viewerPollTimer = null;
       }
     }
   };

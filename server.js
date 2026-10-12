@@ -468,7 +468,19 @@ app.post('/api/settings', checkAuth, (req, res) => {
 app.get('/api/profiles', checkAuth, (req, res) => {
     res.json({
         activeProfileId: profilesState.activeProfileId,
-        profiles: profilesState.profiles,
+        profiles: profilesState.profiles.map(p => {
+            const s = activeSessions.get(p.id);
+            const sc = getSchedulerForProfile(p.id);
+            return {
+                ...p,
+                isStreaming: !!(s && s.isStreaming),
+                isRecording: !!(s && s.isRecording),
+                telemetry: s ? s.telemetry : { health: 'offline', speed: '0x', fps: 0 },
+                viewerCount: s ? s.liveViewerCount : null,
+                startedAt: s ? s.startedAt : null,
+                schedule: sc ? sc.getState() : { enabled: false }
+            };
+        }),
         allSessions: Array.from(activeSessions.values()).map(s => ({
             profileId: s.profileId,
             profileName: s.profileName,
@@ -1069,6 +1081,16 @@ async function endStream(targetProfileId = null, reason = 'user request') {
         session.browser = null;
     }
     session.currentPage = null;
+
+    const poller = chatPollersMap.get(pid);
+    if (poller) {
+        try { poller.stop(); } catch (e) {}
+        chatPollersMap.delete(pid);
+    }
+    const curStatus = youtubeChatStatusMap.get(pid);
+    if (curStatus) {
+        youtubeChatStatusMap.set(pid, { ...curStatus, state: 'idle' });
+    }
 
     activeSessions.delete(pid);
     updateGlobalLegacyState();
@@ -1893,8 +1915,5 @@ app.listen(PORT, () => {
             logMsg(`[${p.name}] Error loading scheduler: ${e.message}`, true);
         }
     }
-    const active = getActiveProfile();
-    if (active) {
-        restartYoutubeChatForProfile(active);
-    }
+    // YouTube Chat listener starts on-demand when a broadcast session goes live.
 });
