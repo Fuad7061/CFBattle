@@ -463,6 +463,46 @@
             animation: fadeIn 0.22s ease-out;
             pointer-events: auto;
         }
+
+        /* --- CHANNEL PROFILE MODAL --- */
+        #channel-profile-modal.modal-overlay {
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(8px);
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        #channel-profile-modal .modal-card {
+            pointer-events: auto;
+            position: relative;
+            animation: fadeIn 0.22s ease-out;
+        }
+
+        /* --- MODIFY DURATION MODAL --- */
+        #modify-duration-modal.modal-overlay {
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(8px);
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        #modify-duration-modal .modal-card {
+            pointer-events: auto;
+            position: relative;
+            animation: fadeIn 0.22s ease-out;
+        }
+
+        .modal-overlay.open:not(#settings-modal) {
+            display: flex;
+            background: rgba(0,0,0,0.78);
+            backdrop-filter: blur(8px);
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+        }
+        .modal-overlay.open:not(#settings-modal) .modal-card {
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -1799,6 +1839,9 @@
                     <button type="button" class="btn btn-primary" onclick="saveBotAccount()" style="font-weight: 600; padding: 8px 18px; font-size: 12.5px;">💾 Save Account</button>
                 </div>
             </div>
+        </div>
+    </div>
+
     <!-- CHANNEL PROFILE MODAL (Add / Edit / Clone) -->
     <div id="channel-profile-modal" class="modal-overlay" onclick="if (event.target === this) closeChannelProfileModal()">
         <div class="modal-card" style="max-width: 580px; width: 92%; max-height: 90vh; overflow-y: auto; background: #0b0f19; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 20px 60px rgba(0,0,0,0.85); border-radius: 12px; padding: 22px;">
@@ -1902,7 +1945,7 @@
             if (el) el.value = hex;
         }
 
-        function openChannelProfileModal(profileId = null) {
+        async function openChannelProfileModal(profileId = null) {
             const modal = document.getElementById('channel-profile-modal');
             const title = document.getElementById('channel-modal-title');
             const idInput = document.getElementById('cmodal-id');
@@ -1915,8 +1958,17 @@
             const watermarkInput = document.getElementById('cmodal-watermark');
             const chatModeInput = document.getElementById('cmodal-chat-mode');
 
+            // Fetch fresh profiles from server to ensure accurate credentials & settings
+            try {
+                const res = await fetch('/api/profiles', { headers: API_HEADERS() });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.profiles) profilesList = data.profiles;
+                }
+            } catch (e) {}
+
             if (profileId) {
-                const p = profilesList.find(x => x.id === profileId);
+                const p = (profilesList || []).find(x => x.id === profileId);
                 if (p) {
                     title.textContent = `Edit Channel: ${p.name}`;
                     idInput.value = p.id;
@@ -1925,6 +1977,7 @@
                     engineInput.value = p.activeEngine || 'hero-tournament';
                     streamUrlInput.value = p.streamUrl || 'rtmp://a.rtmp.youtube.com/live2';
                     streamKeyInput.value = p.streamKey || '';
+                    streamKeyInput.placeholder = p.streamKey ? 'Leave blank to keep current key' : 'xxxx-xxxx-xxxx-xxxx';
                     liveIdInput.value = p.youtubeLiveId || '';
                     watermarkInput.value = p.gameSettings?.watermark || p.watermark || '';
                     chatModeInput.value = p.youtubeChatMode || 'player';
@@ -1932,14 +1985,15 @@
             } else {
                 title.textContent = 'Add New Channel Profile';
                 idInput.value = '';
-                nameInput.value = `Channel ${profilesList.length + 1}`;
+                nameInput.value = `Channel ${(profilesList || []).length + 1}`;
                 const colors = ['#38bdf8', '#e11d48', '#eab308', '#10b981', '#a855f7', '#ec4899', '#f97316'];
-                colorInput.value = colors[profilesList.length % colors.length];
+                colorInput.value = colors[(profilesList || []).length % colors.length];
                 engineInput.value = document.getElementById('live-engine-select')?.value || 'hero-tournament';
                 streamUrlInput.value = 'rtmp://a.rtmp.youtube.com/live2';
                 streamKeyInput.value = '';
+                streamKeyInput.placeholder = 'xxxx-xxxx-xxxx-xxxx';
                 liveIdInput.value = '';
-                watermarkInput.value = `@Channel${profilesList.length + 1}`;
+                watermarkInput.value = `@Channel${(profilesList || []).length + 1}`;
                 chatModeInput.value = 'player';
             }
 
@@ -1956,6 +2010,7 @@
             const name = document.getElementById('cmodal-name').value.trim();
             if (!name) return showAlert('Channel name is required', true);
 
+            const wm = document.getElementById('cmodal-watermark').value.trim();
             const payload = {
                 name,
                 color: document.getElementById('cmodal-color').value,
@@ -1964,8 +2019,9 @@
                 streamKey: document.getElementById('cmodal-stream-key').value.trim(),
                 youtubeLiveId: document.getElementById('cmodal-youtube-live-id').value.trim(),
                 youtubeChatMode: document.getElementById('cmodal-chat-mode').value,
+                watermark: wm,
                 gameSettings: {
-                    watermark: document.getElementById('cmodal-watermark').value.trim()
+                    watermark: wm
                 }
             };
             if (id) payload.id = id;
@@ -1980,6 +2036,12 @@
                 if (res.ok && data.success) {
                     showAlert(`Channel "${name}" saved!`);
                     closeChannelProfileModal();
+                    if (data.profiles) {
+                        profilesList = data.profiles;
+                        allSessionsList = data.allSessions || allSessionsList;
+                        renderProfileSwitcher(profilesList, selectedProfileId, allSessionsList);
+                        renderChannelMatrix(profilesList, selectedProfileId, allSessionsList);
+                    }
                     checkAuth();
                 } else {
                     showAlert(data.error || 'Failed to save channel', true);
@@ -1987,6 +2049,22 @@
             } catch (e) {
                 showAlert('Network error saving channel', true);
             }
+        }
+
+        async function fetchProfiles() {
+            if (!authKey) return;
+            try {
+                const res = await fetch('/api/profiles', { headers: API_HEADERS() });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.profiles) {
+                        profilesList = data.profiles;
+                        allSessionsList = data.allSessions || allSessionsList;
+                        renderProfileSwitcher(profilesList, selectedProfileId, allSessionsList);
+                        renderChannelMatrix(profilesList, selectedProfileId, allSessionsList);
+                    }
+                }
+            } catch (e) {}
         }
 
         async function duplicateChannelProfile(id) {

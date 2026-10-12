@@ -402,12 +402,7 @@ app.get('/api/status', checkAuth, (req, res) => {
         profiles: profilesState.profiles.map(p => {
             const s = activeSessions.get(p.id);
             return {
-                id: p.id,
-                name: p.name,
-                color: p.color,
-                activeEngine: p.activeEngine,
-                youtubeLiveId: p.youtubeLiveId,
-                watermark: p.gameSettings?.watermark,
+                ...p,
                 isStreaming: !!(s && s.isStreaming),
                 isRecording: !!(s && s.isRecording),
                 telemetry: s ? s.telemetry : { health: 'offline', speed: '0x', fps: 0 },
@@ -484,15 +479,22 @@ app.post('/api/profiles', checkAuth, (req, res) => {
 
     let profile = id ? getProfileById(id) : null;
     if (profile) {
+        if (rest.gameSettings) {
+            profile.gameSettings = Object.assign({}, profile.gameSettings || {}, rest.gameSettings);
+            delete rest.gameSettings;
+        }
+        if (rest.streamKey === '' && profile.streamKey) {
+            delete rest.streamKey;
+        }
         Object.assign(profile, rest, { name: name.trim(), color: color || profile.color || '#38bdf8', updatedAt: new Date().toISOString() });
     } else {
         const newId = id || `profile-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-        profile = createDefaultProfile(newId, name.trim(), rest);
-        if (color) profile.color = color;
+        profile = createDefaultProfile(newId, name.trim(), { ...rest, color });
         profilesState.profiles.push(profile);
     }
     saveProfiles();
     currentSettings = getActiveProfile();
+    logMsg(`Saved channel profile "${profile.name}" (${profile.id}).`);
     res.json({ success: true, profile, profiles: profilesState.profiles, activeProfileId: profilesState.activeProfileId });
 });
 
